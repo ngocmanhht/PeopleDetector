@@ -4,42 +4,44 @@
  *
  * @format
  */
-
-import { NewAppScreen } from '@react-native/new-app-screen';
-import { StatusBar, StyleSheet, useColorScheme, View } from 'react-native';
+import React from 'react';
+import { StatusBar } from 'react-native';
+import { GestureHandlerRootView } from 'react-native-gesture-handler';
+import { RootNavigator } from './src/navigation/root-navigator';
+import { NavigationContainer } from '@react-navigation/native';
+import { navigationService } from './src/navigation/navigation-service';
+import AppLoadingIndicator from './src/components/app-loading-indicator';
+import { QueryClientProvider } from '@tanstack/react-query';
+import { queryClient } from './src/services/query-client';
 import {
+  initialWindowMetrics,
   SafeAreaProvider,
-  useSafeAreaInsets,
 } from 'react-native-safe-area-context';
+import Toast from 'react-native-toast-message';
+import { toastConfig } from './src/config/toast-config';
+import { Provider } from 'react-redux';
+import { persistor, store } from './src/store';
+import { PersistGate } from 'redux-persist/integration/react';
 
-function App() {
-  const isDarkMode = useColorScheme() === 'dark';
-
+const App = () => {
   return (
-    <SafeAreaProvider>
-      <StatusBar barStyle={isDarkMode ? 'light-content' : 'dark-content'} />
-      <AppContent />
-    </SafeAreaProvider>
+    <Provider store={store}>
+      <PersistGate persistor={persistor} loading={null}>
+        <QueryClientProvider client={queryClient}>
+          <SafeAreaProvider initialMetrics={initialWindowMetrics}>
+            <GestureHandlerRootView>
+              <StatusBar barStyle="default" />
+              <NavigationContainer ref={navigationService.navigationRef}>
+                <RootNavigator />
+                <Toast config={toastConfig} />
+              </NavigationContainer>
+              <AppLoadingIndicator />
+            </GestureHandlerRootView>
+          </SafeAreaProvider>
+        </QueryClientProvider>
+      </PersistGate>
+    </Provider>
   );
-}
-
-function AppContent() {
-  const safeAreaInsets = useSafeAreaInsets();
-
-  return (
-    <View style={styles.container}>
-      <NewAppScreen
-        templateFileName="App.tsx"
-        safeAreaInsets={safeAreaInsets}
-      />
-    </View>
-  );
-}
-
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-  },
-});
+};
 
 export default App;
