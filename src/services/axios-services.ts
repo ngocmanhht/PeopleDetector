@@ -6,8 +6,10 @@ import axios, {
   HeadersDefaults,
 } from 'axios';
 import { StatusCode } from '../const/status-code';
-import { Token } from '../model/token';
 import { API_URL } from '@env';
+import { store } from '../store';
+import { setToken, logout } from '../store/slices/appSlice';
+import { Token } from '../model/token';
 import { navigationService } from '../navigation/navigation-service';
 import { appScreens } from '../const/app-screens';
 
@@ -40,14 +42,6 @@ class ApiClient {
   /**
    * Processes the queue of promises created by the request interceptor when the request was delayed
    * due to the token being refreshed.
-   *
-   * If the refresh token request failed, all promises in the queue are rejected with the error.
-   * If the refresh token request succeeded, all promises in the queue are resolved with the new
-   * access token.
-   *
-   * @param {unknown} error The error returned by the refresh token request, or `null` if the request
-   *                        was successful.
-   * @param {string | null} token The new access token, or `null` if the refresh token request failed.
    */
   private processQueue(error: unknown, token: string | null) {
     this.failedQueue.forEach(prom => {
@@ -62,26 +56,26 @@ class ApiClient {
 
   /**
    * Set up request and response interceptors for the API client.
-   * The request interceptor logs the request and adds the access token to the request headers.
-   * The response interceptor logs the response, returns the response data, and handles errors.
-   * If the response status is 401 (Unauthorized), the interceptor attempts to refresh the access token.
-   * If the refresh token is invalid or not provided, the interceptor logs out the user and redirects them to the login screen.
-   * If the refresh token is valid, the interceptor updates the access token and retries the original request.
-   * If the response status is 422 (Failed validation), the interceptor returns the first validation error message.
-   * If the response status is 500 (Internal Server Error) or any other unexpected status, the interceptor returns a generic error message.
+   * - Request: logs and attaches Authorization: Bearer <accessToken>
+   * - Response: unwraps response.data; on 401 Unauthorized, automatically calls /auth/refresh
+   *   with refreshToken, updates token in Redux, and replays pending queue.
    */
   private setupInterceptors() {
     this.instance.interceptors.request.use(
       async (config: InternalAxiosRequestConfig) => {
+        try {
+          const token = store.getState().app.token?.accessToken;
+          if (token) {
+            config.headers.set('Authorization', `Bearer ${token}`);
+          }
+        } catch (e) {
+          // If store is not initialized yet, proceed
+        }
+
         console.log(
           `[Request] ${config.method?.toUpperCase()} ${config.url}`,
-          config,
+          config.params || config.data || '',
         );
-        // const token = rootStore.sessionStore.token?.accessToken;
-
-        // if (token) {
-        //   config.headers.set('Authorization', `Bearer ${token}`);
-        // }
         return config;
       },
       error => Promise.reject(error),
@@ -97,68 +91,107 @@ class ApiClient {
       },
       async error => {
         const originalRequest = error?.config;
-
         const status = error?.response?.status;
         const data = error?.response?.data;
 
-        // if (status === StatusCode.UNAUTHORIZED && !originalRequest._retry) {
-        //   if (this.isRefreshing) {
-        //     return new Promise((resolve, reject) => {
-        //       this.failedQueue.push({
-        //         resolve: (token: string) => {
-        //           originalRequest.headers.Authorization = `Bearer ${token}`;
-        //           resolve(this.instance(originalRequest));
-        //         },
-        //         reject,
-        //       });
-        //     });
-        //   }
+        // Auto Refresh Token on 401 UNAUTHORIZED
+        if (
+          (status === StatusCode.UNAUTHORIZED || status === 401) &&
+          originalRequest &&
+          !originalRequest._retry
+        ) {
+          // If this was already a refresh request that failed, logout immediately
+          if (originalRequest.url?.includes('/auth/refresh')) {
+            store.dispatch(logout());
+            navigationService.reset(appScreens.Authentication);
+            return Promise.reject(new Error('Phiên đăng nhập đã hết hạn'));
+          }
 
-        //   originalRequest._retry = true;
-        //   this.isRefreshing = true;
+          if (this.isRefreshing) {
+            return new Promise((resolve, reject) => {
+              this.failedQueue.push({
+                resolve: (token: string) => {
+                  originalRequest.headers.set(
+                    'Authorization',
+                    `Bearer ${token}`,
+                  );
+                  resolve(this.instance(originalRequest));
+                },
+                reject,
+              });
+            });
+          }
 
-        //   try {
-        //     const refreshToken = rootStore.sessionStore.token?.refreshToken;
-        //     if (!refreshToken) {
-        //       navigationService.reset(appScreens.Authentication);
-        //       await rootStore.sessionStore.logout();
-        //       return Promise.reject(new Error('No refresh token'));
-        //     }
+          originalRequest._retry = true;
+          this.isRefreshing = true;
 
-        //     const response = await axios.post(`${API_URL}/auth/refresh`, {
-        //       refresh_token: refreshToken,
-        //     });
-        //     const newAccessToken = response.data.access_token;
-        //     const newToken: Token = {
-        //       accessToken: newAccessToken,
-        //       refreshToken: response.data.refresh_token,
-        //     };
-        //     rootStore.sessionStore.setToken(newToken);
-        //     this.processQueue(null, newAccessToken);
-        //     originalRequest.headers.Authorization = `Bearer ${newAccessToken}`;
-        //     return this.instance(originalRequest);
-        //   } catch (refreshError) {
-        //     this.processQueue(refreshError, null);
-        //     navigationService.reset(appScreens.Authentication);
-        //     rootStore.sessionStore.logout();
-        //     return Promise.reject(refreshError);
-        //   } finally {
-        //     this.isRefreshing = false;
-        //   }
-        // }
+          try {
+            const currentRefreshToken =
+              store.getState().app.token?.refreshToken;
+            if (!currentRefreshToken) {
+              store.dispatch(logout());
+              navigationService.reset(appScreens.Authentication);
+              return Promise.reject(new Error('Không tìm thấy refresh token'));
+            }
+
+            const refreshBaseUrl = this.instance.defaults.baseURL || API_URL;
+            const refreshUrl = refreshBaseUrl.endsWith('/')
+              ? `${refreshBaseUrl}auth/refresh`
+              : `${refreshBaseUrl}/auth/refresh`;
+
+            const response = await axios.post(refreshUrl, {
+              refreshToken: currentRefreshToken,
+              refresh_token: currentRefreshToken,
+            });
+
+            const newAccessToken =
+              response.data?.accessToken || response.data?.access_token;
+            const newRefreshToken =
+              response.data?.refreshToken ||
+              response.data?.refresh_token ||
+              currentRefreshToken;
+
+            if (!newAccessToken) {
+              throw new Error('Phản hồi refresh token không hợp lệ');
+            }
+
+            const newToken: Token = {
+              accessToken: newAccessToken,
+              refreshToken: newRefreshToken,
+            };
+
+            store.dispatch(setToken(newToken));
+            this.processQueue(null, newAccessToken);
+            originalRequest.headers.set(
+              'Authorization',
+              `Bearer ${newAccessToken}`,
+            );
+            return this.instance(originalRequest);
+          } catch (refreshError) {
+            this.processQueue(refreshError, null);
+            store.dispatch(logout());
+            navigationService.reset(appScreens.Authentication);
+            return Promise.reject(refreshError);
+          } finally {
+            this.isRefreshing = false;
+          }
+        }
 
         let networkError: Error;
         switch (status) {
           case StatusCode.FAILED_VALIDATION:
+          case 422:
             const firstField = Object.keys(data?.errors || {})[0];
-            const errorMessage = data?.errors?.[firstField]?.[0];
-            networkError = new Error(errorMessage ?? 'Failed validation');
+            const errorMessage =
+              data?.errors?.[firstField]?.[0] || data?.message;
+            networkError = new Error(errorMessage ?? 'Dữ liệu không hợp lệ');
             break;
           case StatusCode.INTERNAL_SERVER_ERROR:
-            networkError = new Error(data?.message ?? 'Server error');
+          case 500:
+            networkError = new Error(data?.message ?? 'Lỗi máy chủ');
             break;
           default:
-            networkError = new Error(data?.message ?? 'Something went wrong');
+            networkError = new Error(data?.message ?? 'Có lỗi xảy ra');
             break;
         }
         return Promise.reject(networkError);
@@ -166,26 +199,29 @@ class ApiClient {
     );
   }
 
-  public async get(path: string, params?: unknown) {
-    return await this.instance.get(path, { params });
+  public async get<T = any>(path: string, params?: unknown): Promise<T> {
+    return (await this.instance.get(path, { params })) as T;
   }
 
-  public async post(path: string, data?: unknown) {
-    return this.instance.post(path, data);
+  public async post<T = any>(path: string, data?: unknown): Promise<T> {
+    return (await this.instance.post(path, data)) as T;
   }
 
-  public async postFormData(path: string, formData: FormData) {
-    return await this.instance.post(path, formData, {
+  public async postFormData<T = any>(
+    path: string,
+    formData: FormData,
+  ): Promise<T> {
+    return (await this.instance.post(path, formData, {
       headers: { 'Content-Type': 'multipart/form-data' },
-    });
+    })) as T;
   }
 
-  public async put(path: string, data?: unknown) {
-    return this.instance.put(path, data);
+  public async put<T = any>(path: string, data?: unknown): Promise<T> {
+    return (await this.instance.put(path, data)) as T;
   }
 
-  public async delete(path: string, params?: unknown) {
-    return this.instance.delete(path, { params });
+  public async delete<T = any>(path: string, params?: unknown): Promise<T> {
+    return (await this.instance.delete(path, { params })) as T;
   }
 }
 

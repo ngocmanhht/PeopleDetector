@@ -4,6 +4,7 @@ import { AppText } from '../../../components/app-text';
 import { DetectionResult } from '../../../model/detector';
 import { CheckCircle2, AlertCircle, UserX } from 'lucide-react-native';
 import { appColors } from '../../../const/app-colors';
+import { useResponsive } from '../../../hooks/use-responsive';
 
 interface AttendanceCardProps {
   detection: DetectionResult | null;
@@ -14,10 +15,18 @@ export const AttendanceCard: React.FC<AttendanceCardProps> = ({
   detection,
   isSessionActive,
 }) => {
+  const { isPhone } = useResponsive();
   if (!isSessionActive) {
     return (
-      <View style={[styles.container, styles.emptyContainer]}>
-        <UserX size={48} color={appColors.slate400} />
+      <View
+        style={[
+          styles.container,
+          isPhone && styles.containerPhone,
+          styles.emptyContainer,
+          isPhone && styles.emptyContainerPhone,
+        ]}
+      >
+        <UserX size={isPhone ? 38 : 48} color={appColors.slate400} />
         <AppText style={styles.emptyTitle}>Phiên điểm danh chưa bắt đầu</AppText>
         <AppText style={styles.emptySubtitle}>
           Vui lòng nhấn "Bắt đầu phiên" để camera quét và nhận diện khuôn mặt.
@@ -28,7 +37,14 @@ export const AttendanceCard: React.FC<AttendanceCardProps> = ({
 
   if (!detection) {
     return (
-      <View style={[styles.container, styles.emptyContainer]}>
+      <View
+        style={[
+          styles.container,
+          isPhone && styles.containerPhone,
+          styles.emptyContainer,
+          isPhone && styles.emptyContainerPhone,
+        ]}
+      >
         <View style={styles.scanningPlaceholder}>
           <AppText style={styles.scanningText}>Đang quét khuôn mặt...</AppText>
         </View>
@@ -42,22 +58,33 @@ export const AttendanceCard: React.FC<AttendanceCardProps> = ({
   const isVerified = detection.status === 'present';
 
   return (
-    <View style={styles.container}>
+    <View style={[styles.container, isPhone && styles.containerPhone]}>
       {/* Top Row: Avatar & Status Badge */}
       <View style={styles.avatarRow}>
-        {detection.avatarUri ? (
-          <Image
-            source={{ uri: detection.avatarUri }}
-            style={styles.avatarImage}
-            resizeMode="cover"
-          />
-        ) : (
-          <View style={[styles.avatarImage, styles.placeholderAvatar]}>
-            <AppText style={styles.placeholderText}>
-              {(detection.fullName || 'N')[0]}
-            </AppText>
+        <View style={styles.avatarWrapper}>
+          {detection.avatarUri ? (
+            <Image
+              source={{ uri: detection.avatarUri }}
+              style={[styles.avatarImage, isPhone && styles.avatarImagePhone]}
+              resizeMode="cover"
+            />
+          ) : (
+            <View
+              style={[
+                styles.avatarImage,
+                isPhone && styles.avatarImagePhone,
+                styles.placeholderAvatar,
+              ]}
+            >
+              <AppText style={styles.placeholderText}>
+                {(detection.fullName || 'N')[0]}
+              </AppText>
+            </View>
+          )}
+          <View style={styles.scannedBadge}>
+            <AppText style={styles.scannedBadgeText}>Ảnh quét camera</AppText>
           </View>
-        )}
+        </View>
 
         <View style={styles.badgeWrapper}>
           {isVerified ? (
@@ -76,16 +103,35 @@ export const AttendanceCard: React.FC<AttendanceCardProps> = ({
 
       {/* User Information */}
       <View style={styles.infoSection}>
-        <AppText style={styles.fullName}>{detection.fullName}</AppText>
-        <AppText style={styles.codeText}>{detection.code}</AppText>
+        <AppText style={styles.fullName} numberOfLines={2} ellipsizeMode="tail">
+          {detection.fullName}
+        </AppText>
+        <AppText style={styles.codeText} numberOfLines={1}>
+          {detection.code}
+        </AppText>
 
         <View style={styles.detailList}>
-          <View style={styles.detailRow}>
-            <AppText style={styles.detailLabel}>Khu: </AppText>
-            <AppText style={styles.detailValueBold}>{detection.zoneName}</AppText>
-            <AppText style={styles.detailDivider}> | </AppText>
-            <AppText style={styles.detailLabel}>Phòng: </AppText>
-            <AppText style={styles.detailValueBold}>{detection.roomName}</AppText>
+          <View style={styles.detailLocationRow}>
+            <View style={styles.detailLocationItem}>
+              <AppText style={styles.detailLabel}>Khu: </AppText>
+              <AppText
+                style={styles.detailValueBold}
+                numberOfLines={1}
+                ellipsizeMode="tail"
+              >
+                {detection.zoneName}
+              </AppText>
+            </View>
+            <View style={styles.detailLocationItem}>
+              <AppText style={styles.detailLabel}>Phòng: </AppText>
+              <AppText
+                style={styles.detailValueBold}
+                numberOfLines={1}
+                ellipsizeMode="tail"
+              >
+                {detection.roomName}
+              </AppText>
+            </View>
           </View>
 
           <View style={styles.detailRow}>
@@ -119,10 +165,17 @@ const styles = StyleSheet.create({
     elevation: 3,
     minHeight: 320,
   },
+  containerPhone: {
+    padding: 14,
+    minHeight: 180,
+  },
   emptyContainer: {
     justifyContent: 'center',
     alignItems: 'center',
     paddingVertical: 50,
+  },
+  emptyContainerPhone: {
+    paddingVertical: 24,
   },
   emptyTitle: {
     fontSize: 18,
@@ -156,6 +209,9 @@ const styles = StyleSheet.create({
     gap: 20,
     marginBottom: 20,
   },
+  avatarWrapper: {
+    position: 'relative',
+  },
   avatarImage: {
     width: 120,
     height: 120,
@@ -163,6 +219,29 @@ const styles = StyleSheet.create({
     borderWidth: 2,
     borderColor: appColors.slate200,
     backgroundColor: appColors.slate50,
+  },
+  avatarImagePhone: {
+    width: 88,
+    height: 88,
+    borderRadius: 14,
+  },
+  scannedBadge: {
+    position: 'absolute',
+    bottom: -6,
+    left: 8,
+    right: 8,
+    backgroundColor: appColors.slate800,
+    borderRadius: 6,
+    paddingVertical: 3,
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: appColors.slate600,
+  },
+  scannedBadgeText: {
+    color: appColors.white,
+    fontSize: 9,
+    fontWeight: '700',
+    letterSpacing: 0.3,
   },
   placeholderAvatar: {
     backgroundColor: appColors.blue50,
@@ -231,6 +310,13 @@ const styles = StyleSheet.create({
   detailList: {
     gap: 8,
   },
+  detailLocationRow: {
+    gap: 6,
+  },
+  detailLocationItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
   detailRow: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -239,11 +325,13 @@ const styles = StyleSheet.create({
     fontSize: 16,
     color: appColors.slate600,
     fontWeight: '500',
+    flexShrink: 0,
   },
   detailValueBold: {
     fontSize: 16,
     color: appColors.slate900,
     fontWeight: '700',
+    flexShrink: 1,
   },
   detailDivider: {
     fontSize: 16,

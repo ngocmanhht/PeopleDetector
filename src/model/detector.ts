@@ -37,6 +37,8 @@ export interface BoundingBox {
   y: number;
   width: number;
   height: number;
+  frameWidth?: number;
+  frameHeight?: number;
 }
 
 export interface DetectionResult {
@@ -59,3 +61,22 @@ export interface AlertLog {
   timestamp: string;
   type: 'warning' | 'info' | 'error';
 }
+
+export interface AttendanceSession {
+  id: string;
+  name: string; // Tên phiên do user đặt hoặc mặc định: Phiên HH:mm DD-MM-YYYY
+  zoneId: string;
+  zoneName: string;
+  roomId: string;
+  roomName: string;
+  startTime: string;
+  endTime?: string;
+  createdAt: string;
+  isActive: boolean;
+  attendanceMap: Record<string, AttendanceRecord>;
+  totalCount: number;
+  presentCount: number;
+  missingCount: number;
+  verifyCount: number;
+}
+

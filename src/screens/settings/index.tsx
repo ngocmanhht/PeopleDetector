@@ -23,8 +23,11 @@ import {
   Info,
 } from 'lucide-react-native';
 import { appColors } from '../../const/app-colors';
+import { useResponsive } from '../../hooks/use-responsive';
+import { authService } from '../../services/api';
 
 export const SettingsScreen: React.FC = () => {
+  const { isPhone } = useResponsive();
   const dispatch = useAppDispatch();
   const navigation = useCustomNavigation<RootNavigatorParamList>();
   const currentUser = useAppSelector(state => state.app.currentUser);
@@ -34,6 +37,8 @@ export const SettingsScreen: React.FC = () => {
   const [targetFps, setTargetFps] = useState(30);
   const [soundEnabled, setSoundEnabled] = useState(true);
   const [autoSessionReset, setAutoSessionReset] = useState(false);
+
+  const token = useAppSelector(state => state.app.token);
 
   const handleLogout = () => {
     Alert.alert(
@@ -45,6 +50,11 @@ export const SettingsScreen: React.FC = () => {
           text: 'Đăng xuất',
           style: 'destructive',
           onPress: () => {
+            if (token?.refreshToken) {
+              authService.logout(token.refreshToken).catch(err => {
+                console.log('[Settings] Logout error on BE:', err);
+              });
+            }
             dispatch(logout());
             navigation.reset({
               index: 0,
@@ -62,21 +72,27 @@ export const SettingsScreen: React.FC = () => {
   };
 
   return (
-    <ScrollView style={styles.container} contentContainerStyle={styles.content}>
+    <ScrollView
+      style={styles.container}
+      contentContainerStyle={[styles.content, isPhone && styles.contentPhone]}
+      showsVerticalScrollIndicator={false}
+    >
       {/* Header */}
-      <View style={styles.header}>
+      <View style={[styles.header, isPhone && styles.headerPhone]}>
         <View style={styles.headerIconWrap}>
-          <SettingsIcon size={26} color={appColors.blue600} />
+          <SettingsIcon size={isPhone ? 22 : 26} color={appColors.blue600} />
         </View>
-        <View>
-          <AppText style={styles.headerTitle}>Cài đặt & Quản trị Hệ thống</AppText>
-          <AppText style={styles.headerSub}>
+        <View style={{ flex: 1 }}>
+          <AppText style={[styles.headerTitle, isPhone && styles.headerTitlePhone]}>
+            {isPhone ? 'Cài đặt hệ thống' : 'Cài đặt & Quản trị Hệ thống'}
+          </AppText>
+          <AppText style={styles.headerSub} numberOfLines={isPhone ? 1 : 2}>
             Cấu hình tham số AI nhận diện, camera và quản lý phiên đăng nhập
           </AppText>
         </View>
       </View>
 
-      <View style={styles.gridContainer}>
+      <View style={[styles.gridContainer, isPhone && styles.gridContainerPhone]}>
         {/* Left Column: Account & Logout */}
         <View style={styles.column}>
           {/* User Account Card */}
@@ -271,6 +287,10 @@ const styles = StyleSheet.create({
   content: {
     padding: 24,
   },
+  contentPhone: {
+    padding: 12,
+    paddingBottom: 28,
+  },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -281,6 +301,12 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: appColors.slate200,
     marginBottom: 20,
+  },
+  headerPhone: {
+    padding: 14,
+    gap: 10,
+    marginBottom: 14,
+    borderRadius: 14,
   },
   headerIconWrap: {
     width: 48,
@@ -295,6 +321,9 @@ const styles = StyleSheet.create({
     fontWeight: '800',
     color: appColors.slate900,
   },
+  headerTitlePhone: {
+    fontSize: 18,
+  },
   headerSub: {
     fontSize: 13,
     color: appColors.slate500,
@@ -303,6 +332,10 @@ const styles = StyleSheet.create({
   gridContainer: {
     flexDirection: 'row',
     gap: 20,
+  },
+  gridContainerPhone: {
+    flexDirection: 'column',
+    gap: 14,
   },
   column: {
     flex: 1,

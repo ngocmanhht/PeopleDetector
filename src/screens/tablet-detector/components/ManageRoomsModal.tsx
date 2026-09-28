@@ -24,6 +24,7 @@ import {
   setSelectedZoneId,
 } from '../../../store/slices/detectorSlice';
 import { appColors } from '../../../const/app-colors';
+import { useResponsive } from '../../../hooks/use-responsive';
 
 interface ManageRoomsModalProps {
   visible: boolean;
@@ -34,6 +35,7 @@ export const ManageRoomsModal: React.FC<ManageRoomsModalProps> = ({
   visible,
   onClose,
 }) => {
+  const { isPhone } = useResponsive();
   const dispatch = useAppDispatch();
   const { zones, rooms, userProfiles, selectedZoneId, selectedRoomId } =
     useAppSelector(state => state.detector);
@@ -52,17 +54,28 @@ export const ManageRoomsModal: React.FC<ManageRoomsModalProps> = ({
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
 
+  // Keep newRoomZoneId in sync when zones or selectedZoneId changes
+  React.useEffect(() => {
+    if (!newRoomZoneId && (selectedZoneId || zones[0]?.id)) {
+      setNewRoomZoneId(selectedZoneId || zones[0]?.id || '');
+    }
+  }, [selectedZoneId, zones, newRoomZoneId]);
+
   const handleAddZone = () => {
     if (!newZoneName.trim()) {
       setError('Vui lòng nhập tên khu vực.');
       return;
     }
+    const zoneId = `zone-${Date.now()}`;
     dispatch(
       addZone({
+        id: zoneId,
         name: newZoneName.trim(),
         description: newZoneDesc.trim(),
       })
     );
+    setNewRoomZoneId(zoneId);
+    dispatch(setSelectedZoneId(zoneId));
     setNewZoneName('');
     setNewZoneDesc('');
     setError('');
@@ -75,18 +88,23 @@ export const ManageRoomsModal: React.FC<ManageRoomsModalProps> = ({
       setError('Vui lòng nhập tên phòng.');
       return;
     }
-    if (!newRoomZoneId) {
+    const targetZoneId = newRoomZoneId || selectedZoneId || zones[0]?.id;
+    if (!targetZoneId) {
       setError('Vui lòng chọn khu vực trực thuộc.');
       return;
     }
     const cap = parseInt(newRoomCapacity, 10) || 30;
+    const roomId = `room-${Date.now()}`;
     dispatch(
       addRoom({
+        id: roomId,
         name: newRoomName.trim(),
-        zoneId: newRoomZoneId,
+        zoneId: targetZoneId,
         capacity: cap,
       })
     );
+    dispatch(setSelectedZoneId(targetZoneId));
+    dispatch(setSelectedRoomId(roomId));
     setNewRoomName('');
     setNewRoomCapacity('30');
     setError('');
@@ -102,13 +120,15 @@ export const ManageRoomsModal: React.FC<ManageRoomsModalProps> = ({
       onRequestClose={onClose}
       supportedOrientations={['portrait', 'landscape', 'landscape-left', 'landscape-right']}
     >
-      <View style={styles.overlay}>
-        <View style={styles.modalContent}>
+      <View style={[styles.overlay, isPhone && styles.overlayPhone]}>
+        <View style={[styles.modalContent, isPhone && styles.modalContentPhone]}>
           {/* Header */}
           <View style={styles.header}>
-            <View>
-              <AppText style={styles.title}>Quản lý Khu & Phòng học / làm việc</AppText>
-              <AppText style={styles.subtitle}>
+            <View style={{ flex: 1, paddingRight: 8 }}>
+              <AppText style={[styles.title, isPhone && { fontSize: 16 }]} numberOfLines={1}>
+                {isPhone ? 'Quản lý Khu & Phòng' : 'Quản lý Khu & Phòng học / làm việc'}
+              </AppText>
+              <AppText style={styles.subtitle} numberOfLines={1}>
                 Xem danh sách khu vực, phòng và thêm mới nhanh chóng
               </AppText>
             </View>
@@ -119,7 +139,7 @@ export const ManageRoomsModal: React.FC<ManageRoomsModalProps> = ({
           </View>
 
           {/* Tab Selector */}
-          <View style={styles.tabRow}>
+          <View style={[styles.tabRow, isPhone && styles.tabRowPhone]}>
             <TouchableOpacity
               style={[styles.tabBtn, activeTab === 'zones' && styles.tabBtnActive]}
               onPress={() => {
@@ -212,21 +232,23 @@ export const ManageRoomsModal: React.FC<ManageRoomsModalProps> = ({
                         activeOpacity={0.8}
                       >
                         <View style={styles.itemIconWrap}>
-                          <Building2 size={20} color={appColors.blue600} />
+                          <Building2 size={20} color={appColors.blue600} style={{ flexShrink: 0 }} />
                         </View>
                         <View style={styles.itemInfo}>
-                          <AppText style={styles.itemName}>{z.name}</AppText>
-                          <AppText style={styles.itemDesc}>
+                          <AppText style={styles.itemName} numberOfLines={1} ellipsizeMode="tail">
+                            {z.name}
+                          </AppText>
+                          <AppText style={styles.itemDesc} numberOfLines={1} ellipsizeMode="tail">
                             {z.description || 'Không có mô tả'}
                           </AppText>
                         </View>
                         <View style={styles.itemMeta}>
-                          <AppText style={styles.metaText}>
+                          <AppText style={styles.metaText} numberOfLines={1}>
                             {roomsCount} phòng • {membersCount} nhân sự
                           </AppText>
                           {isSelected && (
                             <View style={styles.selectedPill}>
-                              <Check size={12} color={appColors.green600} />
+                              <Check size={12} color={appColors.green600} style={{ flexShrink: 0 }} />
                               <AppText style={styles.selectedPillText}>
                                 Đang chọn
                               </AppText>
@@ -321,24 +343,26 @@ export const ManageRoomsModal: React.FC<ManageRoomsModalProps> = ({
                         activeOpacity={0.8}
                       >
                         <View style={styles.itemIconWrap}>
-                          <DoorOpen size={20} color={appColors.blue600} />
+                          <DoorOpen size={20} color={appColors.blue600} style={{ flexShrink: 0 }} />
                         </View>
                         <View style={styles.itemInfo}>
-                          <AppText style={styles.itemName}>{r.name}</AppText>
-                          <AppText style={styles.itemDesc}>
+                          <AppText style={styles.itemName} numberOfLines={1} ellipsizeMode="tail">
+                            {r.name}
+                          </AppText>
+                          <AppText style={styles.itemDesc} numberOfLines={1} ellipsizeMode="tail">
                             Thuộc {zone?.name || 'Khu vực'} • Sức chứa {r.capacity || 30} người
                           </AppText>
                         </View>
                         <View style={styles.itemMeta}>
                           <View style={styles.usersCountRow}>
-                            <Users size={14} color={appColors.slate500} />
-                            <AppText style={styles.metaText}>
+                            <Users size={14} color={appColors.slate500} style={{ flexShrink: 0 }} />
+                            <AppText style={styles.metaText} numberOfLines={1}>
                               {membersCount} học viên
                             </AppText>
                           </View>
                           {isSelected && (
                             <View style={styles.selectedPill}>
-                              <Check size={12} color={appColors.green600} />
+                              <Check size={12} color={appColors.green600} style={{ flexShrink: 0 }} />
                               <AppText style={styles.selectedPillText}>
                                 Đang chọn
                               </AppText>
@@ -366,6 +390,9 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     padding: 24,
   },
+  overlayPhone: {
+    padding: 12,
+  },
   modalContent: {
     backgroundColor: appColors.white,
     borderRadius: 20,
@@ -377,6 +404,12 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.15,
     shadowRadius: 20,
     elevation: 8,
+  },
+  modalContentPhone: {
+    width: '100%',
+    maxHeight: '94%',
+    padding: 14,
+    borderRadius: 16,
   },
   header: {
     flexDirection: 'row',
@@ -406,6 +439,9 @@ const styles = StyleSheet.create({
     borderBottomColor: appColors.slate200,
     paddingBottom: 10,
     marginBottom: 14,
+  },
+  tabRowPhone: {
+    gap: 6,
   },
   tabBtn: {
     flexDirection: 'row',
@@ -536,23 +572,29 @@ const styles = StyleSheet.create({
     backgroundColor: appColors.blue50,
     justifyContent: 'center',
     alignItems: 'center',
+    flexShrink: 0,
   },
   itemInfo: {
     flex: 1,
+    minWidth: 0,
+    marginRight: 8,
   },
   itemName: {
     fontSize: 15,
     fontWeight: '700',
     color: appColors.slate900,
+    flexShrink: 1,
   },
   itemDesc: {
     fontSize: 12,
     color: appColors.slate500,
     marginTop: 2,
+    flexShrink: 1,
   },
   itemMeta: {
     alignItems: 'flex-end',
     gap: 6,
+    flexShrink: 0,
   },
   usersCountRow: {
     flexDirection: 'row',

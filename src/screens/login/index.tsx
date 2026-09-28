@@ -5,16 +5,18 @@ import {
   TextInput,
   TouchableOpacity,
   StatusBar,
+  ScrollView,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { AppText } from '../../components/app-text';
 import { useAppDispatch } from '../../store/hooks';
 import { login } from '../../store/slices/appSlice';
-import { setAppLoading } from '../../store/slices/uiSlice';
 import { useMutation } from '@tanstack/react-query';
 import { useCustomNavigation } from '../../hooks/use-custom-navigation';
 import { appScreens } from '../../const/app-screens';
 import { RootNavigatorParamList } from '../../navigation/types/root';
+import { useResponsive } from '../../hooks/use-responsive';
+import { useAppToast } from '../../hooks/use-app-toast';
 import {
   ScanFace,
   Lock,
@@ -26,201 +28,227 @@ import {
   CheckCircle2,
 } from 'lucide-react-native';
 import { appColors } from '../../const/app-colors';
+import { authService } from '../../services/api';
 
 export const LoginScreen = () => {
   const dispatch = useAppDispatch();
   const navigation = useCustomNavigation<RootNavigatorParamList>();
+  const { showErrorToast } = useAppToast();
 
   const [email, setEmail] = useState('admin@vietcore.ai');
   const [password, setPassword] = useState('123456');
   const [showPassword, setShowPassword] = useState(false);
-  const [errorMessage, setErrorMessage] = useState('');
 
-  // Use TanStack Query useMutation + uiSlice for loading control
+  // Real Backend API Login with JWT & Refresh Token support
+  // Loading and error toast are automatically handled by queryClient default options
   const loginMutation = useMutation({
     mutationFn: async ({
       email: userEmail,
-      role,
+      password: userPassword,
     }: {
       email: string;
-      role: string;
+      password: string;
     }) => {
-      // Mock network delay
-      await new Promise(resolve => setTimeout(() => resolve(undefined), 800));
-      return {
-        id: 'admin-01',
-        name: role,
+      return await authService.login({
         email: userEmail,
-        role: 'ADMIN',
-      };
+        password: userPassword,
+      });
     },
-    onMutate: () => {
-      dispatch(setAppLoading(true));
-      setErrorMessage('');
-    },
-    onSuccess: user => {
-      dispatch(login(user));
+    onSuccess: res => {
+      const accessToken = res.access_token;
+      const refreshToken = res.refresh_token;
+      dispatch(
+        login({
+          user: res.user,
+          token: { accessToken, refreshToken },
+        }),
+      );
       navigation.reset({
         index: 0,
         routes: [{ name: appScreens.Authenticated as never }],
       });
     },
-    onError: (err: any) => {
-      setErrorMessage(err?.message || 'Đăng nhập không thành công.');
-    },
-    onSettled: () => {
-      dispatch(setAppLoading(false));
-    },
   });
 
-  const handleLogin = (mockRole: string = 'Quản trị viên') => {
-    if (!email.trim()) {
-      setErrorMessage('Vui lòng nhập email hoặc tài khoản.');
+  const handleLogin = (customEmail?: string, customPassword?: string) => {
+    const targetEmail = (
+      customEmail !== undefined ? customEmail : email
+    ).trim();
+    const targetPassword = (
+      customPassword !== undefined ? customPassword : password
+    ).trim();
+
+    if (!targetEmail) {
+      showErrorToast('Vui lòng nhập email hoặc tài khoản.');
       return;
     }
-    if (!password.trim()) {
-      setErrorMessage('Vui lòng nhập mật khẩu.');
+    if (!targetPassword) {
+      showErrorToast('Vui lòng nhập mật khẩu.');
       return;
     }
 
     loginMutation.mutate({
-      email: email.trim(),
-      role: mockRole,
+      email: targetEmail,
+      password: targetPassword,
     });
   };
+
+  const { isPhone } = useResponsive();
+
+  const renderFormContent = (isPhoneLayout: boolean = false) => (
+    <View style={isPhoneLayout ? styles.phoneFormCard : styles.formCard}>
+      <AppText style={isPhoneLayout ? styles.phoneFormTitle : styles.formTitle}>
+        Đăng nhập hệ thống
+      </AppText>
+      <AppText style={styles.formSubtitle}>
+        Nhập tài khoản quản trị để bắt đầu phiên làm việc
+      </AppText>
+      {/* Email input */}
+      <View style={styles.inputGroup}>
+        <AppText style={styles.inputLabel}>Tài khoản / Email</AppText>
+        <View style={styles.inputWrapper}>
+          <Mail size={18} color={appColors.slate400} />
+          <TextInput
+            style={styles.textInput}
+            placeholder="admin@vietcore.ai"
+            value={email}
+            onChangeText={setEmail}
+            autoCapitalize="none"
+            keyboardType="email-address"
+            placeholderTextColor={appColors.slate400}
+          />
+        </View>
+      </View>
+      {/* Password input */}
+      <View style={styles.inputGroup}>
+        <AppText style={styles.inputLabel}>Mật khẩu</AppText>
+        <View style={styles.inputWrapper}>
+          <Lock size={18} color={appColors.slate400} />
+          <TextInput
+            style={styles.textInput}
+            placeholder="Mật khẩu..."
+            value={password}
+            onChangeText={setPassword}
+            secureTextEntry={!showPassword}
+            placeholderTextColor={appColors.slate400}
+          />
+          <TouchableOpacity
+            onPress={() => setShowPassword(!showPassword)}
+            style={styles.eyeBtn}
+          >
+            {showPassword ? (
+              <EyeOff size={18} color={appColors.slate400} />
+            ) : (
+              <Eye size={18} color={appColors.slate400} />
+            )}
+          </TouchableOpacity>
+        </View>
+      </View>
+      {/* Submit Button */}
+      <TouchableOpacity
+        style={styles.loginBtn}
+        onPress={() => handleLogin()}
+        disabled={loginMutation.isPending}
+        activeOpacity={0.85}
+      >
+        <LogIn size={18} color={appColors.white} />
+        <AppText style={styles.loginBtnText}>Đăng nhập</AppText>
+      </TouchableOpacity>
+      {/* Quick Login Admin Button */}
+      <TouchableOpacity
+        style={styles.mockLoginBtn}
+        onPress={() => {
+          setEmail('admin@vietcore.ai');
+          setPassword('123456');
+          handleLogin('admin@vietcore.ai', '123456');
+        }}
+        disabled={loginMutation.isPending}
+        activeOpacity={0.85}
+      >
+        <Zap size={18} color={appColors.blue600} />
+        <AppText style={styles.mockLoginBtnText}>
+          Đăng nhập nhanh tài khoản Admin
+        </AppText>
+      </TouchableOpacity>
+      <AppText style={styles.hintText}>
+        Tài khoản thử nghiệm:{' '}
+        <AppText style={styles.hintBold}>admin@vietcore.ai</AppText> /{' '}
+        <AppText style={styles.hintBold}>123456</AppText>
+      </AppText>
+    </View>
+  );
 
   return (
     <SafeAreaView style={styles.safeArea}>
       <StatusBar barStyle="light-content" />
 
-      <View style={styles.container}>
-        {/* Left Side: Brand presentation */}
-        <View style={styles.leftBrandCol}>
-          <View style={styles.iconCircle}>
-            <ScanFace size={52} color={appColors.sky400} />
-          </View>
-
-          <View style={styles.logoRow}>
-            <AppText style={styles.brandTitlePrimary}>VietCore</AppText>
-            <AppText style={styles.brandTitleSecondary}> AI</AppText>
-          </View>
-          <AppText style={styles.brandSub}>FACE CHECK • TABLET SYSTEM</AppText>
-
-          <View style={styles.featuresList}>
-            <View style={styles.featureItem}>
-              <CheckCircle2 size={18} color={appColors.emerald400} />
-              <AppText style={styles.featureText}>
-                Nhận diện khuôn mặt thời gian thực bằng YOLO
-              </AppText>
-            </View>
-            <View style={styles.featureItem}>
-              <CheckCircle2 size={18} color={appColors.emerald400} />
-              <AppText style={styles.featureText}>
-                Quản lý Khu & Phòng học/làm việc linh hoạt
-              </AppText>
-            </View>
-            <View style={styles.featureItem}>
-              <CheckCircle2 size={18} color={appColors.emerald400} />
-              <AppText style={styles.featureText}>
-                Đối soát danh sách & cảnh báo vắng mặt tự động
-              </AppText>
-            </View>
-          </View>
-        </View>
-
-        {/* Right Side: Login Card */}
-        <View style={styles.rightFormCol}>
-          <View style={styles.formCard}>
-            <AppText style={styles.formTitle}>Đăng nhập hệ thống</AppText>
-            <AppText style={styles.formSubtitle}>
-              Nhập tài khoản quản trị để bắt đầu phiên làm việc
-            </AppText>
-
-            {errorMessage ? (
-              <View style={styles.errorBox}>
-                <AppText style={styles.errorText}>{errorMessage}</AppText>
-              </View>
-            ) : null}
-
-            {/* Email input */}
-            <View style={styles.inputGroup}>
-              <AppText style={styles.inputLabel}>Tài khoản / Email</AppText>
-              <View style={styles.inputWrapper}>
-                <Mail size={18} color={appColors.slate400} />
-                <TextInput
-                  style={styles.textInput}
-                  placeholder="admin@vietcore.ai"
-                  value={email}
-                  onChangeText={setEmail}
-                  autoCapitalize="none"
-                  keyboardType="email-address"
-                  placeholderTextColor={appColors.slate400}
-                />
-              </View>
+      {isPhone ? (
+        <ScrollView
+          style={styles.phoneScrollView}
+          contentContainerStyle={styles.phoneScrollContent}
+          keyboardShouldPersistTaps="handled"
+          showsVerticalScrollIndicator={false}
+        >
+          {/* Top Compact Brand Presentation for Phone */}
+          <View style={styles.phoneBrandWrap}>
+            <View style={styles.phoneIconCircle}>
+              <ScanFace size={38} color={appColors.sky400} />
             </View>
 
-            {/* Password input */}
-            <View style={styles.inputGroup}>
-              <AppText style={styles.inputLabel}>Mật khẩu</AppText>
-              <View style={styles.inputWrapper}>
-                <Lock size={18} color={appColors.slate400} />
-                <TextInput
-                  style={styles.textInput}
-                  placeholder="Mật khẩu..."
-                  value={password}
-                  onChangeText={setPassword}
-                  secureTextEntry={!showPassword}
-                  placeholderTextColor={appColors.slate400}
-                />
-                <TouchableOpacity
-                  onPress={() => setShowPassword(!showPassword)}
-                  style={styles.eyeBtn}
-                >
-                  {showPassword ? (
-                    <EyeOff size={18} color={appColors.slate400} />
-                  ) : (
-                    <Eye size={18} color={appColors.slate400} />
-                  )}
-                </TouchableOpacity>
-              </View>
+            <View style={styles.logoRow}>
+              <AppText style={styles.phoneBrandTitlePrimary}>VietCore</AppText>
+              <AppText style={styles.phoneBrandTitleSecondary}> AI</AppText>
             </View>
-
-            {/* Submit Button */}
-            <TouchableOpacity
-              style={styles.loginBtn}
-              onPress={() => handleLogin('Quản trị viên')}
-              disabled={loginMutation.isPending}
-              activeOpacity={0.85}
-            >
-              <LogIn size={18} color={appColors.white} />
-              <AppText style={styles.loginBtnText}>Đăng nhập</AppText>
-            </TouchableOpacity>
-
-            {/* Quick Mock Login Button */}
-            <TouchableOpacity
-              style={styles.mockLoginBtn}
-              onPress={() => {
-                setEmail('admin@vietcore.ai');
-                setPassword('123456');
-                handleLogin('Admin Quản Trị');
-              }}
-              disabled={loginMutation.isPending}
-              activeOpacity={0.85}
-            >
-              <Zap size={18} color={appColors.blue600} />
-              <AppText style={styles.mockLoginBtnText}>
-                Đăng nhập nhanh (Mock Login Admin)
-              </AppText>
-            </TouchableOpacity>
-
-            <AppText style={styles.hintText}>
-              Tài khoản thử nghiệm:{' '}
-              <AppText style={styles.hintBold}>admin@vietcore.ai</AppText> /{' '}
-              <AppText style={styles.hintBold}>123456</AppText>
+            <AppText style={styles.phoneBrandSub}>
+              HỆ THỐNG ĐIỂM DANH KHUÔN MẶT
             </AppText>
           </View>
+
+          {renderFormContent(true)}
+        </ScrollView>
+      ) : (
+        /* Original Tablet 2-column Landscape */
+        <View style={styles.container}>
+          {/* Left Side: Brand presentation */}
+          <View style={styles.leftBrandCol}>
+            <View style={styles.iconCircle}>
+              <ScanFace size={52} color={appColors.sky400} />
+            </View>
+
+            <View style={styles.logoRow}>
+              <AppText style={styles.brandTitlePrimary}>VietCore</AppText>
+              <AppText style={styles.brandTitleSecondary}> AI</AppText>
+            </View>
+            <AppText style={styles.brandSub}>
+              FACE CHECK • TABLET SYSTEM
+            </AppText>
+
+            <View style={styles.featuresList}>
+              <View style={styles.featureItem}>
+                <CheckCircle2 size={18} color={appColors.emerald400} />
+                <AppText style={styles.featureText}>
+                  Nhận diện khuôn mặt thời gian thực bằng YOLO
+                </AppText>
+              </View>
+              <View style={styles.featureItem}>
+                <CheckCircle2 size={18} color={appColors.emerald400} />
+                <AppText style={styles.featureText}>
+                  Quản lý Khu & Phòng học/làm việc linh hoạt
+                </AppText>
+              </View>
+              <View style={styles.featureItem}>
+                <CheckCircle2 size={18} color={appColors.emerald400} />
+                <AppText style={styles.featureText}>
+                  Đối soát danh sách & cảnh báo vắng mặt tự động
+                </AppText>
+              </View>
+            </View>
+          </View>
+
+          {/* Right Side: Login Card */}
+          <View style={styles.rightFormCol}>{renderFormContent(false)}</View>
         </View>
-      </View>
+      )}
     </SafeAreaView>
   );
 };
@@ -318,19 +346,6 @@ const styles = StyleSheet.create({
     color: appColors.slate500,
     marginBottom: 20,
   },
-  errorBox: {
-    backgroundColor: appColors.red50,
-    borderWidth: 1,
-    borderColor: appColors.red300,
-    borderRadius: 10,
-    padding: 10,
-    marginBottom: 14,
-  },
-  errorText: {
-    color: appColors.red600,
-    fontSize: 12,
-    fontWeight: '600',
-  },
   inputGroup: {
     marginBottom: 16,
   },
@@ -400,5 +415,66 @@ const styles = StyleSheet.create({
   hintBold: {
     color: appColors.slate600,
     fontWeight: '700',
+  },
+  phoneScrollView: {
+    flex: 1,
+    backgroundColor: appColors.slate900,
+  },
+  phoneScrollContent: {
+    paddingHorizontal: 20,
+    paddingTop: 24,
+    paddingBottom: 40,
+    alignItems: 'center',
+  },
+  phoneBrandWrap: {
+    alignItems: 'center',
+    marginBottom: 24,
+  },
+  phoneIconCircle: {
+    width: 64,
+    height: 64,
+    borderRadius: 20,
+    backgroundColor: appColors.slate800,
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: appColors.slate700,
+    marginBottom: 12,
+  },
+  phoneBrandTitlePrimary: {
+    fontSize: 26,
+    fontWeight: '900',
+    color: appColors.slate50,
+    letterSpacing: -0.5,
+  },
+  phoneBrandTitleSecondary: {
+    fontSize: 26,
+    fontWeight: '900',
+    color: appColors.sky400,
+    letterSpacing: -0.5,
+  },
+  phoneBrandSub: {
+    fontSize: 10,
+    fontWeight: '700',
+    color: appColors.slate400,
+    letterSpacing: 2,
+    marginTop: 4,
+  },
+  phoneFormCard: {
+    width: '100%',
+    backgroundColor: appColors.white,
+    borderRadius: 20,
+    padding: 20,
+    shadowColor: appColors.black,
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.15,
+    shadowRadius: 15,
+    elevation: 6,
+  },
+  phoneFormTitle: {
+    fontSize: 19,
+    fontWeight: '800',
+    color: appColors.slate900,
+    marginBottom: 4,
   },
 });

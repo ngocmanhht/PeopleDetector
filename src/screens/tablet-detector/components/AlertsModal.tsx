@@ -11,6 +11,7 @@ import { useAppDispatch, useAppSelector } from '../../../store/hooks';
 import { X, AlertTriangle, AlertCircle, Info, Trash2 } from 'lucide-react-native';
 import { clearAlerts } from '../../../store/slices/detectorSlice';
 import { appColors } from '../../../const/app-colors';
+import { useResponsive } from '../../../hooks/use-responsive';
 
 interface AlertsModalProps {
   visible: boolean;
@@ -21,6 +22,7 @@ export const AlertsModal: React.FC<AlertsModalProps> = ({
   visible,
   onClose,
 }) => {
+  const { isPhone } = useResponsive();
   const dispatch = useAppDispatch();
   const alerts = useAppSelector(state => state.detector.alerts);
 
@@ -32,14 +34,16 @@ export const AlertsModal: React.FC<AlertsModalProps> = ({
       onRequestClose={onClose}
       supportedOrientations={['portrait', 'landscape', 'landscape-left', 'landscape-right']}
     >
-      <View style={styles.overlay}>
-        <View style={styles.modalContent}>
+      <View style={[styles.overlay, isPhone && styles.overlayPhone]}>
+        <View style={[styles.modalContent, isPhone && styles.modalContentPhone]}>
           {/* Header */}
           <View style={styles.header}>
-            <View>
-              <AppText style={styles.title}>Nhật ký Cảnh báo & Sự kiện</AppText>
-              <AppText style={styles.subtitle}>
-                Các trường hợp độ tin cậy thấp hoặc người lạ xuất hiện trong phiên
+            <View style={{ flex: 1, paddingRight: 8 }}>
+              <AppText style={styles.title} numberOfLines={1}>
+                {isPhone ? 'Nhật ký Cảnh báo' : 'Nhật ký Cảnh báo & Sự kiện'}
+              </AppText>
+              <AppText style={styles.subtitle} numberOfLines={1}>
+                Độ tin cậy thấp hoặc người lạ xuất hiện trong phiên
               </AppText>
             </View>
 
@@ -118,6 +122,9 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     padding: 24,
   },
+  overlayPhone: {
+    padding: 12,
+  },
   modalContent: {
     backgroundColor: appColors.white,
     borderRadius: 20,
@@ -129,6 +136,12 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.15,
     shadowRadius: 20,
     elevation: 8,
+  },
+  modalContentPhone: {
+    width: '100%',
+    maxHeight: '92%',
+    padding: 14,
+    borderRadius: 16,
   },
   header: {
     flexDirection: 'row',

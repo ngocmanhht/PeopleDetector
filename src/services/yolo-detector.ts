@@ -17,22 +17,50 @@ export class YoloDetectorService {
   /**
    * Enroll a profile into the face recognition feature embedding cache
    */
-  public static enrollProfile(profile: UserProfile): void {
-    TfliteYoloService.enrollProfile(profile);
+  public static async enrollProfile(profile: UserProfile): Promise<void> {
+    await TfliteYoloService.enrollProfile(profile);
+  }
+
+  /**
+   * Process a captured real photo from camera through real YOLOv8 and MobileFaceNet pipeline
+   */
+  public static async processCapturedFrame(
+    photoPath: string,
+    roomProfiles: UserProfile[],
+    isFrontCamera?: boolean,
+  ): Promise<DetectionResult | null> {
+    return TfliteYoloService.processCapturedFrame(
+      photoPath,
+      roomProfiles,
+      isFrontCamera,
+    );
+  }
+
+  /**
+   * Fallback simulator scan when no hardware camera device exists
+   */
+  public static simulateScanDetection(
+    roomProfiles: UserProfile[],
+  ): DetectionResult | null {
+    return TfliteYoloService.simulateScanDetection(roomProfiles);
   }
 
   /**
    * Process a captured frame or detection event against the enrolled profiles of the active room.
    */
-  public static matchDetectedFace(
+  public static async matchDetectedFace(
     detectedBox: BoundingBox,
     roomProfiles: UserProfile[],
     targetUser?: UserProfile,
-  ): DetectionResult | null {
+    photoPath?: string,
+    isFrontCamera?: boolean,
+  ): Promise<DetectionResult | null> {
     return TfliteYoloService.matchFaceInRoom(
       detectedBox,
       roomProfiles,
       targetUser,
+      photoPath,
+      isFrontCamera,
     );
   }
 

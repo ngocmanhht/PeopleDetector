@@ -16,8 +16,19 @@
 default_platform(:ios)
 
 platform :ios do
-  desc "Description of what the lane does"
-  lane :custom_lane do
-    # add actions here: https://docs.fastlane.tools/actions
+  desc "Push a new beta build to TestFlight"
+  lane :beta do
+    # get_certificates
+    # get_provisioning_profile
+    increment_build_number(xcodeproj: "PeopleDetector.xcodeproj")
+    build_app(workspace: "PeopleDetector.xcworkspace", scheme: "PeopleDetector")
+    upload_to_testflight
+    git_commit(
+      path: [
+        "./PeopleDetector/Info.plist",
+        "./PeopleDetector.xcodeproj/project.pbxproj"
+      ],
+      message: "Version Bump on iOS - #{Time.now.strftime('%Y-%m-%d %H:%M:%S')}"
+    )
   end
 end

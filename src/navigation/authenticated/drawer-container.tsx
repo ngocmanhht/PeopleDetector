@@ -20,16 +20,20 @@ import {
   ChevronRight,
 } from 'lucide-react-native';
 import { appColors } from '../../const/app-colors';
+import { useResponsive } from '../../hooks/use-responsive';
 
 // Screen Tabs
 import HomeScreen from '../../screens/home';
 import { RoomsManagerScreen } from '../../screens/rooms-manager';
 import { AlertsScreen } from '../../screens/alerts';
 import { SettingsScreen } from '../../screens/settings';
+import { useBackendSync } from '../../hooks/use-backend-sync';
 
 export type DrawerTabKey = 'home' | 'rooms' | 'alerts' | 'settings';
 
 export const DrawerContainer: React.FC = () => {
+  useBackendSync();
+  const { isTablet, isPhone } = useResponsive();
   const [activeTab, setActiveTab] = useState<DrawerTabKey>('home');
   const [isExpanded, setIsExpanded] = useState(false);
 
@@ -86,41 +90,183 @@ export const DrawerContainer: React.FC = () => {
     <SafeAreaView style={styles.safeArea}>
       <StatusBar barStyle="dark-content" />
 
-      <View style={styles.container}>
-        {/* Left Permanent Animated Drawer */}
-        <Animated.View style={[styles.sidebar, { width: sidebarWidth }]}>
-          {/* Top Brand / Toggle Header */}
-          <View style={styles.sidebarHeader}>
-            {isExpanded ? (
-              <View style={styles.expandedBrand}>
-                <View style={styles.brandIconWrap}>
-                  <ScanFace size={24} color={appColors.blue600} />
+      <View style={[styles.container, isPhone && styles.containerPhone]}>
+        {/* Left Permanent Animated Drawer for Tablet */}
+        {isTablet && (
+          <Animated.View style={[styles.sidebar, { width: sidebarWidth }]}>
+            {/* Top Brand / Toggle Header */}
+            <View style={styles.sidebarHeader}>
+              {isExpanded ? (
+                <View style={styles.expandedBrand}>
+                  <View style={styles.brandIconWrap}>
+                    <ScanFace size={24} color={appColors.blue600} />
+                  </View>
+                  <View style={{ flex: 1 }}>
+                    <AppText style={styles.brandTitle}>VietCore AI</AppText>
+                    <AppText style={styles.brandSubtitle}>FACE CHECK</AppText>
+                  </View>
+                  <TouchableOpacity
+                    style={styles.toggleBtn}
+                    onPress={toggleExpand}
+                    activeOpacity={0.7}
+                  >
+                    <PanelLeftClose size={20} color={appColors.slate500} />
+                  </TouchableOpacity>
                 </View>
-                <View style={{ flex: 1 }}>
-                  <AppText style={styles.brandTitle}>VietCore AI</AppText>
-                  <AppText style={styles.brandSubtitle}>FACE CHECK</AppText>
-                </View>
+              ) : (
                 <TouchableOpacity
-                  style={styles.toggleBtn}
+                  style={styles.toggleBtnCollapsed}
                   onPress={toggleExpand}
                   activeOpacity={0.7}
                 >
-                  <PanelLeftClose size={20} color={appColors.slate500} />
+                  <PanelLeftOpen size={24} color={appColors.blue600} />
                 </TouchableOpacity>
+              )}
+            </View>
+
+            {/* Navigation Menu Items */}
+            <View style={styles.menuList}>
+              {navItems.map(item => {
+                const isActive = activeTab === item.key;
+                const IconComponent = item.icon;
+
+                return (
+                  <TouchableOpacity
+                    key={item.key}
+                    style={[
+                      styles.navItem,
+                      isActive && styles.navItemActive,
+                      !isExpanded && styles.navItemCollapsed,
+                    ]}
+                    onPress={() => setActiveTab(item.key)}
+                    activeOpacity={0.8}
+                  >
+                    {/* Icon wrap */}
+                    <View
+                      style={[
+                        styles.iconContainer,
+                        isActive && styles.iconContainerActive,
+                      ]}
+                    >
+                      <IconComponent
+                        size={!isExpanded ? 24 : 20}
+                        color={isActive ? appColors.white : appColors.slate500}
+                      />
+                      {/* Collapsed dot badge */}
+                      {!isExpanded && Boolean(item.badge) && (
+                        <View
+                          style={[
+                            styles.dotBadge,
+                            item.badgeDanger ? styles.dotBadgeDanger : null,
+                          ]}
+                        />
+                      )}
+                    </View>
+
+                    {/* Expanded text info */}
+                    {isExpanded && (
+                      <View style={styles.labelWrapper}>
+                        <AppText
+                          style={[
+                            styles.navLabel,
+                            isActive && styles.navLabelActive,
+                          ]}
+                          numberOfLines={1}
+                        >
+                          {item.label}
+                        </AppText>
+                        <AppText style={styles.navSub} numberOfLines={1}>
+                          {item.subtitle}
+                        </AppText>
+                      </View>
+                    )}
+
+                    {/* Expanded Badge */}
+                    {isExpanded && Boolean(item.badge) && (
+                      <View
+                        style={[
+                          styles.badgePill,
+                          item.badgeDanger ? styles.badgePillDanger : null,
+                        ]}
+                      >
+                        <AppText
+                          style={[
+                            styles.badgePillText,
+                            item.badgeDanger ? styles.badgePillTextDanger : null,
+                          ]}
+                        >
+                          {item.badge}
+                        </AppText>
+                      </View>
+                    )}
+
+                    {/* Active Indicator Chevron */}
+                    {isExpanded && isActive && !item.badge && (
+                      <ChevronRight size={16} color={appColors.blue600} />
+                    )}
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
+
+            {/* Bottom Sidebar Info / Mini toggle */}
+            {isExpanded && (
+              <View style={styles.sidebarFooter}>
+                <View style={styles.systemStatusDot} />
+                <AppText style={styles.systemStatusText}>
+                  System Online • v1.0
+                </AppText>
               </View>
-            ) : (
-              <TouchableOpacity
-                style={styles.toggleBtnCollapsed}
-                onPress={toggleExpand}
-                activeOpacity={0.7}
-              >
-                <PanelLeftOpen size={24} color={appColors.blue600} />
-              </TouchableOpacity>
             )}
+          </Animated.View>
+        )}
+
+        {/* Content Area: Persistent Mounted Screens */}
+        <View style={styles.contentArea}>
+          <View
+            style={[
+              styles.screenWrapper,
+              activeTab !== 'home' && styles.hiddenScreen,
+            ]}
+            pointerEvents={activeTab === 'home' ? 'auto' : 'none'}
+          >
+            <HomeScreen isTabFocused={activeTab === 'home'} />
           </View>
 
-          {/* Navigation Menu Items */}
-          <View style={styles.menuList}>
+          <View
+            style={[
+              styles.screenWrapper,
+              activeTab !== 'rooms' && styles.hiddenScreen,
+            ]}
+            pointerEvents={activeTab === 'rooms' ? 'auto' : 'none'}
+          >
+            <RoomsManagerScreen />
+          </View>
+
+          <View
+            style={[
+              styles.screenWrapper,
+              activeTab !== 'alerts' && styles.hiddenScreen,
+            ]}
+            pointerEvents={activeTab === 'alerts' ? 'auto' : 'none'}
+          >
+            <AlertsScreen />
+          </View>
+
+          <View
+            style={[
+              styles.screenWrapper,
+              activeTab !== 'settings' && styles.hiddenScreen,
+            ]}
+            pointerEvents={activeTab === 'settings' ? 'auto' : 'none'}
+          >
+            <SettingsScreen />
+          </View>
+        </View>
+
+        {/* Bottom Tab Bar for iPhone */}
+        {isPhone && (
+          <View style={styles.bottomTabBar}>
             {navItems.map(item => {
               const isActive = activeTab === item.key;
               const IconComponent = item.icon;
@@ -128,100 +274,39 @@ export const DrawerContainer: React.FC = () => {
               return (
                 <TouchableOpacity
                   key={item.key}
-                  style={[
-                    styles.navItem,
-                    isActive && styles.navItemActive,
-                    !isExpanded && styles.navItemCollapsed,
-                  ]}
+                  style={styles.bottomTabBtn}
                   onPress={() => setActiveTab(item.key)}
-                  activeOpacity={0.8}
+                  activeOpacity={0.75}
                 >
-                  {/* Icon wrap */}
-                  <View
-                    style={[
-                      styles.iconContainer,
-                      isActive && styles.iconContainerActive,
-                    ]}
-                  >
+                  <View style={styles.bottomTabIconWrap}>
                     <IconComponent
-                      size={!isExpanded ? 24 : 20}
-                      color={isActive ? appColors.white : appColors.slate500}
+                      size={22}
+                      color={isActive ? appColors.blue600 : appColors.slate400}
                     />
-                    {/* Collapsed dot badge */}
-                    {!isExpanded && item.badge && (
+                    {Boolean(item.badge) && (
                       <View
                         style={[
-                          styles.dotBadge,
-                          item.badgeDanger ? styles.dotBadgeDanger : null,
+                          styles.bottomBadge,
+                          item.badgeDanger ? styles.badgePillDanger : null,
                         ]}
-                      />
+                      >
+                        <AppText style={styles.bottomBadgeText}>{item.badge}</AppText>
+                      </View>
                     )}
                   </View>
-
-                  {/* Expanded text info */}
-                  {isExpanded && (
-                    <View style={styles.labelWrapper}>
-                      <AppText
-                        style={[
-                          styles.navLabel,
-                          isActive && styles.navLabelActive,
-                        ]}
-                        numberOfLines={1}
-                      >
-                        {item.label}
-                      </AppText>
-                      <AppText style={styles.navSub} numberOfLines={1}>
-                        {item.subtitle}
-                      </AppText>
-                    </View>
-                  )}
-
-                  {/* Expanded Badge */}
-                  {isExpanded && item.badge && (
-                    <View
-                      style={[
-                        styles.badgePill,
-                        item.badgeDanger ? styles.badgePillDanger : null,
-                      ]}
-                    >
-                      <AppText
-                        style={[
-                          styles.badgePillText,
-                          item.badgeDanger ? styles.badgePillTextDanger : null,
-                        ]}
-                      >
-                        {item.badge}
-                      </AppText>
-                    </View>
-                  )}
-
-                  {/* Active Indicator Chevron */}
-                  {isExpanded && isActive && !item.badge && (
-                    <ChevronRight size={16} color={appColors.blue600} />
-                  )}
+                  <AppText
+                    style={[
+                      styles.bottomTabText,
+                      isActive && styles.bottomTabTextActive,
+                    ]}
+                  >
+                    {item.label}
+                  </AppText>
                 </TouchableOpacity>
               );
             })}
           </View>
-
-          {/* Bottom Sidebar Info / Mini toggle */}
-          {isExpanded && (
-            <View style={styles.sidebarFooter}>
-              <View style={styles.systemStatusDot} />
-              <AppText style={styles.systemStatusText}>
-                System Online • v1.0
-              </AppText>
-            </View>
-          )}
-        </Animated.View>
-
-        {/* Right Content Area: Active Screen */}
-        <View style={styles.contentArea}>
-          {activeTab === 'home' && <HomeScreen />}
-          {activeTab === 'rooms' && <RoomsManagerScreen />}
-          {activeTab === 'alerts' && <AlertsScreen />}
-          {activeTab === 'settings' && <SettingsScreen />}
-        </View>
+        )}
       </View>
     </SafeAreaView>
   );
@@ -398,5 +483,65 @@ const styles = StyleSheet.create({
   },
   contentArea: {
     flex: 1,
+  },
+  screenWrapper: {
+    flex: 1,
+    width: '100%',
+    height: '100%',
+  },
+  hiddenScreen: {
+    display: 'none',
+  },
+  containerPhone: {
+    flexDirection: 'column',
+  },
+  bottomTabBar: {
+    flexDirection: 'row',
+    height: 64,
+    backgroundColor: appColors.white,
+    borderTopWidth: 1,
+    borderTopColor: appColors.slate200,
+    alignItems: 'center',
+    justifyContent: 'space-around',
+    paddingHorizontal: 8,
+    paddingBottom: 4,
+  },
+  bottomTabBtn: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 6,
+  },
+  bottomTabIconWrap: {
+    position: 'relative',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 4,
+  },
+  bottomTabText: {
+    fontSize: 11,
+    fontWeight: '500',
+    color: appColors.slate500,
+  },
+  bottomTabTextActive: {
+    color: appColors.blue600,
+    fontWeight: '700',
+  },
+  bottomBadge: {
+    position: 'absolute',
+    top: -4,
+    right: -10,
+    backgroundColor: appColors.blue600,
+    borderRadius: 8,
+    paddingHorizontal: 5,
+    paddingVertical: 1,
+    minWidth: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  bottomBadgeText: {
+    color: appColors.white,
+    fontSize: 9,
+    fontWeight: '700',
   },
 });

@@ -18,8 +18,10 @@ import {
 } from 'lucide-react-native';
 import { addAlert, clearAlerts } from '../../store/slices/detectorSlice';
 import { appColors } from '../../const/app-colors';
+import { useResponsive } from '../../hooks/use-responsive';
 
 export const AlertsScreen: React.FC = () => {
+  const { isPhone } = useResponsive();
   const dispatch = useAppDispatch();
   const alerts = useAppSelector(state => state.detector.alerts);
 
@@ -57,36 +59,38 @@ export const AlertsScreen: React.FC = () => {
   };
 
   return (
-    <View style={styles.container}>
+    <View style={[styles.container, isPhone && styles.containerPhone]}>
       {/* Top Header */}
-      <View style={styles.header}>
-        <View>
+      <View style={[styles.header, isPhone && styles.headerPhone]}>
+        <View style={{ flex: 1 }}>
           <View style={styles.titleRow}>
-            <Bell size={26} color={appColors.red600} />
-            <AppText style={styles.title}>Nhật ký Cảnh báo & Sự kiện AI</AppText>
+            <Bell size={isPhone ? 20 : 26} color={appColors.red600} />
+            <AppText style={[styles.title, isPhone && styles.titlePhone]}>
+              {isPhone ? 'Nhật ký Cảnh báo AI' : 'Nhật ký Cảnh báo & Sự kiện AI'}
+            </AppText>
           </View>
-          <AppText style={styles.subtitle}>
+          <AppText style={styles.subtitle} numberOfLines={isPhone ? 1 : 2}>
             Theo dõi tất cả các phát hiện bất thường, lỗi hệ thống và nhật ký điểm danh
           </AppText>
         </View>
 
-        <View style={styles.headerActions}>
+        <View style={[styles.headerActions, isPhone && styles.headerActionsPhone]}>
           <TouchableOpacity
-            style={styles.testBtn}
+            style={[styles.testBtn, isPhone && styles.testBtnPhone]}
             onPress={handleSimulateAlert}
             activeOpacity={0.8}
           >
-            <Plus size={16} color={appColors.blue600} />
+            <Plus size={15} color={appColors.blue600} />
             <AppText style={styles.testBtnText}>Tạo cảnh báo test</AppText>
           </TouchableOpacity>
 
           {alerts.length > 0 && (
             <TouchableOpacity
-              style={styles.clearBtn}
+              style={[styles.clearBtn, isPhone && styles.clearBtnPhone]}
               onPress={() => dispatch(clearAlerts())}
               activeOpacity={0.8}
             >
-              <Trash2 size={16} color={appColors.red600} />
+              <Trash2 size={15} color={appColors.red600} />
               <AppText style={styles.clearBtnText}>Xóa tất cả</AppText>
             </TouchableOpacity>
           )}
@@ -94,33 +98,40 @@ export const AlertsScreen: React.FC = () => {
       </View>
 
       {/* Filter Tabs */}
-      <View style={styles.filterRow}>
-        {(['all', 'warning', 'error', 'info'] as const).map(tab => {
-          const isSelected = activeFilter === tab;
-          const labels = {
-            all: `Tất cả (${alerts.length})`,
-            warning: `Cảnh báo (${alerts.filter(a => a.type === 'warning').length})`,
-            error: `Lỗi (${alerts.filter(a => a.type === 'error').length})`,
-            info: `Thông tin (${alerts.filter(a => a.type === 'info').length})`,
-          };
+      <View style={styles.filterWrapper}>
+        <FlatList
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          data={['all', 'warning', 'error', 'info'] as const}
+          keyExtractor={tab => tab}
+          contentContainerStyle={styles.filterRow}
+          renderItem={({ item: tab }) => {
+            const isSelected = activeFilter === tab;
+            const labels = {
+              all: `Tất cả (${alerts.length})`,
+              warning: `Cảnh báo (${alerts.filter(a => a.type === 'warning').length})`,
+              error: `Lỗi (${alerts.filter(a => a.type === 'error').length})`,
+              info: `Thông tin (${alerts.filter(a => a.type === 'info').length})`,
+            };
 
-          return (
-            <TouchableOpacity
-              key={tab}
-              style={[styles.filterChip, isSelected && styles.filterChipActive]}
-              onPress={() => setActiveFilter(tab)}
-            >
-              <AppText
-                style={[
-                  styles.filterText,
-                  isSelected && styles.filterTextActive,
-                ]}
+            return (
+              <TouchableOpacity
+                key={tab}
+                style={[styles.filterChip, isSelected && styles.filterChipActive]}
+                onPress={() => setActiveFilter(tab)}
               >
-                {labels[tab]}
-              </AppText>
-            </TouchableOpacity>
-          );
-        })}
+                <AppText
+                  style={[
+                    styles.filterText,
+                    isSelected && styles.filterTextActive,
+                  ]}
+                >
+                  {labels[tab]}
+                </AppText>
+              </TouchableOpacity>
+            );
+          }}
+        />
       </View>
 
       {/* Alerts List */}
@@ -188,6 +199,9 @@ const styles = StyleSheet.create({
     backgroundColor: appColors.slate50,
     padding: 24,
   },
+  containerPhone: {
+    padding: 12,
+  },
   header: {
     flexDirection: 'row',
     justifyContent: 'space-between',
@@ -199,6 +213,14 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: appColors.slate200,
   },
+  headerPhone: {
+    flexDirection: 'column',
+    alignItems: 'stretch',
+    gap: 12,
+    padding: 14,
+    marginBottom: 14,
+    borderRadius: 14,
+  },
   titleRow: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -208,6 +230,9 @@ const styles = StyleSheet.create({
     fontSize: 22,
     fontWeight: '800',
     color: appColors.slate900,
+  },
+  titlePhone: {
+    fontSize: 18,
   },
   subtitle: {
     fontSize: 13,
@@ -219,6 +244,10 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 12,
   },
+  headerActionsPhone: {
+    justifyContent: 'flex-start',
+    gap: 8,
+  },
   testBtn: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -229,6 +258,17 @@ const styles = StyleSheet.create({
     paddingVertical: 8,
     borderRadius: 10,
     gap: 6,
+  },
+  testBtnPhone: {
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+  },
+  clearBtnPhone: {
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+  },
+  filterWrapper: {
+    marginBottom: 14,
   },
   testBtnText: {
     color: appColors.blue600,

@@ -19,12 +19,17 @@ import {
   Trash2,
   Star,
   UserCheck,
+  FlipHorizontal,
+  RotateCw,
 } from 'lucide-react-native';
 import { updateUserProfile } from '../../../store/slices/detectorSlice';
+import { profileService } from '../../../services/api';
 import { UserProfile } from '../../../model/detector';
 import { PHOTO_CONFIG } from '../../../const/photo-config';
 import { ImagePickerService } from '../../../services/image-picker-service';
+import { tfliteYoloService } from '../../../services/tflite-yolo-service';
 import { appColors } from '../../../const/app-colors';
+import { useResponsive } from '../../../hooks/use-responsive';
 
 interface EditUserModalProps {
   visible: boolean;
@@ -37,6 +42,7 @@ export const EditUserModal: React.FC<EditUserModalProps> = ({
   user,
   onClose,
 }) => {
+  const { isPhone } = useResponsive();
   const dispatch = useAppDispatch();
   const { rooms } = useAppSelector(state => state.detector);
 
@@ -64,7 +70,7 @@ export const EditUserModal: React.FC<EditUserModalProps> = ({
     }
   }, [user, visible]);
 
-  const handleCapturePhoto = async () => {
+  const handleCapturePhoto = () => {
     if (photos.length >= PHOTO_CONFIG.MAX_PHOTOS_PER_USER) {
       Alert.alert(
         'Đã đủ ảnh',
@@ -72,13 +78,59 @@ export const EditUserModal: React.FC<EditUserModalProps> = ({
       );
       return;
     }
-    const uri = await ImagePickerService.captureImageWithCamera(photos.length);
-    if (uri) {
-      setPhotos(prev => {
-        const next = [...prev, uri];
-        if (!avatarUri) setAvatarUri(uri);
-        return next;
-      });
+
+    Alert.alert('Chọn Camera', 'Bạn muốn chụp ảnh hồ sơ bằng camera nào?', [
+      {
+        text: 'Camera sau (Khuyên dùng)',
+        onPress: async () => {
+          const uri = await ImagePickerService.captureImageWithCamera(
+            photos.length,
+            'back'
+          );
+          if (uri) {
+            setPhotos(prev => {
+              const next = [...prev, uri];
+              if (!avatarUri) setAvatarUri(uri);
+              return next;
+            });
+          }
+        },
+      },
+      {
+        text: 'Camera trước (Selfie)',
+        onPress: async () => {
+          const uri = await ImagePickerService.captureImageWithCamera(
+            photos.length,
+            'front'
+          );
+          if (uri) {
+            setPhotos(prev => {
+              const next = [...prev, uri];
+              if (!avatarUri) setAvatarUri(uri);
+              return next;
+            });
+          }
+        },
+      },
+      { text: 'Hủy', style: 'cancel' },
+    ]);
+  };
+
+  // Flip photo horizontally to fix mirrored selfie images
+  const handleFlipPhoto = async (photoUri: string) => {
+    const flippedUri = await ImagePickerService.flipImageHorizontal(photoUri);
+    setPhotos(prev => prev.map(p => (p === photoUri ? flippedUri : p)));
+    if (avatarUri === photoUri) {
+      setAvatarUri(flippedUri);
+    }
+  };
+
+  // Rotate photo 90 degrees clockwise
+  const handleRotatePhoto = async (photoUri: string) => {
+    const rotatedUri = await ImagePickerService.rotateImage90(photoUri);
+    setPhotos(prev => prev.map(p => (p === photoUri ? rotatedUri : p)));
+    if (avatarUri === photoUri) {
+      setAvatarUri(rotatedUri);
     }
   };
 
@@ -137,16 +189,25 @@ export const EditUserModal: React.FC<EditUserModalProps> = ({
 
     const finalAvatar = avatarUri || photos[0] || '';
 
+    const updatedData = {
+      fullName: fullName.trim(),
+      code: code.trim(),
+      roomId: roomId || user.roomId,
+      avatarUri: finalAvatar,
+      photos,
+    };
+
+    tfliteYoloService.invalidateProfileCache(user.id);
     dispatch(
       updateUserProfile({
         id: user.id,
-        fullName: fullName.trim(),
-        code: code.trim(),
-        roomId: roomId || user.roomId,
-        avatarUri: finalAvatar,
-        photos,
+        ...updatedData,
       })
     );
+
+    profileService.updateProfile(user.id, updatedData).catch(err => {
+      console.log('[EditUserModal] Failed to sync update to BE:', err);
+    });
 
     onClose();
   };
@@ -161,18 +222,20 @@ export const EditUserModal: React.FC<EditUserModalProps> = ({
       onRequestClose={onClose}
       supportedOrientations={['portrait', 'landscape', 'landscape-left', 'landscape-right']}
     >
-      <View style={styles.overlay}>
-        <View style={styles.modalContent}>
+      <View style={[styles.overlay, isPhone && styles.overlayPhone]}>
+        <View style={[styles.modalContent, isPhone && styles.modalContentPhone]}>
           {/* Header */}
           <View style={styles.header}>
-            <View style={styles.headerTitleRow}>
+            <View style={[styles.headerTitleRow, { flex: 1, paddingRight: 8 }]}>
               <View style={styles.iconWrap}>
                 <UserCheck size={20} color={appColors.blue600} />
               </View>
-              <View>
-                <AppText style={styles.title}>Chỉnh sửa thông tin nhân sự</AppText>
-                <AppText style={styles.subtitle}>
-                  Cập nhật thông tin và quản lý bộ ảnh nhận diện khuôn mặt
+              <View style={{ flex: 1 }}>
+                <AppText style={[styles.title, isPhone && styles.titlePhone]} numberOfLines={1}>
+                  Chỉnh sửa nhân sự
+                </AppText>
+                <AppText style={styles.subtitle} numberOfLines={1}>
+                  Cập nhật thông tin & ảnh nhận diện
                 </AppText>
               </View>
             </View>
@@ -187,7 +250,7 @@ export const EditUserModal: React.FC<EditUserModalProps> = ({
 
             {/* Photos Management */}
             <View style={styles.photoSection}>
-              <View style={styles.photoHeaderRow}>
+              <View style={[styles.photoHeaderRow, isPhone && styles.photoHeaderRowPhone]}>
                 <View>
                   <AppText style={styles.sectionLabel}>
                     Bộ ảnh nhận diện ({photos.length}/{PHOTO_CONFIG.MAX_PHOTOS_PER_USER} ảnh)
@@ -243,6 +306,7 @@ export const EditUserModal: React.FC<EditUserModalProps> = ({
                             <TouchableOpacity
                               style={styles.setMainBtn}
                               onPress={() => setAvatarUri(uri)}
+                              activeOpacity={0.8}
                             >
                               <AppText style={styles.setMainText}>Đặt chính</AppText>
                             </TouchableOpacity>
@@ -251,9 +315,28 @@ export const EditUserModal: React.FC<EditUserModalProps> = ({
                           <TouchableOpacity
                             style={styles.deletePhotoBtn}
                             onPress={() => handleDeletePhoto(uri)}
+                            activeOpacity={0.8}
                           >
-                            <Trash2 size={13} color={appColors.red600} />
+                            <Trash2 size={12} color={appColors.red600} />
                           </TouchableOpacity>
+
+                          {/* Bottom Action Tools: Flip and Rotate */}
+                          <View style={styles.photoBottomTools}>
+                            <TouchableOpacity
+                              style={styles.toolIconBtn}
+                              onPress={() => handleFlipPhoto(uri)}
+                              activeOpacity={0.7}
+                            >
+                              <FlipHorizontal size={12} color={appColors.white} />
+                            </TouchableOpacity>
+                            <TouchableOpacity
+                              style={styles.toolIconBtn}
+                              onPress={() => handleRotatePhoto(uri)}
+                              activeOpacity={0.7}
+                            >
+                              <RotateCw size={12} color={appColors.white} />
+                            </TouchableOpacity>
+                          </View>
                         </View>
                       );
                     })}
@@ -336,6 +419,9 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     padding: 24,
   },
+  overlayPhone: {
+    padding: 12,
+  },
   modalContent: {
     backgroundColor: appColors.white,
     borderRadius: 20,
@@ -347,6 +433,12 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.15,
     shadowRadius: 20,
     elevation: 8,
+  },
+  modalContentPhone: {
+    width: '100%',
+    maxHeight: '95%',
+    padding: 14,
+    borderRadius: 16,
   },
   header: {
     flexDirection: 'row',
@@ -374,6 +466,9 @@ const styles = StyleSheet.create({
     fontSize: 20,
     fontWeight: '800',
     color: appColors.slate900,
+  },
+  titlePhone: {
+    fontSize: 16,
   },
   subtitle: {
     fontSize: 13,
@@ -404,6 +499,11 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     alignItems: 'center',
     marginBottom: 12,
+  },
+  photoHeaderRowPhone: {
+    flexDirection: 'column',
+    alignItems: 'flex-start',
+    gap: 8,
   },
   sectionLabel: {
     fontSize: 14,
@@ -473,8 +573,8 @@ const styles = StyleSheet.create({
     gap: 12,
   },
   photoCard: {
-    width: 84,
-    height: 84,
+    width: 96,
+    height: 96,
     borderRadius: 12,
     overflow: 'hidden',
     position: 'relative',
@@ -497,6 +597,7 @@ const styles = StyleSheet.create({
     paddingVertical: 2,
     borderRadius: 6,
     gap: 3,
+    zIndex: 5,
   },
   mainBadgeText: {
     color: appColors.white,
@@ -505,13 +606,14 @@ const styles = StyleSheet.create({
   },
   setMainBtn: {
     position: 'absolute',
-    bottom: 4,
+    top: 4,
     left: 4,
-    right: 4,
     backgroundColor: appColors.overlayDark75,
+    paddingHorizontal: 5,
     paddingVertical: 2,
-    borderRadius: 4,
+    borderRadius: 6,
     alignItems: 'center',
+    zIndex: 5,
   },
   setMainText: {
     color: appColors.white,
@@ -528,11 +630,30 @@ const styles = StyleSheet.create({
     borderRadius: 11,
     justifyContent: 'center',
     alignItems: 'center',
+    zIndex: 5,
     shadowColor: appColors.black,
     shadowOffset: { width: 0, height: 1 },
     shadowOpacity: 0.2,
     shadowRadius: 2,
     elevation: 2,
+  },
+  photoBottomTools: {
+    position: 'absolute',
+    bottom: 4,
+    left: 4,
+    right: 4,
+    flexDirection: 'row',
+    justifyContent: 'center',
+    gap: 6,
+    zIndex: 5,
+  },
+  toolIconBtn: {
+    backgroundColor: appColors.overlayDark75,
+    paddingHorizontal: 6,
+    paddingVertical: 3,
+    borderRadius: 6,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   formRow: {
     flexDirection: 'row',

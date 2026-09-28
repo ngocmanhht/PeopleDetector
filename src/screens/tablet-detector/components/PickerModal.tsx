@@ -9,6 +9,7 @@ import {
 import { AppText } from '../../../components/app-text';
 import { X, Check } from 'lucide-react-native';
 import { appColors } from '../../../const/app-colors';
+import { useResponsive } from '../../../hooks/use-responsive';
 
 export interface PickerItem {
   id: string;
@@ -33,6 +34,7 @@ export const PickerModal: React.FC<PickerModalProps> = ({
   onSelect,
   onClose,
 }) => {
+  const { isPhone } = useResponsive();
   return (
     <Modal
       visible={visible}
@@ -41,8 +43,8 @@ export const PickerModal: React.FC<PickerModalProps> = ({
       onRequestClose={onClose}
       supportedOrientations={['portrait', 'landscape', 'landscape-left', 'landscape-right']}
     >
-      <View style={styles.overlay}>
-        <View style={styles.modalContent}>
+      <View style={[styles.overlay, isPhone && styles.overlayPhone]}>
+        <View style={[styles.modalContent, isPhone && styles.modalContentPhone]}>
           <View style={styles.header}>
             <AppText style={styles.title}>{title}</AppText>
             <TouchableOpacity style={styles.closeBtn} onPress={onClose}>
@@ -68,20 +70,24 @@ export const PickerModal: React.FC<PickerModalProps> = ({
                   }}
                   activeOpacity={0.8}
                 >
-                  <View style={{ flex: 1 }}>
+                  <View style={{ flex: 1, minWidth: 0, marginRight: 8 }}>
                     <AppText
                       style={[
                         styles.itemLabel,
                         isSelected && styles.itemLabelActive,
                       ]}
+                      numberOfLines={1}
+                      ellipsizeMode="tail"
                     >
                       {item.label}
                     </AppText>
                     {item.subtitle ? (
-                      <AppText style={styles.itemSub}>{item.subtitle}</AppText>
+                      <AppText style={styles.itemSub} numberOfLines={1} ellipsizeMode="tail">
+                        {item.subtitle}
+                      </AppText>
                     ) : null}
                   </View>
-                  {isSelected && <Check size={18} color={appColors.blue600} />}
+                  {isSelected && <Check size={18} color={appColors.blue600} style={{ flexShrink: 0 }} />}
                 </TouchableOpacity>
               );
             }}
@@ -100,6 +106,9 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     padding: 24,
   },
+  overlayPhone: {
+    padding: 16,
+  },
   modalContent: {
     backgroundColor: appColors.white,
     borderRadius: 16,
@@ -111,6 +120,11 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.15,
     shadowRadius: 16,
     elevation: 6,
+  },
+  modalContentPhone: {
+    width: '100%',
+    maxHeight: '80%',
+    padding: 16,
   },
   header: {
     flexDirection: 'row',
@@ -128,6 +142,7 @@ const styles = StyleSheet.create({
   },
   closeBtn: {
     padding: 4,
+    flexShrink: 0,
   },
   list: {
     gap: 8,
@@ -150,6 +165,7 @@ const styles = StyleSheet.create({
     fontSize: 15,
     fontWeight: '600',
     color: appColors.slate700,
+    flexShrink: 1,
   },
   itemLabelActive: {
     color: appColors.blue700,
@@ -159,5 +175,6 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: appColors.slate500,
     marginTop: 2,
+    flexShrink: 1,
   },
 });

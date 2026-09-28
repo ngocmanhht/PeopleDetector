@@ -23,6 +23,7 @@ import dayjs from 'dayjs';
 import { UserProfile } from '../../../model/detector';
 import { recordAttendance } from '../../../store/slices/detectorSlice';
 import { appColors } from '../../../const/app-colors';
+import { useResponsive } from '../../../hooks/use-responsive';
 
 interface UserListModalProps {
   visible: boolean;
@@ -35,9 +36,17 @@ export const UserListModal: React.FC<UserListModalProps> = ({
   onClose,
   onOpenAddUser,
 }) => {
+  const { isPhone } = useResponsive();
   const dispatch = useAppDispatch();
-  const { userProfiles, selectedZoneId, selectedRoomId, rooms, zones, attendanceMap, isSessionActive } =
-    useAppSelector(state => state.detector);
+  const {
+    userProfiles,
+    selectedZoneId,
+    selectedRoomId,
+    rooms,
+    zones,
+    attendanceMap,
+    isSessionActive,
+  } = useAppSelector(state => state.detector);
 
   const [search, setSearch] = useState('');
 
@@ -50,17 +59,17 @@ export const UserListModal: React.FC<UserListModalProps> = ({
   const filteredUsers = usersInRoom.filter(
     u =>
       u.fullName.toLowerCase().includes(search.toLowerCase()) ||
-      u.code.toLowerCase().includes(search.toLowerCase())
+      u.code.toLowerCase().includes(search.toLowerCase()),
   );
 
-  const handleSimulateScan = (user: UserProfile) => {
+  const handleManualCheckIn = (user: UserProfile) => {
     dispatch(
       recordAttendance({
         userId: user.id,
-        confidence: Math.floor(Math.random() * 11) + 89, // 89 - 99%
+        confidence: 100,
         status: 'present',
         timestamp: dayjs().format('HH:mm:ss'),
-      })
+      }),
     );
   };
 
@@ -69,17 +78,18 @@ export const UserListModal: React.FC<UserListModalProps> = ({
       visible={visible}
       animationType="fade"
       transparent
+      supportedOrientations={['portrait', 'landscape', 'landscape-left', 'landscape-right']}
       onRequestClose={onClose}
     >
-      <View style={styles.overlay}>
-        <View style={styles.modalContent}>
+      <View style={[styles.overlay, isPhone && styles.overlayPhone]}>
+        <View style={[styles.modalContent, isPhone && styles.modalContentPhone]}>
           {/* Header */}
           <View style={styles.header}>
-            <View>
-              <AppText style={styles.title}>
+            <View style={{ flex: 1, paddingRight: 8 }}>
+              <AppText style={styles.title} numberOfLines={1}>
                 Danh sách: {currentRoom?.name || 'Phòng'} ({usersInRoom.length})
               </AppText>
-              <AppText style={styles.subtitle}>
+              <AppText style={styles.subtitle} numberOfLines={1}>
                 {currentZone?.name || 'Khu vực'} • Quản lý học viên & điểm danh
               </AppText>
             </View>
@@ -127,42 +137,59 @@ export const UserListModal: React.FC<UserListModalProps> = ({
 
               return (
                 <View style={styles.userCard}>
-                  <Image source={{ uri: item.avatarUri }} style={styles.userAvatar} />
+                  {item.avatarUri ? (
+                    <Image
+                      source={{ uri: item.avatarUri }}
+                      style={styles.userAvatar}
+                    />
+                  ) : (
+                    <View style={[styles.userAvatar, styles.placeholderAvatar]}>
+                      <AppText style={styles.placeholderText}>
+                        {(item.fullName || 'N')[0]}
+                      </AppText>
+                    </View>
+                  )}
                   <View style={styles.userInfo}>
-                    <AppText style={styles.userName}>{item.fullName}</AppText>
-                    <AppText style={styles.userCode}>{item.code}</AppText>
+                    <AppText style={styles.userName} numberOfLines={1} ellipsizeMode="tail">
+                      {item.fullName}
+                    </AppText>
+                    <AppText style={styles.userCode} numberOfLines={1}>{item.code}</AppText>
                   </View>
 
                   {/* Attendance status badge */}
                   <View style={styles.statusCol}>
                     {isPresent ? (
                       <View style={styles.presentBadge}>
-                        <CheckCircle2 size={15} color={appColors.green600} />
+                        <CheckCircle2 size={15} color={appColors.green600} style={{ flexShrink: 0 }} />
                         <AppText style={styles.presentText}>Đã có</AppText>
-                        <AppText style={styles.timeSub}>{attendance.timestamp}</AppText>
+                        <AppText style={styles.timeSub}>
+                          {attendance.timestamp}
+                        </AppText>
                       </View>
                     ) : isVerify ? (
                       <View style={styles.verifyBadge}>
-                        <AlertCircle size={15} color={appColors.red600} />
-                        <AppText style={styles.verifyText}>Cần xác minh</AppText>
+                        <AlertCircle size={15} color={appColors.red600} style={{ flexShrink: 0 }} />
+                        <AppText style={styles.verifyText}>
+                          Cần xác minh
+                        </AppText>
                       </View>
                     ) : (
                       <View style={styles.missingBadge}>
-                        <AlertTriangle size={15} color={appColors.amber600} />
+                        <AlertTriangle size={15} color={appColors.amber600} style={{ flexShrink: 0 }} />
                         <AppText style={styles.missingText}>Còn thiếu</AppText>
                       </View>
                     )}
                   </View>
 
-                  {/* Quick scan trigger */}
+                  {/* Manual check-in trigger */}
                   {isSessionActive && (
                     <TouchableOpacity
                       style={styles.scanBtn}
-                      onPress={() => handleSimulateScan(item)}
+                      onPress={() => handleManualCheckIn(item)}
                       activeOpacity={0.7}
                     >
-                      <ScanLine size={16} color={appColors.blue600} />
-                      <AppText style={styles.scanBtnText}>Quét</AppText>
+                      <ScanLine size={16} color={appColors.blue600} style={{ flexShrink: 0 }} />
+                      <AppText style={styles.scanBtnText}>Điểm danh</AppText>
                     </TouchableOpacity>
                   )}
                 </View>
@@ -190,6 +217,9 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     padding: 24,
   },
+  overlayPhone: {
+    padding: 12,
+  },
   modalContent: {
     backgroundColor: appColors.white,
     borderRadius: 20,
@@ -201,6 +231,12 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.15,
     shadowRadius: 20,
     elevation: 8,
+  },
+  modalContentPhone: {
+    width: '100%',
+    maxHeight: '94%',
+    padding: 14,
+    borderRadius: 16,
   },
   header: {
     flexDirection: 'row',
@@ -279,14 +315,31 @@ const styles = StyleSheet.create({
     height: 48,
     borderRadius: 10,
     backgroundColor: appColors.slate100,
+    flexShrink: 0,
+  },
+  placeholderAvatar: {
+    backgroundColor: appColors.blue50,
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: appColors.blue200,
+    flexShrink: 0,
+  },
+  placeholderText: {
+    fontSize: 18,
+    fontWeight: '800',
+    color: appColors.blue600,
   },
   userInfo: {
     flex: 1,
+    minWidth: 0,
+    marginRight: 8,
   },
   userName: {
     fontSize: 15,
     fontWeight: '700',
     color: appColors.slate900,
+    flexShrink: 1,
   },
   userCode: {
     fontSize: 13,
@@ -296,7 +349,8 @@ const styles = StyleSheet.create({
   },
   statusCol: {
     alignItems: 'flex-end',
-    minWidth: 110,
+    minWidth: 90,
+    flexShrink: 0,
   },
   presentBadge: {
     flexDirection: 'row',

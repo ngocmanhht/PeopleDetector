@@ -45,7 +45,11 @@ const SplashScreen = () => {
         <AppText style={styles.brandTitleSecondary}> AI</AppText>
       </View>
       <AppText style={styles.brandSub}>FACE CHECK SYSTEM</AppText>
-      <ActivityIndicator size="small" color={appColors.blue600} style={{ marginTop: 24 }} />
+      <ActivityIndicator
+        size="small"
+        color={appColors.blue600}
+        style={{ marginTop: 24 }}
+      />
     </View>
   );
 };

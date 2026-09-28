@@ -19,11 +19,15 @@ import {
   Trash2,
   Star,
   UserPlus,
+  FlipHorizontal,
+  RotateCw,
 } from 'lucide-react-native';
 import { addUserProfile } from '../../../store/slices/detectorSlice';
+import { profileService } from '../../../services/api';
 import { PHOTO_CONFIG } from '../../../const/photo-config';
 import { ImagePickerService } from '../../../services/image-picker-service';
 import { appColors } from '../../../const/app-colors';
+import { useResponsive } from '../../../hooks/use-responsive';
 
 interface AddUserModalProps {
   visible: boolean;
@@ -34,9 +38,10 @@ export const AddUserModal: React.FC<AddUserModalProps> = ({
   visible,
   onClose,
 }) => {
+  const { isPhone } = useResponsive();
   const dispatch = useAppDispatch();
   const { zones, rooms, selectedZoneId, selectedRoomId } = useAppSelector(
-    state => state.detector
+    state => state.detector,
   );
 
   const [fullName, setFullName] = useState('');
@@ -52,25 +57,71 @@ export const AddUserModal: React.FC<AddUserModalProps> = ({
     if (visible) {
       if (selectedZoneId) setZoneId(selectedZoneId);
       if (selectedRoomId) setRoomId(selectedRoomId);
-      setCode(prev => (prev ? prev : `NS-${Math.floor(1000 + Math.random() * 9000)}`));
+      setCode(prev =>
+        prev ? prev : `NS-${Math.floor(1000 + Math.random() * 9000)}`,
+      );
     }
   }, [visible, selectedZoneId, selectedRoomId]);
 
   const roomsInZone = rooms.filter(r => r.zoneId === zoneId);
 
-  // Handle Capture Photo from Camera
-  const handleCapturePhoto = async () => {
+  // Handle Capture Photo from Camera with front/back camera choice
+  const handleCapturePhoto = () => {
     if (photos.length >= PHOTO_CONFIG.MAX_PHOTOS_PER_USER) {
       Alert.alert(
         'Đã đủ ảnh',
-        `Tối đa ${PHOTO_CONFIG.MAX_PHOTOS_PER_USER} ảnh cho mỗi người.`
+        `Tối đa ${PHOTO_CONFIG.MAX_PHOTOS_PER_USER} ảnh cho mỗi người.`,
       );
       return;
     }
-    const uri = await ImagePickerService.captureImageWithCamera(photos.length);
-    if (uri) {
-      setPhotos(prev => [...prev, uri]);
-    }
+
+    Alert.alert('Chọn Camera', 'Bạn muốn chụp ảnh hồ sơ bằng camera nào?', [
+      {
+        text: 'Camera sau (Khuyên dùng)',
+        onPress: async () => {
+          const uri = await ImagePickerService.captureImageWithCamera(
+            photos.length,
+            'back',
+          );
+          if (uri) setPhotos(prev => [...prev, uri]);
+        },
+      },
+      {
+        text: 'Camera trước (Selfie)',
+        onPress: async () => {
+          const uri = await ImagePickerService.captureImageWithCamera(
+            photos.length,
+            'front',
+          );
+          if (uri) setPhotos(prev => [...prev, uri]);
+        },
+      },
+      { text: 'Hủy', style: 'cancel' },
+    ]);
+  };
+
+  // Flip photo horizontally to fix mirrored selfie images
+  const handleFlipPhoto = async (index: number) => {
+    const currentUri = photos[index];
+    if (!currentUri) return;
+    const flippedUri = await ImagePickerService.flipImageHorizontal(currentUri);
+    setPhotos(prev => {
+      const copy = [...prev];
+      copy[index] = flippedUri;
+      return copy;
+    });
+  };
+
+  // Rotate photo 90 degrees clockwise
+  const handleRotatePhoto = async (index: number) => {
+    const currentUri = photos[index];
+    if (!currentUri) return;
+    const rotatedUri = await ImagePickerService.rotateImage90(currentUri);
+    setPhotos(prev => {
+      const copy = [...prev];
+      copy[index] = rotatedUri;
+      return copy;
+    });
   };
 
   // Handle Pick Photos from Library
@@ -78,16 +129,21 @@ export const AddUserModal: React.FC<AddUserModalProps> = ({
     if (photos.length >= PHOTO_CONFIG.MAX_PHOTOS_PER_USER) {
       Alert.alert(
         'Đã đủ ảnh',
-        `Tối đa ${PHOTO_CONFIG.MAX_PHOTOS_PER_USER} ảnh cho mỗi người.`
+        `Tối đa ${PHOTO_CONFIG.MAX_PHOTOS_PER_USER} ảnh cho mỗi người.`,
       );
       return;
     }
-    const newUris = await ImagePickerService.pickImagesFromLibrary(photos.length);
+    const newUris = await ImagePickerService.pickImagesFromLibrary(
+      photos.length,
+    );
     if (newUris.length > 0) {
       setPhotos(prev => {
         const combined = [...prev];
         newUris.forEach(u => {
-          if (!combined.includes(u) && combined.length < PHOTO_CONFIG.MAX_PHOTOS_PER_USER) {
+          if (
+            !combined.includes(u) &&
+            combined.length < PHOTO_CONFIG.MAX_PHOTOS_PER_USER
+          ) {
             combined.push(u);
           }
         });
@@ -118,20 +174,21 @@ export const AddUserModal: React.FC<AddUserModalProps> = ({
     }
 
     const mainAvatar =
-      photos.length > 0
-        ? photos[selectedAvatarIndex] || photos[0]
-        : '';
+      photos.length > 0 ? photos[selectedAvatarIndex] || photos[0] : '';
 
-    dispatch(
-      addUserProfile({
-        fullName: fullName.trim(),
-        code: code.trim(),
-        zoneId: zoneId || '',
-        roomId,
-        avatarUri: mainAvatar,
-        photos,
-      })
-    );
+    const newProfileData = {
+      fullName: fullName.trim(),
+      code: code.trim(),
+      zoneId: zoneId || '',
+      roomId,
+      avatarUri: mainAvatar,
+      photos,
+    };
+
+    dispatch(addUserProfile(newProfileData));
+    profileService.createProfile(newProfileData).catch(err => {
+      console.log('[AddUserModal] Failed to sync profile to BE:', err);
+    });
 
     // Reset fields
     setFullName('');
@@ -148,20 +205,32 @@ export const AddUserModal: React.FC<AddUserModalProps> = ({
       animationType="fade"
       transparent
       onRequestClose={onClose}
-      supportedOrientations={['portrait', 'landscape', 'landscape-left', 'landscape-right']}
+      supportedOrientations={[
+        'portrait',
+        'landscape',
+        'landscape-left',
+        'landscape-right',
+      ]}
     >
-      <View style={styles.overlay}>
-        <View style={styles.modalContent}>
+      <View style={[styles.overlay, isPhone && styles.overlayPhone]}>
+        <View
+          style={[styles.modalContent, isPhone && styles.modalContentPhone]}
+        >
           {/* Header */}
           <View style={styles.header}>
-            <View style={styles.headerTitleRow}>
+            <View style={[styles.headerTitleRow, { flex: 1, paddingRight: 8 }]}>
               <View style={styles.iconWrap}>
                 <UserPlus size={20} color={appColors.blue600} />
               </View>
-              <View>
-                <AppText style={styles.title}>Thêm người</AppText>
-                <AppText style={styles.subtitle}>
-                  Nhập thông tin cá nhân và chụp hoặc chọn ảnh mẫu để AI nhận diện
+              <View style={{ flex: 1 }}>
+                <AppText
+                  style={[styles.title, isPhone && { fontSize: 16 }]}
+                  numberOfLines={1}
+                >
+                  Thêm người
+                </AppText>
+                <AppText style={styles.subtitle} numberOfLines={1}>
+                  Nhập thông tin cá nhân & ảnh nhận diện
                 </AppText>
               </View>
             </View>
@@ -176,10 +245,16 @@ export const AddUserModal: React.FC<AddUserModalProps> = ({
 
             {/* Photo Section */}
             <View style={styles.photoSection}>
-              <View style={styles.photoHeaderRow}>
+              <View
+                style={[
+                  styles.photoHeaderRow,
+                  isPhone && styles.photoHeaderRowPhone,
+                ]}
+              >
                 <View>
                   <AppText style={styles.sectionLabel}>
-                    Ảnh nhận diện ({photos.length}/{PHOTO_CONFIG.MAX_PHOTOS_PER_USER} ảnh)
+                    Ảnh nhận diện ({photos.length}/
+                    {PHOTO_CONFIG.MAX_PHOTOS_PER_USER} ảnh)
                   </AppText>
                   <AppText style={styles.sectionDesc}>
                     Chụp hoặc chọn nhiều góc mặt để tăng độ chính xác nhận diện
@@ -194,7 +269,9 @@ export const AddUserModal: React.FC<AddUserModalProps> = ({
                     disabled={photos.length >= PHOTO_CONFIG.MAX_PHOTOS_PER_USER}
                   >
                     <Camera size={16} color={appColors.white} />
-                    <AppText style={styles.actionBtnCameraText}>Chụp ảnh</AppText>
+                    <AppText style={styles.actionBtnCameraText}>
+                      Chụp ảnh
+                    </AppText>
                   </TouchableOpacity>
 
                   <TouchableOpacity
@@ -203,7 +280,9 @@ export const AddUserModal: React.FC<AddUserModalProps> = ({
                     disabled={photos.length >= PHOTO_CONFIG.MAX_PHOTOS_PER_USER}
                   >
                     <ImageIcon size={16} color={appColors.blue600} />
-                    <AppText style={styles.actionBtnLibraryText}>Chọn ảnh</AppText>
+                    <AppText style={styles.actionBtnLibraryText}>
+                      Chọn ảnh
+                    </AppText>
                   </TouchableOpacity>
                 </View>
               </View>
@@ -213,11 +292,16 @@ export const AddUserModal: React.FC<AddUserModalProps> = ({
                 <View style={styles.emptyPhotoBox}>
                   <ImageIcon size={36} color={appColors.slate300} />
                   <AppText style={styles.emptyPhotoText}>
-                    Chưa có ảnh nào. Nhấn "Chụp ảnh" hoặc "Chọn ảnh" (tối đa {PHOTO_CONFIG.MAX_PHOTOS_PER_USER} ảnh)
+                    Chưa có ảnh nào. Nhấn "Chụp ảnh" hoặc "Chọn ảnh" (tối đa{' '}
+                    {PHOTO_CONFIG.MAX_PHOTOS_PER_USER} ảnh)
                   </AppText>
                 </View>
               ) : (
-                <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.photosScroll}>
+                <ScrollView
+                  horizontal
+                  showsHorizontalScrollIndicator={false}
+                  style={styles.photosScroll}
+                >
                   <View style={styles.photosRow}>
                     {photos.map((uri, idx) => {
                       const isMain = idx === selectedAvatarIndex;
@@ -225,18 +309,23 @@ export const AddUserModal: React.FC<AddUserModalProps> = ({
                         <View key={`${uri}-${idx}`} style={styles.photoCard}>
                           <Image source={{ uri }} style={styles.photoThumb} />
 
-                          {/* Main badge */}
+                          {/* Main badge or Set Main */}
                           {isMain ? (
                             <View style={styles.mainBadge}>
                               <Star size={10} color={appColors.white} />
-                              <AppText style={styles.mainBadgeText}>Chính</AppText>
+                              <AppText style={styles.mainBadgeText}>
+                                Chính
+                              </AppText>
                             </View>
                           ) : (
                             <TouchableOpacity
                               style={styles.setMainBtn}
                               onPress={() => setSelectedAvatarIndex(idx)}
+                              activeOpacity={0.8}
                             >
-                              <AppText style={styles.setMainText}>Đặt chính</AppText>
+                              <AppText style={styles.setMainText}>
+                                Đặt chính
+                              </AppText>
                             </TouchableOpacity>
                           )}
 
@@ -244,9 +333,31 @@ export const AddUserModal: React.FC<AddUserModalProps> = ({
                           <TouchableOpacity
                             style={styles.deletePhotoBtn}
                             onPress={() => handleDeletePhoto(idx)}
+                            activeOpacity={0.8}
                           >
-                            <Trash2 size={13} color={appColors.red600} />
+                            <Trash2 size={12} color={appColors.red600} />
                           </TouchableOpacity>
+
+                          {/* Bottom Action Tools: Flip and Rotate */}
+                          <View style={styles.photoBottomTools}>
+                            <TouchableOpacity
+                              style={styles.toolIconBtn}
+                              onPress={() => handleFlipPhoto(idx)}
+                              activeOpacity={0.7}
+                            >
+                              <FlipHorizontal
+                                size={12}
+                                color={appColors.white}
+                              />
+                            </TouchableOpacity>
+                            <TouchableOpacity
+                              style={styles.toolIconBtn}
+                              onPress={() => handleRotatePhoto(idx)}
+                              activeOpacity={0.7}
+                            >
+                              <RotateCw size={12} color={appColors.white} />
+                            </TouchableOpacity>
+                          </View>
                         </View>
                       );
                     })}
@@ -269,7 +380,9 @@ export const AddUserModal: React.FC<AddUserModalProps> = ({
               </View>
 
               <View style={styles.formGroup}>
-                <AppText style={styles.label}>Mã người dùng / CCCD / ID *</AppText>
+                <AppText style={styles.label}>
+                  Mã người dùng / CCCD / ID *
+                </AppText>
                 <TextInput
                   style={styles.input}
                   placeholder="Ví dụ: NS-1024"
@@ -298,7 +411,10 @@ export const AddUserModal: React.FC<AddUserModalProps> = ({
                         }}
                       >
                         <AppText
-                          style={[styles.chipText, isSelected && styles.chipTextActive]}
+                          style={[
+                            styles.chipText,
+                            isSelected && styles.chipTextActive,
+                          ]}
                         >
                           {z.name}
                         </AppText>
@@ -323,7 +439,10 @@ export const AddUserModal: React.FC<AddUserModalProps> = ({
                         onPress={() => setRoomId(r.id)}
                       >
                         <AppText
-                          style={[styles.chipText, isSelected && styles.chipTextActive]}
+                          style={[
+                            styles.chipText,
+                            isSelected && styles.chipTextActive,
+                          ]}
                         >
                           {r.name}
                         </AppText>
@@ -335,7 +454,8 @@ export const AddUserModal: React.FC<AddUserModalProps> = ({
             ) : (
               <View style={styles.warningBox}>
                 <AppText style={styles.warningText}>
-                  Chưa có phòng nào được tạo. Bạn vui lòng tạo phòng trước ở mục "Danh sách phòng".
+                  Chưa có phòng nào được tạo. Bạn vui lòng tạo phòng trước ở mục
+                  "Danh sách phòng".
                 </AppText>
               </View>
             )}
@@ -366,6 +486,9 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     padding: 24,
   },
+  overlayPhone: {
+    padding: 12,
+  },
   modalContent: {
     backgroundColor: appColors.white,
     borderRadius: 20,
@@ -377,6 +500,12 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.15,
     shadowRadius: 20,
     elevation: 8,
+  },
+  modalContentPhone: {
+    width: '100%',
+    maxHeight: '95%',
+    padding: 14,
+    borderRadius: 16,
   },
   header: {
     flexDirection: 'row',
@@ -434,6 +563,11 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     alignItems: 'center',
     marginBottom: 12,
+  },
+  photoHeaderRowPhone: {
+    flexDirection: 'column',
+    alignItems: 'flex-start',
+    gap: 8,
   },
   sectionLabel: {
     fontSize: 14,
@@ -504,8 +638,8 @@ const styles = StyleSheet.create({
     gap: 12,
   },
   photoCard: {
-    width: 84,
-    height: 84,
+    width: 96,
+    height: 96,
     borderRadius: 12,
     overflow: 'hidden',
     position: 'relative',
@@ -528,6 +662,7 @@ const styles = StyleSheet.create({
     paddingVertical: 2,
     borderRadius: 6,
     gap: 3,
+    zIndex: 5,
   },
   mainBadgeText: {
     color: appColors.white,
@@ -536,13 +671,14 @@ const styles = StyleSheet.create({
   },
   setMainBtn: {
     position: 'absolute',
-    bottom: 4,
+    top: 4,
     left: 4,
-    right: 4,
     backgroundColor: appColors.overlayDark75,
+    paddingHorizontal: 5,
     paddingVertical: 2,
-    borderRadius: 4,
+    borderRadius: 6,
     alignItems: 'center',
+    zIndex: 5,
   },
   setMainText: {
     color: appColors.white,
@@ -559,11 +695,30 @@ const styles = StyleSheet.create({
     borderRadius: 11,
     justifyContent: 'center',
     alignItems: 'center',
+    zIndex: 5,
     shadowColor: appColors.black,
     shadowOffset: { width: 0, height: 1 },
     shadowOpacity: 0.2,
     shadowRadius: 2,
     elevation: 2,
+  },
+  photoBottomTools: {
+    position: 'absolute',
+    bottom: 4,
+    left: 4,
+    right: 4,
+    flexDirection: 'row',
+    justifyContent: 'center',
+    gap: 6,
+    zIndex: 5,
+  },
+  toolIconBtn: {
+    backgroundColor: appColors.overlayDark75,
+    paddingHorizontal: 6,
+    paddingVertical: 3,
+    borderRadius: 6,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   formRow: {
     flexDirection: 'row',
