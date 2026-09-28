@@ -216,7 +216,7 @@ export const LoginScreen = () => {
             </View>
 
             <View style={styles.logoRow}>
-              <AppText style={styles.brandTitlePrimary}>VietCore</AppText>
+              <AppText style={styles.brandTitlePrimary}>H2Tech</AppText>
               <AppText style={styles.brandTitleSecondary}> AI</AppText>
             </View>
             <AppText style={styles.brandSub}>

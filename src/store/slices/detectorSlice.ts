@@ -202,12 +202,90 @@ const detectorSlice = createSlice({
         user.avatarUri = action.payload.avatarUri;
       }
     },
+    upsertUserProfile: (state, action: PayloadAction<UserProfile>) => {
+      const idx = state.userProfiles.findIndex(u => u.id === action.payload.id);
+      if (idx >= 0) {
+        state.userProfiles[idx] = {
+          ...state.userProfiles[idx],
+          ...action.payload,
+        };
+      } else {
+        state.userProfiles.push(action.payload);
+      }
+    },
     deleteUserProfile: (state, action: PayloadAction<string>) => {
       state.userProfiles = state.userProfiles.filter(u => u.id !== action.payload);
       delete state.attendanceMap[action.payload];
       if (state.activeDetection?.userId === action.payload) {
         state.activeDetection = null;
       }
+    },
+    updateUserCondition: (
+      state,
+      action: PayloadAction<{
+        userId: string;
+        status: string;
+        note?: string;
+        updatedBy: string;
+      }>
+    ) => {
+      const user = state.userProfiles.find(u => u.id === action.payload.userId);
+      if (user) {
+        const oldStatus = user.conditionStatus || 'normal';
+        user.conditionStatus = action.payload.status;
+        user.conditionNote = action.payload.note || '';
+        if (!Array.isArray(user.statusLogs)) {
+          user.statusLogs = [];
+        }
+        user.statusLogs.unshift({
+          id: `log-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
+          timestamp: dayjs().toISOString(),
+          oldStatus,
+          newStatus: action.payload.status,
+          note: action.payload.note || '',
+          updatedBy: action.payload.updatedBy || 'Admin',
+        });
+      }
+    },
+    assignUsersToRoom: (
+      state,
+      action: PayloadAction<{
+        userIds: string[];
+        roomId: string;
+        zoneId: string;
+      }>
+    ) => {
+      const { userIds, roomId, zoneId } = action.payload;
+      state.userProfiles.forEach(user => {
+        if (userIds.includes(user.id)) {
+          user.roomId = roomId;
+          user.zoneId = zoneId;
+        }
+      });
+    },
+    addBatchUserProfiles: (
+      state,
+      action: PayloadAction<Omit<UserProfile, 'id' | 'enrolledAt'>[]>
+    ) => {
+      if (!Array.isArray(state.userProfiles)) {
+        state.userProfiles = [];
+      }
+      action.payload.forEach((item, index) => {
+        const photos =
+          item.photos && item.photos.length > 0
+            ? item.photos
+            : item.avatarUri
+            ? [item.avatarUri]
+            : [];
+        const primaryAvatar = item.avatarUri || photos[0] || '';
+        state.userProfiles.push({
+          id: `user-${Date.now()}-${index}`,
+          ...item,
+          avatarUri: primaryAvatar,
+          photos,
+          enrolledAt: new Date().toISOString().split('T')[0],
+        });
+      });
     },
     clearMockData: (state) => {
       state.zones = Array.isArray(state.zones)
@@ -373,7 +451,7 @@ const detectorSlice = createSlice({
           });
           activeSess.presentCount = p;
           activeSess.verifyCount = v;
-          activeSess.missingCount = Math.max(0, activeSess.totalCount - p - v);
+          activeSess.missingCount = Math.max(0, activeSess.totalCount - p);
         }
       }
 
@@ -439,7 +517,11 @@ export const {
   addPhotosToProfile,
   deletePhotoFromProfile,
   setMainAvatar,
+  upsertUserProfile,
   deleteUserProfile,
+  updateUserCondition,
+  assignUsersToRoom,
+  addBatchUserProfiles,
   clearMockData,
   resetAllData,
   startSession,

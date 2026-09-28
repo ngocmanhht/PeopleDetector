@@ -220,6 +220,10 @@ class ApiClient {
     return (await this.instance.put(path, data)) as T;
   }
 
+  public async patch<T = any>(path: string, data?: unknown): Promise<T> {
+    return (await this.instance.patch(path, data)) as T;
+  }
+
   public async delete<T = any>(path: string, params?: unknown): Promise<T> {
     return (await this.instance.delete(path, { params })) as T;
   }

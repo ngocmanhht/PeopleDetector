@@ -41,7 +41,7 @@ const SplashScreen = () => {
         <ScanFace size={60} color={appColors.blue600} />
       </View>
       <View style={styles.brandRow}>
-        <AppText style={styles.brandTitlePrimary}>VietCore</AppText>
+        <AppText style={styles.brandTitlePrimary}>H2Tech</AppText>
         <AppText style={styles.brandTitleSecondary}> AI</AppText>
       </View>
       <AppText style={styles.brandSub}>FACE CHECK SYSTEM</AppText>

@@ -176,22 +176,48 @@ export const CameraViewFinder = forwardRef<
       width: number;
       height: number;
     } | null>(() => {
-      if (!boundingBox) return null;
+      if (
+        !boundingBox ||
+        typeof boundingBox.x !== 'number' ||
+        isNaN(boundingBox.x) ||
+        typeof boundingBox.y !== 'number' ||
+        isNaN(boundingBox.y) ||
+        typeof boundingBox.width !== 'number' ||
+        isNaN(boundingBox.width) ||
+        typeof boundingBox.height !== 'number' ||
+        isNaN(boundingBox.height)
+      ) {
+        return null;
+      }
       const isFront = cameraFacing === 'front';
 
-      const Wc = containerLayout.width > 0 ? containerLayout.width : 360;
-      const Hc = containerLayout.height > 0 ? containerLayout.height : 480;
+      const Wc =
+        containerLayout.width > 0 && isFinite(containerLayout.width)
+          ? containerLayout.width
+          : 360;
+      const Hc =
+        containerLayout.height > 0 && isFinite(containerLayout.height)
+          ? containerLayout.height
+          : 480;
 
-      let Wf = boundingBox.frameWidth || (Wc > Hc ? 4 : 3);
-      let Hf = boundingBox.frameHeight || (Wc > Hc ? 3 : 4);
+      // Real camera frame dimensions from YOLO detector
+      const Wf =
+        boundingBox.frameWidth &&
+        boundingBox.frameWidth > 0 &&
+        isFinite(boundingBox.frameWidth)
+          ? boundingBox.frameWidth
+          : Wc;
+      const Hf =
+        boundingBox.frameHeight &&
+        boundingBox.frameHeight > 0 &&
+        isFinite(boundingBox.frameHeight)
+          ? boundingBox.frameHeight
+          : Hc;
 
-      if ((Wc > Hc && Wf < Hf) || (Wc < Hc && Wf > Hf)) {
-        const temp = Wf;
-        Wf = Hf;
-        Hf = temp;
-      }
-
+      // VisionCamera preview uses resizeMode="cover" (Aspect Fill centered)
       const scale = Math.max(Wc / Wf, Hc / Hf);
+      if (!isFinite(scale) || scale <= 0) return null;
+
       const renderedW = Wf * scale;
       const renderedH = Hf * scale;
       const offsetX = (Wc - renderedW) / 2;
@@ -210,10 +236,21 @@ export const CameraViewFinder = forwardRef<
       const faceW = normW * renderedW;
       const faceH = normH * renderedH;
 
-      const left = Math.max(0, Math.min(Wc - 20, offsetX + faceX));
-      const top = Math.max(0, Math.min(Hc - 20, offsetY + faceY));
-      const width = Math.min(Wc - left, faceW);
-      const height = Math.min(Hc - top, faceH);
+      const left = Math.max(2, Math.min(Wc - 30, offsetX + faceX));
+      const top = Math.max(2, Math.min(Hc - 30, offsetY + faceY));
+      const width = Math.max(24, Math.min(Wc - left - 2, faceW));
+      const height = Math.max(24, Math.min(Hc - top - 2, faceH));
+
+      if (
+        !isFinite(left) ||
+        !isFinite(top) ||
+        !isFinite(width) ||
+        !isFinite(height) ||
+        width <= 0 ||
+        height <= 0
+      ) {
+        return null;
+      }
 
       return {
         left,
@@ -238,26 +275,26 @@ export const CameraViewFinder = forwardRef<
           Animated.parallel([
             Animated.spring(animLeft, {
               toValue: targetCoords.left,
-              friction: 9,
-              tension: 50,
+              friction: 12,
+              tension: 85,
               useNativeDriver: false,
             }),
             Animated.spring(animTop, {
               toValue: targetCoords.top,
-              friction: 9,
-              tension: 50,
+              friction: 12,
+              tension: 85,
               useNativeDriver: false,
             }),
             Animated.spring(animWidth, {
               toValue: targetCoords.width,
-              friction: 9,
-              tension: 50,
+              friction: 12,
+              tension: 85,
               useNativeDriver: false,
             }),
             Animated.spring(animHeight, {
               toValue: targetCoords.height,
-              friction: 9,
-              tension: 50,
+              friction: 12,
+              tension: 85,
               useNativeDriver: false,
             }),
           ]).start();
@@ -436,6 +473,9 @@ export const CameraViewFinder = forwardRef<
               style={[
                 styles.detectionLabel,
                 !isVerified && styles.detectionLabelWarning,
+                targetCoords && targetCoords.top < 34
+                  ? styles.detectionLabelBottom
+                  : styles.detectionLabelTop,
               ]}
             >
               {isVerified ? (
@@ -616,7 +656,6 @@ const styles = StyleSheet.create({
   },
   detectionLabel: {
     position: 'absolute',
-    top: -30,
     left: 0,
     backgroundColor: appColors.cameraSuccessBg,
     paddingHorizontal: 10,
@@ -628,6 +667,12 @@ const styles = StyleSheet.create({
     maxWidth: 240,
     zIndex: 22,
     elevation: 12,
+  },
+  detectionLabelTop: {
+    top: -30,
+  },
+  detectionLabelBottom: {
+    bottom: -32,
   },
   detectionLabelWarning: {
     backgroundColor: appColors.amber600,

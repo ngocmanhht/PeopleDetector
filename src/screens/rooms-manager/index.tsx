@@ -38,8 +38,10 @@ import {
   setSelectedZoneId,
   clearMockData,
   deleteSession,
+  assignUsersToRoom,
 } from '../../store/slices/detectorSlice';
 import { AddUserModal } from '../tablet-detector/components/AddUserModal';
+import { AddRoomMemberModal } from './components/AddRoomMemberModal';
 import { EditUserModal } from './components/EditUserModal';
 import { SessionDetailModal } from './components/SessionDetailModal';
 import { PickerModal } from '../tablet-detector/components/PickerModal';
@@ -74,6 +76,7 @@ export const RoomsManagerScreen: React.FC = () => {
 
   const [searchQuery, setSearchQuery] = useState('');
   const [showAddUserModal, setShowAddUserModal] = useState(false);
+  const [showAddRoomMemberModal, setShowAddRoomMemberModal] = useState(false);
   const [editingUser, setEditingUser] = useState<UserProfile | null>(null);
 
   // Mobile picker modals state
@@ -420,7 +423,7 @@ export const RoomsManagerScreen: React.FC = () => {
           {activeTab === 'members' && (
             <TouchableOpacity
               style={[styles.addUserHeaderBtn, isPhone && styles.addUserHeaderBtnPhone]}
-              onPress={() => setShowAddUserModal(true)}
+              onPress={() => setShowAddRoomMemberModal(true)}
               activeOpacity={0.85}
             >
               <UserPlus size={18} color={appColors.white} style={{ flexShrink: 0 }} />
@@ -743,6 +746,50 @@ export const RoomsManagerScreen: React.FC = () => {
           </>
         )}
       </View>
+
+      {/* Pick Existing User or Create New Member Modal */}
+      {currentRoom && currentZone && (
+        <AddRoomMemberModal
+          visible={showAddRoomMemberModal}
+          roomName={currentRoom.name}
+          zoneName={currentZone.name}
+          roomId={currentRoom.id}
+          zoneId={currentZone.id}
+          currentRoomUserIds={usersInRoom.map(u => u.id)}
+          allUsers={userProfiles}
+          rooms={rooms}
+          zones={zones}
+          onClose={() => setShowAddRoomMemberModal(false)}
+          onOpenCreateNew={() => {
+            setShowAddRoomMemberModal(false);
+            setShowAddUserModal(true);
+          }}
+          onAssignUsers={async (userIds) => {
+            try {
+              await roomService.assignMembers(currentRoom.id, {
+                userIds,
+                zoneId: currentZone.id,
+              });
+              dispatch(
+                assignUsersToRoom({
+                  userIds,
+                  roomId: currentRoom.id,
+                  zoneId: currentZone.id,
+                })
+              );
+              Alert.alert(
+                'Thành công',
+                `Đã thêm ${userIds.length} nhân sự vào phòng ${currentRoom.name}`
+              );
+            } catch (e: any) {
+              Alert.alert(
+                'Lỗi thêm vào phòng',
+                e?.message || 'Không kết nối được server. Vui lòng thử lại.'
+              );
+            }
+          }}
+        />
+      )}
 
       {/* Add User Modal */}
       <AddUserModal

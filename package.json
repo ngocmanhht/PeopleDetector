@@ -32,11 +32,13 @@
     "react-native-nitro-modules": "^0.37.1",
     "react-native-safe-area-context": "^5.5.2",
     "react-native-screens": "^4.11.1",
+    "react-native-share": "^12.3.1",
     "react-native-svg": "^15.13.0",
     "react-native-toast-message": "^2.3.3",
     "react-native-vision-camera": "^4.6.3",
     "react-redux": "^9.2.0",
     "redux-persist": "^6.0.0",
+    "xlsx": "^0.18.5",
     "yup": "^1.6.1"
   },
   "devDependencies": {

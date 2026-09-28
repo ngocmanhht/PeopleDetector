@@ -10,6 +10,23 @@ export interface CreateProfilePayload {
   zoneId?: string;
   roomId?: string;
   enrolledAt?: string;
+  phoneNumber?: string;
+  conditionStatus?: string;
+  conditionNote?: string;
+}
+
+export interface UpdateConditionPayload {
+  conditionStatus: string;
+  conditionNote?: string;
+  updatedBy?: string;
+}
+
+export interface BatchCreateProfilesResponse {
+  success: boolean;
+  count: number;
+  skippedCount: number;
+  skipped: { code: string; reason: string }[];
+  data: UserProfile[];
 }
 
 export interface UpdateProfilePayload {
@@ -70,6 +87,25 @@ export class ProfileService {
       `/profiles/${id}`,
       payload,
     );
+  }
+
+  public async updateCondition(
+    id: string,
+    payload: UpdateConditionPayload,
+  ): Promise<{ success: boolean; message?: string; data: UserProfile }> {
+    return apiClient.patch<{
+      success: boolean;
+      message?: string;
+      data: UserProfile;
+    }>(`/profiles/${id}/condition`, payload);
+  }
+
+  public async batchCreateProfiles(
+    profiles: CreateProfilePayload[],
+  ): Promise<BatchCreateProfilesResponse> {
+    return apiClient.post<BatchCreateProfilesResponse>('/profiles/batch', {
+      profiles,
+    });
   }
 
   public async deleteProfile(

@@ -46,8 +46,12 @@ export const HeaderBar: React.FC<HeaderBarProps> = ({
   const { showWarnToast } = useAppToast();
   const [showStartSessionModal, setShowStartSessionModal] = useState(false);
 
-  const [currentTime, setCurrentTime] = useState<string>(() => dayjs().format('HH:mm:ss'));
-  const [currentDate, setCurrentDate] = useState<string>(() => dayjs().format('DD/MM/YYYY'));
+  const [currentTime, setCurrentTime] = useState<string>(() =>
+    dayjs().format('HH:mm:ss'),
+  );
+  const [currentDate, setCurrentDate] = useState<string>(() =>
+    dayjs().format('DD/MM/YYYY'),
+  );
 
   useEffect(() => {
     const updateTime = () => {
@@ -68,7 +72,7 @@ export const HeaderBar: React.FC<HeaderBarProps> = ({
     if (!selectedRoom || !selectedRoom.id) {
       showWarnToast(
         'Chưa chọn phòng',
-        'Vui lòng tạo hoặc chọn phòng trước khi bắt đầu phiên!'
+        'Vui lòng tạo hoặc chọn phòng trước khi bắt đầu phiên!',
       );
       onOpenManageRooms();
       return;
@@ -83,7 +87,7 @@ export const HeaderBar: React.FC<HeaderBarProps> = ({
         <View style={styles.phoneRow1}>
           <View style={styles.brandContainer}>
             <View style={styles.logoRow}>
-              <AppText style={styles.brandTitlePrimary}>VietCore</AppText>
+              <AppText style={styles.brandTitlePrimary}>H2Tech</AppText>
               <AppText style={styles.brandTitleSecondary}> AI</AppText>
             </View>
           </View>
@@ -108,13 +112,22 @@ export const HeaderBar: React.FC<HeaderBarProps> = ({
                 onPress={handleStartPress}
                 activeOpacity={0.85}
               >
-                <Play size={13} color={appColors.white} fill={appColors.white} />
-                <AppText style={styles.startSessionTextPhone}>Bắt đầu phiên</AppText>
+                <Play
+                  size={13}
+                  color={appColors.white}
+                  fill={appColors.white}
+                />
+                <AppText style={styles.startSessionTextPhone}>
+                  Bắt đầu phiên
+                </AppText>
               </TouchableOpacity>
             ) : (
               <View style={styles.sessionActiveBadgePhone}>
                 <View style={styles.pulsingSessionDot} />
-                <AppText style={styles.sessionActiveTextPhone} numberOfLines={1}>
+                <AppText
+                  style={styles.sessionActiveTextPhone}
+                  numberOfLines={1}
+                >
                   {activeSessionName || 'Đang chạy'}
                 </AppText>
               </View>
@@ -129,11 +142,23 @@ export const HeaderBar: React.FC<HeaderBarProps> = ({
             onPress={onSelectZone}
             activeOpacity={0.8}
           >
-            <Building2 size={15} color={appColors.blue600} style={{ flexShrink: 0 }} />
-            <AppText style={styles.dropdownTextPhone} numberOfLines={1} ellipsizeMode="tail">
+            <Building2
+              size={15}
+              color={appColors.blue600}
+              style={{ flexShrink: 0 }}
+            />
+            <AppText
+              style={styles.dropdownTextPhone}
+              numberOfLines={1}
+              ellipsizeMode="tail"
+            >
               {selectedZone ? selectedZone.name : 'Chọn Khu'}
             </AppText>
-            <ChevronDown size={14} color={appColors.gray500} style={{ flexShrink: 0 }} />
+            <ChevronDown
+              size={14}
+              color={appColors.gray500}
+              style={{ flexShrink: 0 }}
+            />
           </TouchableOpacity>
 
           <TouchableOpacity
@@ -141,11 +166,23 @@ export const HeaderBar: React.FC<HeaderBarProps> = ({
             onPress={onSelectRoom}
             activeOpacity={0.8}
           >
-            <DoorOpen size={15} color={appColors.blue600} style={{ flexShrink: 0 }} />
-            <AppText style={styles.dropdownTextPhone} numberOfLines={1} ellipsizeMode="tail">
+            <DoorOpen
+              size={15}
+              color={appColors.blue600}
+              style={{ flexShrink: 0 }}
+            />
+            <AppText
+              style={styles.dropdownTextPhone}
+              numberOfLines={1}
+              ellipsizeMode="tail"
+            >
               {selectedRoom ? selectedRoom.name : 'Chọn Phòng'}
             </AppText>
-            <ChevronDown size={14} color={appColors.gray500} style={{ flexShrink: 0 }} />
+            <ChevronDown
+              size={14}
+              color={appColors.gray500}
+              style={{ flexShrink: 0 }}
+            />
           </TouchableOpacity>
 
           <TouchableOpacity
@@ -153,7 +190,11 @@ export const HeaderBar: React.FC<HeaderBarProps> = ({
             onPress={onOpenManageRooms}
             activeOpacity={0.8}
           >
-            <Sliders size={16} color={appColors.gray600} style={{ flexShrink: 0 }} />
+            <Sliders
+              size={16}
+              color={appColors.gray600}
+              style={{ flexShrink: 0 }}
+            />
           </TouchableOpacity>
         </View>
 
@@ -172,15 +213,20 @@ export const HeaderBar: React.FC<HeaderBarProps> = ({
             setShowStartSessionModal(false);
             dispatch(startSession({ name: sessionName }));
             if (selectedRoom) {
-              sessionService.startSession({
-                name: sessionName,
-                roomId: selectedRoom.id,
-                roomName: selectedRoom.name,
-                zoneId: selectedZone?.id,
-                zoneName: selectedZone?.name,
-              }).catch(err => {
-                console.log('[HeaderBar] Failed to start session on BE:', err);
-              });
+              sessionService
+                .startSession({
+                  name: sessionName,
+                  roomId: selectedRoom.id,
+                  roomName: selectedRoom.name,
+                  zoneId: selectedZone?.id,
+                  zoneName: selectedZone?.name,
+                })
+                .catch(err => {
+                  console.log(
+                    '[HeaderBar] Failed to start session on BE:',
+                    err,
+                  );
+                });
             }
           }}
         />
@@ -193,7 +239,7 @@ export const HeaderBar: React.FC<HeaderBarProps> = ({
       {/* Brand logo & status */}
       <View style={styles.brandContainer}>
         <View style={styles.logoRow}>
-          <AppText style={styles.brandTitlePrimary}>VietCore</AppText>
+          <AppText style={styles.brandTitlePrimary}>H2Tech</AppText>
           <AppText style={styles.brandTitleSecondary}> AI</AppText>
         </View>
         <AppText style={styles.brandSub}>FACE CHECK</AppText>
@@ -212,11 +258,23 @@ export const HeaderBar: React.FC<HeaderBarProps> = ({
           onPress={onSelectZone}
           activeOpacity={0.8}
         >
-          <Building2 size={18} color={appColors.blue600} style={{ flexShrink: 0 }} />
-          <AppText style={styles.dropdownText} numberOfLines={1} ellipsizeMode="tail">
+          <Building2
+            size={18}
+            color={appColors.blue600}
+            style={{ flexShrink: 0 }}
+          />
+          <AppText
+            style={styles.dropdownText}
+            numberOfLines={1}
+            ellipsizeMode="tail"
+          >
             {selectedZone ? selectedZone.name : 'Chọn Khu'}
           </AppText>
-          <ChevronDown size={18} color={appColors.gray500} style={{ flexShrink: 0 }} />
+          <ChevronDown
+            size={18}
+            color={appColors.gray500}
+            style={{ flexShrink: 0 }}
+          />
         </TouchableOpacity>
 
         {/* Room Selector */}
@@ -225,11 +283,23 @@ export const HeaderBar: React.FC<HeaderBarProps> = ({
           onPress={onSelectRoom}
           activeOpacity={0.8}
         >
-          <DoorOpen size={18} color={appColors.blue600} style={{ flexShrink: 0 }} />
-          <AppText style={styles.dropdownText} numberOfLines={1} ellipsizeMode="tail">
+          <DoorOpen
+            size={18}
+            color={appColors.blue600}
+            style={{ flexShrink: 0 }}
+          />
+          <AppText
+            style={styles.dropdownText}
+            numberOfLines={1}
+            ellipsizeMode="tail"
+          >
             {selectedRoom ? selectedRoom.name : 'Chọn Phòng'}
           </AppText>
-          <ChevronDown size={18} color={appColors.gray500} style={{ flexShrink: 0 }} />
+          <ChevronDown
+            size={18}
+            color={appColors.gray500}
+            style={{ flexShrink: 0 }}
+          />
         </TouchableOpacity>
 
         {/* Manage Zones & Rooms */}
@@ -238,7 +308,11 @@ export const HeaderBar: React.FC<HeaderBarProps> = ({
           onPress={onOpenManageRooms}
           activeOpacity={0.8}
         >
-          <Sliders size={16} color={appColors.gray600} style={{ flexShrink: 0 }} />
+          <Sliders
+            size={16}
+            color={appColors.gray600}
+            style={{ flexShrink: 0 }}
+          />
         </TouchableOpacity>
 
         {/* Session Action Button */}
@@ -248,7 +322,12 @@ export const HeaderBar: React.FC<HeaderBarProps> = ({
             onPress={handleStartPress}
             activeOpacity={0.85}
           >
-            <Play size={16} color={appColors.white} fill={appColors.white} style={{ flexShrink: 0 }} />
+            <Play
+              size={16}
+              color={appColors.white}
+              fill={appColors.white}
+              style={{ flexShrink: 0 }}
+            />
             <AppText style={styles.startSessionText}>Bắt đầu phiên</AppText>
           </TouchableOpacity>
         ) : (
@@ -293,15 +372,17 @@ export const HeaderBar: React.FC<HeaderBarProps> = ({
           setShowStartSessionModal(false);
           dispatch(startSession({ name: sessionName }));
           if (selectedRoom) {
-            sessionService.startSession({
-              name: sessionName,
-              roomId: selectedRoom.id,
-              roomName: selectedRoom.name,
-              zoneId: selectedZone?.id,
-              zoneName: selectedZone?.name,
-            }).catch(err => {
-              console.log('[HeaderBar] Failed to start session on BE:', err);
-            });
+            sessionService
+              .startSession({
+                name: sessionName,
+                roomId: selectedRoom.id,
+                roomName: selectedRoom.name,
+                zoneId: selectedZone?.id,
+                zoneName: selectedZone?.name,
+              })
+              .catch(err => {
+                console.log('[HeaderBar] Failed to start session on BE:', err);
+              });
           }
         }}
       />

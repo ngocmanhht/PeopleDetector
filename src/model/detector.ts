@@ -11,6 +11,22 @@ export interface Room {
   capacity?: number;
 }
 
+export type UserConditionStatus =
+  | 'normal'
+  | 'leave'
+  | 'medical'
+  | 'warning'
+  | 'suspended';
+
+export interface UserStatusLog {
+  id: string;
+  timestamp: string;
+  oldStatus?: string;
+  newStatus: string;
+  note: string;
+  updatedBy: string;
+}
+
 export interface UserProfile {
   id: string;
   code: string; // e.g. "HV-00123"
@@ -20,6 +36,10 @@ export interface UserProfile {
   zoneId: string;
   roomId: string;
   enrolledAt: string;
+  phoneNumber?: string;
+  conditionStatus?: UserConditionStatus | string;
+  conditionNote?: string;
+  statusLogs?: UserStatusLog[];
 }
 
 export type AttendanceStatus = 'present' | 'missing' | 'verify';

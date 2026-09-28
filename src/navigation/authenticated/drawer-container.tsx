@@ -18,6 +18,7 @@ import {
   PanelLeftOpen,
   ScanFace,
   ChevronRight,
+  ShieldCheck,
 } from 'lucide-react-native';
 import { appColors } from '../../const/app-colors';
 import { useResponsive } from '../../hooks/use-responsive';
@@ -25,11 +26,12 @@ import { useResponsive } from '../../hooks/use-responsive';
 // Screen Tabs
 import HomeScreen from '../../screens/home';
 import { RoomsManagerScreen } from '../../screens/rooms-manager';
+import { CmsScreen } from '../../screens/cms';
 import { AlertsScreen } from '../../screens/alerts';
 import { SettingsScreen } from '../../screens/settings';
 import { useBackendSync } from '../../hooks/use-backend-sync';
 
-export type DrawerTabKey = 'home' | 'rooms' | 'alerts' | 'settings';
+export type DrawerTabKey = 'home' | 'rooms' | 'cms' | 'alerts' | 'settings';
 
 export const DrawerContainer: React.FC = () => {
   useBackendSync();
@@ -69,6 +71,12 @@ export const DrawerContainer: React.FC = () => {
       subtitle: `${rooms.length} phòng học/xưởng`,
       icon: DoorOpen,
       badge: `${rooms.length}`,
+    },
+    {
+      key: 'cms' as DrawerTabKey,
+      label: 'Quản trị CMS',
+      subtitle: 'Tình trạng & Báo cáo',
+      icon: ShieldCheck,
     },
     {
       key: 'alerts' as DrawerTabKey,
@@ -241,6 +249,16 @@ export const DrawerContainer: React.FC = () => {
             pointerEvents={activeTab === 'rooms' ? 'auto' : 'none'}
           >
             <RoomsManagerScreen />
+          </View>
+
+          <View
+            style={[
+              styles.screenWrapper,
+              activeTab !== 'cms' && styles.hiddenScreen,
+            ]}
+            pointerEvents={activeTab === 'cms' ? 'auto' : 'none'}
+          >
+            <CmsScreen />
           </View>
 
           <View

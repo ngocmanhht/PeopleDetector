@@ -51,6 +51,17 @@ export class RoomService {
     );
   }
 
+  public async assignMembers(
+    roomId: string,
+    payload: { userIds: string[]; zoneId?: string },
+  ): Promise<{ success: boolean; message: string; assignedCount: number }> {
+    return apiClient.post<{
+      success: boolean;
+      message: string;
+      assignedCount: number;
+    }>(`/rooms/${roomId}/members`, payload);
+  }
+
   public async deleteRoom(
     id: string,
   ): Promise<{ success: boolean; message: string }> {

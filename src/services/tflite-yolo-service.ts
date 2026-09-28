@@ -371,15 +371,22 @@ export class TfliteYoloService {
       const normH = Math.max(0.01, Math.min(1, isNormalized ? h : h / 640));
 
       // Normalized percentage coordinates (0 - 100%) for UI display
-      const leftPercent = Math.max(0, Math.min(95, (normCx - normW / 2) * 100));
-      const topPercent = Math.max(0, Math.min(95, (normCy - normH / 2) * 100));
+      // Optimal framing: subtle 10% breathing room around raw facial landmarks
+      // and slight upward adjustment to encompass the full forehead & chin naturally
+      const uiW = normW * 1.10;
+      const uiH = normH * 1.14;
+      const uiCx = normCx;
+      const uiCy = normCy - normH * 0.02;
+
+      const leftPercent = Math.max(0, Math.min(95, (uiCx - uiW / 2) * 100));
+      const topPercent = Math.max(0, Math.min(95, (uiCy - uiH / 2) * 100));
       const widthPercent = Math.max(
         5,
-        Math.min(100 - leftPercent, normW * 100),
+        Math.min(100 - leftPercent, uiW * 100),
       );
       const heightPercent = Math.max(
         5,
-        Math.min(100 - topPercent, normH * 100),
+        Math.min(100 - topPercent, uiH * 100),
       );
 
       // Pixel box in original image space

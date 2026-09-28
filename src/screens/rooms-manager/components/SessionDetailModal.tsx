@@ -59,7 +59,22 @@ export const SessionDetailModal: React.FC<SessionDetailModalProps> = ({
     attendedUserIds.forEach(id => {
       if (!map.has(id)) {
         const found = userProfiles.find(u => u.id === id);
-        if (found) map.set(id, found);
+        if (found) {
+          map.set(id, found);
+        } else {
+          // Unrecognized or guest face detected during session
+          const record = session.attendanceMap?.[id];
+          map.set(id, {
+            id,
+            fullName: 'Khuôn mặt chưa nhận diện',
+            code: 'UNKNOWN',
+            avatarUri: record?.detectedImageUrl || '',
+            photos: [],
+            zoneId: session.zoneId,
+            roomId: session.roomId,
+            enrolledAt: record?.timestamp || '',
+          });
+        }
       }
     });
 
