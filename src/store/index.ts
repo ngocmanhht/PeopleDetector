@@ -7,7 +7,11 @@ import { detectorReducer } from './slices/detectorSlice';
 
 // MMKV Storage
 
-const mmkvStorage = createMMKV();
+const mmkvStorage = createMMKV({
+  id: 'people-detector-storage',
+  encryptionKey: 'h2tech-people-detector-2026',
+  encryptionType: 'AES-256',
+});
 
 export const storage: Storage = {
   setItem: (key, value) => {

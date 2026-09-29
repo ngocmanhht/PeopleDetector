@@ -24,6 +24,7 @@ import { UserProfile } from '../../../model/detector';
 import { recordAttendance } from '../../../store/slices/detectorSlice';
 import { appColors } from '../../../const/app-colors';
 import { useResponsive } from '../../../hooks/use-responsive';
+import { appUtils } from '../../../utils';
 
 interface UserListModalProps {
   visible: boolean;
@@ -139,7 +140,7 @@ export const UserListModal: React.FC<UserListModalProps> = ({
                 <View style={styles.userCard}>
                   {item.avatarUri ? (
                     <Image
-                      source={{ uri: item.avatarUri }}
+                      source={{ uri: appUtils.getUrlImage(item.avatarUri) }}
                       style={styles.userAvatar}
                     />
                   ) : (

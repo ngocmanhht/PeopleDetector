@@ -13,6 +13,15 @@ class AppUtils {
       return url;
     }
 
+    if (
+      url.startsWith('file://') ||
+      url.startsWith('data:') ||
+      url.startsWith('content://') ||
+      url.startsWith('ph://')
+    ) {
+      return url;
+    }
+
     if (url.startsWith('/')) {
       const formattedHost = HOST_DOMAIN?.endsWith('/')
         ? HOST_DOMAIN

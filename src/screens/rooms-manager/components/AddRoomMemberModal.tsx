@@ -23,6 +23,7 @@ import {
 } from 'lucide-react-native';
 import { appColors } from '../../../const/app-colors';
 import { useResponsive } from '../../../hooks/use-responsive';
+import { appUtils } from '../../../utils';
 
 interface AddRoomMemberModalProps {
   visible: boolean;
@@ -216,7 +217,7 @@ export const AddRoomMemberModal: React.FC<AddRoomMemberModalProps> = ({
                   {/* Avatar */}
                   {item.avatarUri ? (
                     <Image
-                      source={{ uri: item.avatarUri }}
+                      source={{ uri: appUtils.getUrlImage(item.avatarUri) }}
                       style={styles.avatar}
                     />
                   ) : (

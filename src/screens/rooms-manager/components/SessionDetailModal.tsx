@@ -26,6 +26,7 @@ import {
 } from 'lucide-react-native';
 import { useResponsive } from '../../../hooks/use-responsive';
 import { appColors } from '../../../const/app-colors';
+import { appUtils } from '../../../utils';
 
 interface SessionDetailModalProps {
   visible: boolean;
@@ -438,7 +439,7 @@ export const SessionDetailModal: React.FC<SessionDetailModalProps> = ({
                 <View style={styles.userCard}>
                   {photoToShow ? (
                     <View style={styles.avatarWrap}>
-                      <Image source={{ uri: photoToShow }} style={styles.avatar} />
+                      <Image source={{ uri: appUtils.getUrlImage(photoToShow) }} style={styles.avatar} />
                       {isCameraPhoto && (
                         <View style={styles.cameraIndicator}>
                           <Camera size={9} color={appColors.white} />

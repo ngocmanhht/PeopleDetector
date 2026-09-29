@@ -49,6 +49,7 @@ import { appColors } from '../../const/app-colors';
 import { exportMonthlyAttendanceExcel } from '../../services/excel-export-service';
 import { ImagePickerService } from '../../services/image-picker-service';
 import { tfliteYoloService } from '../../services/tflite-yolo-service';
+import { appUtils } from '../../utils';
 import { AddUserModal } from '../tablet-detector/components/AddUserModal';
 import { BatchAddUserModal } from './components/BatchAddUserModal';
 import dayjs from 'dayjs';
@@ -449,7 +450,7 @@ export const CmsScreen: React.FC = () => {
                       <View style={styles.userChipAvatar}>
                         {u.avatarUri ? (
                           <Image
-                            source={{ uri: u.avatarUri }}
+                            source={{ uri: appUtils.getUrlImage(u.avatarUri) }}
                             style={styles.userChipAvatarImg}
                           />
                         ) : (
@@ -501,7 +502,7 @@ export const CmsScreen: React.FC = () => {
                     <View style={styles.avatarLargeWrapper}>
                       {selectedUser.avatarUri ? (
                         <Image
-                          source={{ uri: selectedUser.avatarUri }}
+                          source={{ uri: appUtils.getUrlImage(selectedUser.avatarUri) }}
                           style={styles.avatarLarge}
                         />
                       ) : (
@@ -958,7 +959,7 @@ export const CmsScreen: React.FC = () => {
                   <View style={styles.userListAvatar}>
                     {item.avatarUri ? (
                       <Image
-                        source={{ uri: item.avatarUri }}
+                        source={{ uri: appUtils.getUrlImage(item.avatarUri) }}
                         style={styles.userListAvatarImg}
                       />
                     ) : (

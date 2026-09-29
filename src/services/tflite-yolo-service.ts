@@ -5,6 +5,7 @@ import dayjs from 'dayjs';
 import { BoundingBox, DetectionResult, UserProfile } from '../model/detector';
 import { createMMKV } from 'react-native-mmkv';
 import { appAiModel } from '../const/app-ai-model';
+import { appUtils } from '../utils';
 
 // Persistent MMKV storage for pre-computed 512-d biometric embeddings
 const faceEmbeddingStorage = createMMKV({ id: 'face-embeddings-cache-v6' });
@@ -559,9 +560,10 @@ export class TfliteYoloService {
     if (this.faceRecognitionModel && photoSources.length > 0) {
       for (const src of photoSources) {
         try {
+          const resolvedSrc = appUtils.getUrlImage(src) || src;
           let rawImg: Image;
-          if (src.startsWith('data:')) {
-            const buffer = base64ToArrayBuffer(src);
+          if (resolvedSrc.startsWith('data:')) {
+            const buffer = base64ToArrayBuffer(resolvedSrc);
             rawImg = await loadImage({
               encodedImageData: {
                 buffer,
@@ -570,10 +572,10 @@ export class TfliteYoloService {
                 imageFormat: 'jpg',
               },
             });
-          } else if (src.startsWith('http')) {
-            rawImg = await loadImage({ url: src });
+          } else if (resolvedSrc.startsWith('http')) {
+            rawImg = await loadImage({ url: resolvedSrc });
           } else {
-            const cleanPath = src.replace(/^file:\/\//, '');
+            const cleanPath = resolvedSrc.replace(/^file:\/\//, '');
             rawImg = await loadImage({ filePath: cleanPath });
           }
 

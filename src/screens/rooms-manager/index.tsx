@@ -49,6 +49,7 @@ import { ManageRoomsModal } from '../tablet-detector/components/ManageRoomsModal
 import { AttendanceSession, UserProfile } from '../../model/detector';
 import { useResponsive } from '../../hooks/use-responsive';
 import { appColors } from '../../const/app-colors';
+import { appUtils } from '../../utils';
 import { tfliteYoloService } from '../../services/tflite-yolo-service';
 import {
   zoneService,
@@ -518,7 +519,7 @@ export const RoomsManagerScreen: React.FC = () => {
                     <View style={styles.avatarWrapper}>
                       {item.avatarUri ? (
                         <Image
-                          source={{ uri: item.avatarUri }}
+                          source={{ uri: appUtils.getUrlImage(item.avatarUri) }}
                           style={styles.memberAvatar}
                         />
                       ) : (

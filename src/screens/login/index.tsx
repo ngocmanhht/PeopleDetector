@@ -35,8 +35,8 @@ export const LoginScreen = () => {
   const navigation = useCustomNavigation<RootNavigatorParamList>();
   const { showErrorToast } = useAppToast();
 
-  const [email, setEmail] = useState('admin@vietcore.ai');
-  const [password, setPassword] = useState('123456');
+  const [email, setEmail] = useState('admin@h2tech.ai');
+  const [password, setPassword] = useState('Aa@123456');
   const [showPassword, setShowPassword] = useState(false);
 
   // Real Backend API Login with JWT & Refresh Token support
@@ -110,7 +110,7 @@ export const LoginScreen = () => {
           <Mail size={18} color={appColors.slate400} />
           <TextInput
             style={styles.textInput}
-            placeholder="admin@vietcore.ai"
+            placeholder="admin@h2tech.ai"
             value={email}
             onChangeText={setEmail}
             autoCapitalize="none"
@@ -158,9 +158,9 @@ export const LoginScreen = () => {
       <TouchableOpacity
         style={styles.mockLoginBtn}
         onPress={() => {
-          setEmail('admin@vietcore.ai');
-          setPassword('123456');
-          handleLogin('admin@vietcore.ai', '123456');
+          setEmail('admin@h2tech.ai');
+          setPassword('Aa@123456');
+          handleLogin('admin@h2tech.ai', 'Aa@123456');
         }}
         disabled={loginMutation.isPending}
         activeOpacity={0.85}
@@ -172,8 +172,8 @@ export const LoginScreen = () => {
       </TouchableOpacity>
       <AppText style={styles.hintText}>
         Tài khoản thử nghiệm:{' '}
-        <AppText style={styles.hintBold}>admin@vietcore.ai</AppText> /{' '}
-        <AppText style={styles.hintBold}>123456</AppText>
+        <AppText style={styles.hintBold}>admin@h2tech.ai</AppText> /{' '}
+        <AppText style={styles.hintBold}>Aa@123456</AppText>
       </AppText>
     </View>
   );

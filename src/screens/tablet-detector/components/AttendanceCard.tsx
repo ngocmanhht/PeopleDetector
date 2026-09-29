@@ -5,6 +5,7 @@ import { DetectionResult } from '../../../model/detector';
 import { CheckCircle2, AlertCircle, UserX } from 'lucide-react-native';
 import { appColors } from '../../../const/app-colors';
 import { useResponsive } from '../../../hooks/use-responsive';
+import { appUtils } from '../../../utils';
 
 interface AttendanceCardProps {
   detection: DetectionResult | null;
@@ -64,7 +65,7 @@ export const AttendanceCard: React.FC<AttendanceCardProps> = ({
         <View style={styles.avatarWrapper}>
           {detection.avatarUri ? (
             <Image
-              source={{ uri: detection.avatarUri }}
+              source={{ uri: appUtils.getUrlImage(detection.avatarUri) }}
               style={[styles.avatarImage, isPhone && styles.avatarImagePhone]}
               resizeMode="cover"
             />

@@ -32,6 +32,7 @@ import { ImagePickerService } from '../../../services/image-picker-service';
 import { tfliteYoloService } from '../../../services/tflite-yolo-service';
 import { appColors } from '../../../const/app-colors';
 import { useResponsive } from '../../../hooks/use-responsive';
+import { appUtils } from '../../../utils';
 
 interface EditUserModalProps {
   visible: boolean;
@@ -206,14 +207,14 @@ export const EditUserModal: React.FC<EditUserModalProps> = ({
         } else if (uri.startsWith('data:image') || uri.length > 500) {
           try {
             const res = await uploadService.uploadBase64(uri, UploadFolder.PROFILES);
-            serverPhotos.push(res.url);
+            serverPhotos.push(res.path);
           } catch {
             serverPhotos.push(uri);
           }
         } else {
           try {
             const res = await uploadService.uploadImage(uri, UploadFolder.PROFILES);
-            serverPhotos.push(res.url);
+            serverPhotos.push(res.path);
           } catch {
             serverPhotos.push(uri);
           }
@@ -221,7 +222,10 @@ export const EditUserModal: React.FC<EditUserModalProps> = ({
       }
 
       const finalAvatar =
-        avatarUri && (avatarUri.startsWith('http://') || avatarUri.startsWith('https://'))
+        avatarUri &&
+        (avatarUri.startsWith('http://') ||
+          avatarUri.startsWith('https://') ||
+          avatarUri.startsWith('/uploads'))
           ? avatarUri
           : serverPhotos[0] || '';
 
@@ -358,7 +362,10 @@ export const EditUserModal: React.FC<EditUserModalProps> = ({
                       const isMain = uri === avatarUri;
                       return (
                         <View key={`${uri}-${idx}`} style={styles.photoCard}>
-                          <Image source={{ uri }} style={styles.photoThumb} />
+                          <Image
+                            source={{ uri: appUtils.getUrlImage(uri) }}
+                            style={styles.photoThumb}
+                          />
 
                           {isMain ? (
                             <View style={styles.mainBadge}>

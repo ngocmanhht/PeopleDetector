@@ -117,7 +117,7 @@ export const SettingsScreen: React.FC = () => {
                   {currentUser?.name || 'Quản trị viên'}
                 </AppText>
                 <AppText style={styles.accountEmail}>
-                  {currentUser?.email || 'admin@vietcore.ai'}
+                  {currentUser?.email || 'admin@h2tech.ai'}
                 </AppText>
                 <View style={styles.roleBadge}>
                   <Shield size={12} color={appColors.emerald600} />

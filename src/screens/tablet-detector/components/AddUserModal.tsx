@@ -30,6 +30,7 @@ import { UploadFolder } from '../../../const/upload-folder';
 import { ImagePickerService } from '../../../services/image-picker-service';
 import { appColors } from '../../../const/app-colors';
 import { useResponsive } from '../../../hooks/use-responsive';
+import { appUtils } from '../../../utils';
 
 interface AddUserModalProps {
   visible: boolean;
@@ -187,14 +188,14 @@ export const AddUserModal: React.FC<AddUserModalProps> = ({
         } else if (uri.startsWith('data:image') || uri.length > 500) {
           try {
             const res = await uploadService.uploadBase64(uri, UploadFolder.PROFILES);
-            serverPhotos.push(res.url);
+            serverPhotos.push(res.path);
           } catch {
             serverPhotos.push(uri);
           }
         } else {
           try {
             const res = await uploadService.uploadImage(uri, UploadFolder.PROFILES);
-            serverPhotos.push(res.url);
+            serverPhotos.push(res.path);
           } catch {
             serverPhotos.push(uri);
           }
@@ -340,7 +341,10 @@ export const AddUserModal: React.FC<AddUserModalProps> = ({
                       const isMain = idx === selectedAvatarIndex;
                       return (
                         <View key={`${uri}-${idx}`} style={styles.photoCard}>
-                          <Image source={{ uri }} style={styles.photoThumb} />
+                          <Image
+                            source={{ uri: appUtils.getUrlImage(uri) }}
+                            style={styles.photoThumb}
+                          />
 
                           {/* Main badge or Set Main */}
                           {isMain ? (
