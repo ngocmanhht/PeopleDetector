@@ -376,7 +376,7 @@ export const CameraViewFinder = forwardRef<
             </AppText>
             <AppText style={styles.permissionSubtitle}>
               Ứng dụng cần quyền Camera để nhận diện khuôn mặt và điểm danh trực
-              tiếp qua YOLO.
+              tiếp.
             </AppText>
             <TouchableOpacity
               style={styles.permissionBtn}
@@ -401,8 +401,8 @@ export const CameraViewFinder = forwardRef<
         {!isSessionActive && (
           <View style={styles.inactiveOverlay}>
             <AppText style={styles.inactiveText}>
-              Phiên chưa bắt đầu. Nhấn "Bắt đầu phiên" để kích hoạt camera &
-              YOLO tự động quét.
+              Phiên chưa bắt đầu. Nhấn "Bắt đầu phiên" để kích hoạt camera & tự
+              động quét.
             </AppText>
           </View>
         )}
@@ -419,9 +419,7 @@ export const CameraViewFinder = forwardRef<
                 width: animWidth,
                 height: animHeight,
                 opacity: animOpacity,
-                transform: [
-                  { scale: Animated.multiply(animScale, pulseAnim) },
-                ],
+                transform: [{ scale: Animated.multiply(animScale, pulseAnim) }],
               },
             ]}
           >

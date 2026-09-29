@@ -8,6 +8,7 @@ import {
   ScrollView,
   Image,
   Alert,
+  ActivityIndicator,
 } from 'react-native';
 import { AppText } from '../../../components/app-text';
 import { useAppDispatch, useAppSelector } from '../../../store/hooks';
@@ -23,7 +24,7 @@ import {
   RotateCw,
 } from 'lucide-react-native';
 import { addUserProfile } from '../../../store/slices/detectorSlice';
-import { profileService } from '../../../services/api';
+import { profileService, uploadService } from '../../../services/api';
 import { PHOTO_CONFIG } from '../../../const/photo-config';
 import { ImagePickerService } from '../../../services/image-picker-service';
 import { appColors } from '../../../const/app-colors';
@@ -159,7 +160,9 @@ export const AddUserModal: React.FC<AddUserModalProps> = ({
     }
   };
 
-  const handleSave = () => {
+  const [isSubmitting, setIsSubmitting] = useState(false);
+
+  const handleSave = async () => {
     if (!fullName.trim()) {
       setError('Vui lòng nhập họ và tên');
       return;
@@ -173,30 +176,59 @@ export const AddUserModal: React.FC<AddUserModalProps> = ({
       return;
     }
 
-    const mainAvatar =
-      photos.length > 0 ? photos[selectedAvatarIndex] || photos[0] : '';
+    setIsSubmitting(true);
+    try {
+      // Tải các ảnh cục bộ lên backend và nhận URL thực tế
+      const serverPhotos: string[] = [];
+      for (const uri of photos) {
+        if (uri.startsWith('http://') || uri.startsWith('https://')) {
+          serverPhotos.push(uri);
+        } else if (uri.startsWith('data:image') || uri.length > 500) {
+          try {
+            const res = await uploadService.uploadBase64(uri, 'profiles');
+            serverPhotos.push(res.url);
+          } catch {
+            serverPhotos.push(uri);
+          }
+        } else {
+          try {
+            const res = await uploadService.uploadImage(uri, 'profiles');
+            serverPhotos.push(res.url);
+          } catch {
+            serverPhotos.push(uri);
+          }
+        }
+      }
 
-    const newProfileData = {
-      fullName: fullName.trim(),
-      code: code.trim(),
-      zoneId: zoneId || '',
-      roomId,
-      avatarUri: mainAvatar,
-      photos,
-    };
+      const mainAvatar =
+        serverPhotos.length > 0
+          ? serverPhotos[selectedAvatarIndex] || serverPhotos[0]
+          : '';
 
-    dispatch(addUserProfile(newProfileData));
-    profileService.createProfile(newProfileData).catch(err => {
-      console.log('[AddUserModal] Failed to sync profile to BE:', err);
-    });
+      const newProfileData = {
+        fullName: fullName.trim(),
+        code: code.trim(),
+        zoneId: zoneId || '',
+        roomId,
+        avatarUri: mainAvatar,
+        photos: serverPhotos,
+      };
 
-    // Reset fields
-    setFullName('');
-    setCode('');
-    setPhotos([]);
-    setSelectedAvatarIndex(0);
-    setError('');
-    onClose();
+      dispatch(addUserProfile(newProfileData));
+      profileService.createProfile(newProfileData).catch(err => {
+        console.log('[AddUserModal] Failed to sync profile to BE:', err);
+      });
+
+      // Reset fields
+      setFullName('');
+      setCode('');
+      setPhotos([]);
+      setSelectedAvatarIndex(0);
+      setError('');
+      onClose();
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   return (
@@ -467,9 +499,19 @@ export const AddUserModal: React.FC<AddUserModalProps> = ({
               <AppText style={styles.cancelBtnText}>Hủy</AppText>
             </TouchableOpacity>
 
-            <TouchableOpacity style={styles.saveBtn} onPress={handleSave}>
-              <Check size={18} color={appColors.white} />
-              <AppText style={styles.saveBtnText}>Lưu hồ sơ</AppText>
+            <TouchableOpacity
+              style={[styles.saveBtn, isSubmitting && { opacity: 0.7 }]}
+              onPress={handleSave}
+              disabled={isSubmitting}
+            >
+              {isSubmitting ? (
+                <ActivityIndicator size="small" color={appColors.white} />
+              ) : (
+                <Check size={18} color={appColors.white} />
+              )}
+              <AppText style={styles.saveBtnText}>
+                {isSubmitting ? 'Đang lưu & tải ảnh...' : 'Lưu hồ sơ'}
+              </AppText>
             </TouchableOpacity>
           </View>
         </View>

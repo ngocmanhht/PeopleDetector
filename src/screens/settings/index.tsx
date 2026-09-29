@@ -67,7 +67,7 @@ export const SettingsScreen: React.FC = () => {
             });
           },
         },
-      ]
+      ],
     );
   };
 
@@ -83,7 +83,9 @@ export const SettingsScreen: React.FC = () => {
           <SettingsIcon size={isPhone ? 22 : 26} color={appColors.blue600} />
         </View>
         <View style={{ flex: 1 }}>
-          <AppText style={[styles.headerTitle, isPhone && styles.headerTitlePhone]}>
+          <AppText
+            style={[styles.headerTitle, isPhone && styles.headerTitlePhone]}
+          >
             {isPhone ? 'Cài đặt hệ thống' : 'Cài đặt & Quản trị Hệ thống'}
           </AppText>
           <AppText style={styles.headerSub} numberOfLines={isPhone ? 1 : 2}>
@@ -92,7 +94,9 @@ export const SettingsScreen: React.FC = () => {
         </View>
       </View>
 
-      <View style={[styles.gridContainer, isPhone && styles.gridContainerPhone]}>
+      <View
+        style={[styles.gridContainer, isPhone && styles.gridContainerPhone]}
+      >
         {/* Left Column: Account & Logout */}
         <View style={styles.column}>
           {/* User Account Card */}
@@ -131,7 +135,9 @@ export const SettingsScreen: React.FC = () => {
               activeOpacity={0.85}
             >
               <LogOut size={18} color={appColors.white} />
-              <AppText style={styles.logoutBtnText}>Đăng xuất khỏi thiết bị</AppText>
+              <AppText style={styles.logoutBtnText}>
+                Đăng xuất khỏi thiết bị
+              </AppText>
             </TouchableOpacity>
           </View>
 
@@ -143,19 +149,9 @@ export const SettingsScreen: React.FC = () => {
             </View>
             <View style={styles.infoRow}>
               <AppText style={styles.infoLabel}>Phiên bản:</AppText>
-              <AppText style={styles.infoValue}>v1.0.0 (Tablet Landscape)</AppText>
-            </View>
-            <View style={styles.infoRow}>
-              <AppText style={styles.infoLabel}>Engine nhận diện:</AppText>
-              <AppText style={styles.infoValue}>YOLOv8-Face Detection</AppText>
-            </View>
-            <View style={styles.infoRow}>
-              <AppText style={styles.infoLabel}>Vision Camera:</AppText>
-              <AppText style={styles.infoValue}>v4.7.3 (Hardware Accelerated)</AppText>
-            </View>
-            <View style={styles.infoRow}>
-              <AppText style={styles.infoLabel}>Môi trường:</AppText>
-              <AppText style={styles.infoValue}>React Native New Architecture</AppText>
+              <AppText style={styles.infoValue}>
+                v1.0.0 (Tablet Landscape)
+              </AppText>
             </View>
           </View>
         </View>
@@ -166,7 +162,7 @@ export const SettingsScreen: React.FC = () => {
           <View style={styles.card}>
             <View style={styles.cardHeader}>
               <Sliders size={20} color={appColors.blue600} />
-              <AppText style={styles.cardTitle}>Cấu hình nhận diện YOLO</AppText>
+              <AppText style={styles.cardTitle}>Cấu hình nhận diện</AppText>
             </View>
 
             {/* Confidence Threshold */}
@@ -192,7 +188,8 @@ export const SettingsScreen: React.FC = () => {
                     <AppText
                       style={[
                         styles.thresholdChipText,
-                        confidenceThreshold === val && styles.thresholdChipTextActive,
+                        confidenceThreshold === val &&
+                          styles.thresholdChipTextActive,
                       ]}
                     >
                       {val}%
@@ -205,9 +202,11 @@ export const SettingsScreen: React.FC = () => {
             {/* Target FPS */}
             <View style={styles.settingItem}>
               <View>
-                <AppText style={styles.settingLabel}>Tốc độ quét nhận diện (FPS)</AppText>
+                <AppText style={styles.settingLabel}>
+                  Tốc độ quét nhận diện (FPS)
+                </AppText>
                 <AppText style={styles.settingDesc}>
-                  Số khung hình quét mỗi giây cho mô hình YOLO
+                  Số khung hình quét mỗi giây cho mô hình
                 </AppText>
               </View>
               <View style={styles.thresholdChips}>
@@ -236,7 +235,9 @@ export const SettingsScreen: React.FC = () => {
             {/* Sound switch */}
             <View style={styles.switchRow}>
               <View style={{ flex: 1 }}>
-                <AppText style={styles.settingLabel}>Âm thanh thông báo</AppText>
+                <AppText style={styles.settingLabel}>
+                  Âm thanh thông báo
+                </AppText>
                 <AppText style={styles.settingDesc}>
                   Phát âm thanh bíp khi nhận diện điểm danh thành công
                 </AppText>
@@ -244,8 +245,13 @@ export const SettingsScreen: React.FC = () => {
               <Switch
                 value={soundEnabled}
                 onValueChange={setSoundEnabled}
-                trackColor={{ false: appColors.slate300, true: appColors.blue300 }}
-                thumbColor={soundEnabled ? appColors.blue600 : appColors.slate100}
+                trackColor={{
+                  false: appColors.slate300,
+                  true: appColors.blue300,
+                }}
+                thumbColor={
+                  soundEnabled ? appColors.blue600 : appColors.slate100
+                }
               />
             </View>
           </View>
@@ -268,8 +274,13 @@ export const SettingsScreen: React.FC = () => {
               <Switch
                 value={autoSessionReset}
                 onValueChange={setAutoSessionReset}
-                trackColor={{ false: appColors.slate300, true: appColors.blue300 }}
-                thumbColor={autoSessionReset ? appColors.blue600 : appColors.slate100}
+                trackColor={{
+                  false: appColors.slate300,
+                  true: appColors.blue300,
+                }}
+                thumbColor={
+                  autoSessionReset ? appColors.blue600 : appColors.slate100
+                }
               />
             </View>
           </View>

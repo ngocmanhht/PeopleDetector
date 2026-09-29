@@ -1,5 +1,11 @@
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import {
+  useQuery,
+  useMutation,
+  useQueryClient,
+  useInfiniteQuery,
+} from '@tanstack/react-query';
 import { useAppDispatch, useAppSelector } from '../store/hooks';
+import { DEFAULT_PAGE, DEFAULT_PAGE_SIZE, PaginationParams } from '../const/pagination';
 import {
   authService,
   zoneService,
@@ -15,9 +21,13 @@ import {
   UpdateRoomPayload,
   CreateProfilePayload,
   UpdateProfilePayload,
+  GetProfilesParams,
+  GetSessionsParams,
   StartSessionPayload,
   RecordAttendancePayload,
+  GetAttendanceHistoryParams,
   CreateAlertPayload,
+  uploadService,
 } from '../services/api';
 import { login, logout } from '../store/slices/appSlice';
 import {
@@ -178,7 +188,7 @@ export const useDeleteRoomMutation = () => {
 
 // ======================== PROFILES HOOKS ========================
 export const useProfilesQuery = (
-  params?: { zoneId?: string; roomId?: string; q?: string },
+  params?: GetProfilesParams,
   enabled = true,
 ) => {
   const dispatch = useAppDispatch();
@@ -191,6 +201,39 @@ export const useProfilesQuery = (
         dispatch(setUserProfiles(res.data));
       }
       return res.data;
+    },
+    enabled,
+  });
+};
+
+export const useInfiniteProfilesQuery = (
+  params?: Omit<GetProfilesParams, 'page' | 'limit'>,
+  limit = DEFAULT_PAGE_SIZE,
+  enabled = true,
+) => {
+  return useInfiniteQuery({
+    queryKey: ['profiles', 'infinite', params, limit],
+    queryFn: async ({ pageParam = DEFAULT_PAGE }) => {
+      return await profileService.getProfiles({
+        ...params,
+        page: pageParam,
+        limit,
+      });
+    },
+    initialPageParam: DEFAULT_PAGE,
+    getNextPageParam: lastPage => {
+      const p = lastPage.pagination;
+      if (!p || p.page >= p.totalPages) {
+        return undefined;
+      }
+      return p.page + 1;
+    },
+    getPreviousPageParam: firstPage => {
+      const p = firstPage.pagination;
+      if (!p || p.page <= 1) {
+        return undefined;
+      }
+      return p.page - 1;
     },
     enabled,
   });
@@ -238,7 +281,7 @@ export const useDeleteProfileMutation = () => {
 
 // ======================== SESSIONS HOOKS ========================
 export const useSessionsQuery = (
-  params?: { roomId?: string; zoneId?: string },
+  params?: GetSessionsParams,
   enabled = true,
 ) => {
   const dispatch = useAppDispatch();
@@ -251,6 +294,39 @@ export const useSessionsQuery = (
         dispatch(setSessions(res.data));
       }
       return res.data;
+    },
+    enabled,
+  });
+};
+
+export const useInfiniteSessionsQuery = (
+  params?: Omit<GetSessionsParams, 'page' | 'limit'>,
+  limit = DEFAULT_PAGE_SIZE,
+  enabled = true,
+) => {
+  return useInfiniteQuery({
+    queryKey: ['sessions', 'infinite', params, limit],
+    queryFn: async ({ pageParam = DEFAULT_PAGE }) => {
+      return await sessionService.getSessions({
+        ...params,
+        page: pageParam,
+        limit,
+      });
+    },
+    initialPageParam: DEFAULT_PAGE,
+    getNextPageParam: lastPage => {
+      const p = lastPage.pagination;
+      if (!p || p.page >= p.totalPages) {
+        return undefined;
+      }
+      return p.page + 1;
+    },
+    getPreviousPageParam: firstPage => {
+      const p = firstPage.pagination;
+      if (!p || p.page <= 1) {
+        return undefined;
+      }
+      return p.page - 1;
     },
     enabled,
   });
@@ -297,6 +373,53 @@ export const useDeleteSessionMutation = () => {
 };
 
 // ======================== ATTENDANCE HOOKS ========================
+export const useAttendanceHistoryQuery = (
+  params?: GetAttendanceHistoryParams,
+  enabled = true,
+) => {
+  return useQuery({
+    queryKey: ['attendance', 'history', params],
+    queryFn: async () => {
+      const res = await attendanceService.getHistory(params);
+      return res.data;
+    },
+    enabled,
+  });
+};
+
+export const useInfiniteAttendanceHistoryQuery = (
+  params?: Omit<GetAttendanceHistoryParams, 'page' | 'limit'>,
+  limit = DEFAULT_PAGE_SIZE,
+  enabled = true,
+) => {
+  return useInfiniteQuery({
+    queryKey: ['attendance', 'history', 'infinite', params, limit],
+    queryFn: async ({ pageParam = DEFAULT_PAGE }) => {
+      return await attendanceService.getHistory({
+        ...params,
+        page: pageParam,
+        limit,
+      });
+    },
+    initialPageParam: DEFAULT_PAGE,
+    getNextPageParam: lastPage => {
+      const p = lastPage.pagination;
+      if (!p || p.page >= p.totalPages) {
+        return undefined;
+      }
+      return p.page + 1;
+    },
+    getPreviousPageParam: firstPage => {
+      const p = firstPage.pagination;
+      if (!p || p.page <= 1) {
+        return undefined;
+      }
+      return p.page - 1;
+    },
+    enabled,
+  });
+};
+
 export const useRecordAttendanceMutation = () => {
   const dispatch = useAppDispatch();
 
@@ -310,17 +433,51 @@ export const useRecordAttendanceMutation = () => {
 };
 
 // ======================== ALERTS HOOKS ========================
-export const useAlertsQuery = (enabled = true) => {
+export const useAlertsQuery = (
+  params?: PaginationParams,
+  enabled = true,
+) => {
   const dispatch = useAppDispatch();
 
   return useQuery({
-    queryKey: ['alerts'],
+    queryKey: ['alerts', params],
     queryFn: async () => {
-      const res = await alertService.getAlerts();
+      const res = await alertService.getAlerts(params);
       if (res.data) {
         dispatch(setAlerts(res.data));
       }
       return res.data;
+    },
+    enabled,
+  });
+};
+
+export const useInfiniteAlertsQuery = (
+  limit = DEFAULT_PAGE_SIZE,
+  enabled = true,
+) => {
+  return useInfiniteQuery({
+    queryKey: ['alerts', 'infinite', limit],
+    queryFn: async ({ pageParam = DEFAULT_PAGE }) => {
+      return await alertService.getAlerts({
+        page: pageParam,
+        limit,
+      });
+    },
+    initialPageParam: DEFAULT_PAGE,
+    getNextPageParam: lastPage => {
+      const p = lastPage.pagination;
+      if (!p || p.page >= p.totalPages) {
+        return undefined;
+      }
+      return p.page + 1;
+    },
+    getPreviousPageParam: firstPage => {
+      const p = firstPage.pagination;
+      if (!p || p.page <= 1) {
+        return undefined;
+      }
+      return p.page - 1;
     },
     enabled,
   });
@@ -351,3 +508,43 @@ export const useClearAlertsMutation = () => {
     },
   });
 };
+
+// ======================== UPLOAD HOOKS ========================
+export const useUploadImageMutation = () => {
+  return useMutation({
+    mutationFn: ({
+      fileUri,
+      folder = 'profiles',
+      filename,
+    }: {
+      fileUri: string;
+      folder?: 'profiles' | 'attendance' | 'common';
+      filename?: string;
+    }) => uploadService.uploadImage(fileUri, folder, filename),
+  });
+};
+
+export const useUploadImagesMutation = () => {
+  return useMutation({
+    mutationFn: ({
+      fileUris,
+      folder = 'profiles',
+    }: {
+      fileUris: string[];
+      folder?: 'profiles' | 'attendance' | 'common';
+    }) => uploadService.uploadImages(fileUris, folder),
+  });
+};
+
+export const useUploadBase64Mutation = () => {
+  return useMutation({
+    mutationFn: ({
+      base64,
+      folder = 'common',
+    }: {
+      base64: string;
+      folder?: 'profiles' | 'attendance' | 'common';
+    }) => uploadService.uploadBase64(base64, folder),
+  });
+};
+

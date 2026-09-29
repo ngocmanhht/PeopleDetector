@@ -227,7 +227,7 @@ export const LoginScreen = () => {
               <View style={styles.featureItem}>
                 <CheckCircle2 size={18} color={appColors.emerald400} />
                 <AppText style={styles.featureText}>
-                  Nhận diện khuôn mặt thời gian thực bằng YOLO
+                  Nhận diện khuôn mặt thời gian thực
                 </AppText>
               </View>
               <View style={styles.featureItem}>

@@ -1,5 +1,12 @@
 import { apiClient } from '../axios-services';
 import { UserProfile } from '../../model/detector';
+import { PaginatedResponse, PaginationParams } from '../../const/pagination';
+
+export interface GetProfilesParams extends PaginationParams {
+  zoneId?: string;
+  roomId?: string;
+  q?: string;
+}
 
 export interface CreateProfilePayload {
   id?: string;
@@ -51,12 +58,10 @@ export class ProfileService {
     return ProfileService.instance;
   }
 
-  public async getProfiles(params?: {
-    zoneId?: string;
-    roomId?: string;
-    q?: string;
-  }): Promise<{ success: boolean; data: UserProfile[] }> {
-    return apiClient.get<{ success: boolean; data: UserProfile[] }>(
+  public async getProfiles(
+    params?: GetProfilesParams,
+  ): Promise<PaginatedResponse<UserProfile>> {
+    return apiClient.get<PaginatedResponse<UserProfile>>(
       '/profiles',
       params,
     );

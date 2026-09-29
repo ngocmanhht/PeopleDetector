@@ -8,6 +8,7 @@ import {
   ScrollView,
   Image,
   Alert,
+  ActivityIndicator,
 } from 'react-native';
 import { AppText } from '../../../components/app-text';
 import { useAppDispatch, useAppSelector } from '../../../store/hooks';
@@ -23,7 +24,7 @@ import {
   RotateCw,
 } from 'lucide-react-native';
 import { updateUserProfile } from '../../../store/slices/detectorSlice';
-import { profileService } from '../../../services/api';
+import { profileService, uploadService } from '../../../services/api';
 import { UserProfile } from '../../../model/detector';
 import { PHOTO_CONFIG } from '../../../const/photo-config';
 import { ImagePickerService } from '../../../services/image-picker-service';
@@ -74,7 +75,7 @@ export const EditUserModal: React.FC<EditUserModalProps> = ({
     if (photos.length >= PHOTO_CONFIG.MAX_PHOTOS_PER_USER) {
       Alert.alert(
         'Đã đủ ảnh',
-        `Mỗi hồ sơ tối đa ${PHOTO_CONFIG.MAX_PHOTOS_PER_USER} ảnh nhận diện.`
+        `Mỗi hồ sơ tối đa ${PHOTO_CONFIG.MAX_PHOTOS_PER_USER} ảnh nhận diện.`,
       );
       return;
     }
@@ -85,7 +86,7 @@ export const EditUserModal: React.FC<EditUserModalProps> = ({
         onPress: async () => {
           const uri = await ImagePickerService.captureImageWithCamera(
             photos.length,
-            'back'
+            'back',
           );
           if (uri) {
             setPhotos(prev => {
@@ -101,7 +102,7 @@ export const EditUserModal: React.FC<EditUserModalProps> = ({
         onPress: async () => {
           const uri = await ImagePickerService.captureImageWithCamera(
             photos.length,
-            'front'
+            'front',
           );
           if (uri) {
             setPhotos(prev => {
@@ -138,16 +139,21 @@ export const EditUserModal: React.FC<EditUserModalProps> = ({
     if (photos.length >= PHOTO_CONFIG.MAX_PHOTOS_PER_USER) {
       Alert.alert(
         'Đã đủ ảnh',
-        `Mỗi hồ sơ tối đa ${PHOTO_CONFIG.MAX_PHOTOS_PER_USER} ảnh nhận diện.`
+        `Mỗi hồ sơ tối đa ${PHOTO_CONFIG.MAX_PHOTOS_PER_USER} ảnh nhận diện.`,
       );
       return;
     }
-    const newUris = await ImagePickerService.pickImagesFromLibrary(photos.length);
+    const newUris = await ImagePickerService.pickImagesFromLibrary(
+      photos.length,
+    );
     if (newUris.length > 0) {
       setPhotos(prev => {
         const combined = [...prev];
         newUris.forEach(u => {
-          if (!combined.includes(u) && combined.length < PHOTO_CONFIG.MAX_PHOTOS_PER_USER) {
+          if (
+            !combined.includes(u) &&
+            combined.length < PHOTO_CONFIG.MAX_PHOTOS_PER_USER
+          ) {
             combined.push(u);
           }
         });
@@ -176,7 +182,9 @@ export const EditUserModal: React.FC<EditUserModalProps> = ({
     ]);
   };
 
-  const handleSave = () => {
+  const [isSubmitting, setIsSubmitting] = useState(false);
+
+  const handleSave = async () => {
     if (!user) return;
     if (!fullName.trim()) {
       setError('Vui lòng nhập họ và tên');
@@ -187,29 +195,59 @@ export const EditUserModal: React.FC<EditUserModalProps> = ({
       return;
     }
 
-    const finalAvatar = avatarUri || photos[0] || '';
+    setIsSubmitting(true);
+    try {
+      // Tải các ảnh mới (cục bộ) lên backend và nhận URL thực tế
+      const serverPhotos: string[] = [];
+      for (const uri of photos) {
+        if (uri.startsWith('http://') || uri.startsWith('https://')) {
+          serverPhotos.push(uri);
+        } else if (uri.startsWith('data:image') || uri.length > 500) {
+          try {
+            const res = await uploadService.uploadBase64(uri, 'profiles');
+            serverPhotos.push(res.url);
+          } catch {
+            serverPhotos.push(uri);
+          }
+        } else {
+          try {
+            const res = await uploadService.uploadImage(uri, 'profiles');
+            serverPhotos.push(res.url);
+          } catch {
+            serverPhotos.push(uri);
+          }
+        }
+      }
 
-    const updatedData = {
-      fullName: fullName.trim(),
-      code: code.trim(),
-      roomId: roomId || user.roomId,
-      avatarUri: finalAvatar,
-      photos,
-    };
+      const finalAvatar =
+        avatarUri && (avatarUri.startsWith('http://') || avatarUri.startsWith('https://'))
+          ? avatarUri
+          : serverPhotos[0] || '';
 
-    tfliteYoloService.invalidateProfileCache(user.id);
-    dispatch(
-      updateUserProfile({
-        id: user.id,
-        ...updatedData,
-      })
-    );
+      const updatedData = {
+        fullName: fullName.trim(),
+        code: code.trim(),
+        roomId: roomId || user.roomId,
+        avatarUri: finalAvatar,
+        photos: serverPhotos,
+      };
 
-    profileService.updateProfile(user.id, updatedData).catch(err => {
-      console.log('[EditUserModal] Failed to sync update to BE:', err);
-    });
+      tfliteYoloService.invalidateProfileCache(user.id);
+      dispatch(
+        updateUserProfile({
+          id: user.id,
+          ...updatedData,
+        }),
+      );
 
-    onClose();
+      profileService.updateProfile(user.id, updatedData).catch(err => {
+        console.log('[EditUserModal] Failed to sync update to BE:', err);
+      });
+
+      onClose();
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   if (!user) return null;
@@ -220,10 +258,17 @@ export const EditUserModal: React.FC<EditUserModalProps> = ({
       animationType="fade"
       transparent
       onRequestClose={onClose}
-      supportedOrientations={['portrait', 'landscape', 'landscape-left', 'landscape-right']}
+      supportedOrientations={[
+        'portrait',
+        'landscape',
+        'landscape-left',
+        'landscape-right',
+      ]}
     >
       <View style={[styles.overlay, isPhone && styles.overlayPhone]}>
-        <View style={[styles.modalContent, isPhone && styles.modalContentPhone]}>
+        <View
+          style={[styles.modalContent, isPhone && styles.modalContentPhone]}
+        >
           {/* Header */}
           <View style={styles.header}>
             <View style={[styles.headerTitleRow, { flex: 1, paddingRight: 8 }]}>
@@ -231,7 +276,10 @@ export const EditUserModal: React.FC<EditUserModalProps> = ({
                 <UserCheck size={20} color={appColors.blue600} />
               </View>
               <View style={{ flex: 1 }}>
-                <AppText style={[styles.title, isPhone && styles.titlePhone]} numberOfLines={1}>
+                <AppText
+                  style={[styles.title, isPhone && styles.titlePhone]}
+                  numberOfLines={1}
+                >
                   Chỉnh sửa nhân sự
                 </AppText>
                 <AppText style={styles.subtitle} numberOfLines={1}>
@@ -250,13 +298,19 @@ export const EditUserModal: React.FC<EditUserModalProps> = ({
 
             {/* Photos Management */}
             <View style={styles.photoSection}>
-              <View style={[styles.photoHeaderRow, isPhone && styles.photoHeaderRowPhone]}>
+              <View
+                style={[
+                  styles.photoHeaderRow,
+                  isPhone && styles.photoHeaderRowPhone,
+                ]}
+              >
                 <View>
                   <AppText style={styles.sectionLabel}>
-                    Bộ ảnh nhận diện ({photos.length}/{PHOTO_CONFIG.MAX_PHOTOS_PER_USER} ảnh)
+                    Bộ ảnh nhận diện ({photos.length}/
+                    {PHOTO_CONFIG.MAX_PHOTOS_PER_USER} ảnh)
                   </AppText>
                   <AppText style={styles.sectionDesc}>
-                    Thêm ảnh mới hoặc xóa ảnh cũ để tối ưu độ chính xác YOLO
+                    Thêm ảnh mới hoặc xóa ảnh cũ để tối ưu độ chính xác
                   </AppText>
                 </View>
 
@@ -267,7 +321,9 @@ export const EditUserModal: React.FC<EditUserModalProps> = ({
                     disabled={photos.length >= PHOTO_CONFIG.MAX_PHOTOS_PER_USER}
                   >
                     <Camera size={16} color={appColors.white} />
-                    <AppText style={styles.actionBtnCameraText}>Chụp thêm</AppText>
+                    <AppText style={styles.actionBtnCameraText}>
+                      Chụp thêm
+                    </AppText>
                   </TouchableOpacity>
 
                   <TouchableOpacity
@@ -276,7 +332,9 @@ export const EditUserModal: React.FC<EditUserModalProps> = ({
                     disabled={photos.length >= PHOTO_CONFIG.MAX_PHOTOS_PER_USER}
                   >
                     <ImageIcon size={16} color={appColors.blue600} />
-                    <AppText style={styles.actionBtnLibraryText}>Chọn thêm</AppText>
+                    <AppText style={styles.actionBtnLibraryText}>
+                      Chọn thêm
+                    </AppText>
                   </TouchableOpacity>
                 </View>
               </View>
@@ -289,7 +347,11 @@ export const EditUserModal: React.FC<EditUserModalProps> = ({
                   </AppText>
                 </View>
               ) : (
-                <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.photosScroll}>
+                <ScrollView
+                  horizontal
+                  showsHorizontalScrollIndicator={false}
+                  style={styles.photosScroll}
+                >
                   <View style={styles.photosRow}>
                     {photos.map((uri, idx) => {
                       const isMain = uri === avatarUri;
@@ -300,7 +362,9 @@ export const EditUserModal: React.FC<EditUserModalProps> = ({
                           {isMain ? (
                             <View style={styles.mainBadge}>
                               <Star size={10} color={appColors.white} />
-                              <AppText style={styles.mainBadgeText}>Chính</AppText>
+                              <AppText style={styles.mainBadgeText}>
+                                Chính
+                              </AppText>
                             </View>
                           ) : (
                             <TouchableOpacity
@@ -308,7 +372,9 @@ export const EditUserModal: React.FC<EditUserModalProps> = ({
                               onPress={() => setAvatarUri(uri)}
                               activeOpacity={0.8}
                             >
-                              <AppText style={styles.setMainText}>Đặt chính</AppText>
+                              <AppText style={styles.setMainText}>
+                                Đặt chính
+                              </AppText>
                             </TouchableOpacity>
                           )}
 
@@ -327,7 +393,10 @@ export const EditUserModal: React.FC<EditUserModalProps> = ({
                               onPress={() => handleFlipPhoto(uri)}
                               activeOpacity={0.7}
                             >
-                              <FlipHorizontal size={12} color={appColors.white} />
+                              <FlipHorizontal
+                                size={12}
+                                color={appColors.white}
+                              />
                             </TouchableOpacity>
                             <TouchableOpacity
                               style={styles.toolIconBtn}
@@ -382,7 +451,10 @@ export const EditUserModal: React.FC<EditUserModalProps> = ({
                         onPress={() => setRoomId(r.id)}
                       >
                         <AppText
-                          style={[styles.chipText, isSelected && styles.chipTextActive]}
+                          style={[
+                            styles.chipText,
+                            isSelected && styles.chipTextActive,
+                          ]}
                         >
                           {r.name}
                         </AppText>
@@ -400,9 +472,19 @@ export const EditUserModal: React.FC<EditUserModalProps> = ({
               <AppText style={styles.cancelBtnText}>Hủy</AppText>
             </TouchableOpacity>
 
-            <TouchableOpacity style={styles.saveBtn} onPress={handleSave}>
-              <Check size={18} color={appColors.white} />
-              <AppText style={styles.saveBtnText}>Lưu thay đổi</AppText>
+            <TouchableOpacity
+              style={[styles.saveBtn, isSubmitting && { opacity: 0.7 }]}
+              onPress={handleSave}
+              disabled={isSubmitting}
+            >
+              {isSubmitting ? (
+                <ActivityIndicator size="small" color={appColors.white} />
+              ) : (
+                <Check size={18} color={appColors.white} />
+              )}
+              <AppText style={styles.saveBtnText}>
+                {isSubmitting ? 'Đang lưu & tải ảnh...' : 'Lưu thay đổi'}
+              </AppText>
             </TouchableOpacity>
           </View>
         </View>

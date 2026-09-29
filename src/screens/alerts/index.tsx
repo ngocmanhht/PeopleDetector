@@ -1,9 +1,10 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import {
   StyleSheet,
   View,
   TouchableOpacity,
   FlatList,
+  ActivityIndicator,
 } from 'react-native';
 import dayjs from 'dayjs';
 import { AppText } from '../../components/app-text';
@@ -19,13 +20,31 @@ import {
 import { addAlert, clearAlerts } from '../../store/slices/detectorSlice';
 import { appColors } from '../../const/app-colors';
 import { useResponsive } from '../../hooks/use-responsive';
+import { useInfiniteAlertsQuery } from '../../hooks/use-api-queries';
 
 export const AlertsScreen: React.FC = () => {
   const { isPhone } = useResponsive();
   const dispatch = useAppDispatch();
-  const alerts = useAppSelector(state => state.detector.alerts);
+  const reduxAlerts = useAppSelector(state => state.detector.alerts);
+
+  const {
+    data: alertsInfiniteData,
+    fetchNextPage,
+    hasNextPage,
+    isFetchingNextPage,
+    refetch,
+    isRefetching,
+  } = useInfiniteAlertsQuery();
 
   const [activeFilter, setActiveFilter] = useState<'all' | 'warning' | 'error' | 'info'>('all');
+
+  const alerts = useMemo(() => {
+    if (alertsInfiniteData?.pages) {
+      const apiAlerts = alertsInfiniteData.pages.flatMap(page => page.data || []);
+      if (apiAlerts.length > 0) return apiAlerts;
+    }
+    return reduxAlerts;
+  }, [alertsInfiniteData, reduxAlerts]);
 
   const filteredAlerts = alerts.filter(a => {
     if (activeFilter === 'all') return true;
@@ -187,6 +206,21 @@ export const AlertsScreen: React.FC = () => {
               Hệ thống vận hành bình thường. Mọi sự cố bất thường sẽ được ghi nhận tại đây.
             </AppText>
           </View>
+        }
+        onEndReached={() => {
+          if (hasNextPage && !isFetchingNextPage) {
+            fetchNextPage();
+          }
+        }}
+        onEndReachedThreshold={0.5}
+        refreshing={isRefetching}
+        onRefresh={refetch}
+        ListFooterComponent={
+          isFetchingNextPage ? (
+            <View style={{ paddingVertical: 16, alignItems: 'center' }}>
+              <ActivityIndicator size="small" color={appColors.blue600} />
+            </View>
+          ) : undefined
         }
       />
     </View>

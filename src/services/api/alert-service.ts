@@ -1,5 +1,6 @@
 import { apiClient } from '../axios-services';
 import { AlertLog } from '../../model/detector';
+import { PaginatedResponse, PaginationParams } from '../../const/pagination';
 
 export interface CreateAlertPayload {
   id?: string;
@@ -21,8 +22,10 @@ export class AlertService {
     return AlertService.instance;
   }
 
-  public async getAlerts(): Promise<{ success: boolean; data: AlertLog[] }> {
-    return apiClient.get<{ success: boolean; data: AlertLog[] }>('/alerts');
+  public async getAlerts(
+    params?: PaginationParams,
+  ): Promise<PaginatedResponse<AlertLog>> {
+    return apiClient.get<PaginatedResponse<AlertLog>>('/alerts', params);
   }
 
   public async createAlert(

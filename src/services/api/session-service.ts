@@ -1,5 +1,11 @@
 import { apiClient } from '../axios-services';
 import { AttendanceSession } from '../../model/detector';
+import { PaginatedResponse, PaginationParams } from '../../const/pagination';
+
+export interface GetSessionsParams extends PaginationParams {
+  roomId?: string;
+  zoneId?: string;
+}
 
 export interface StartSessionPayload {
   id?: string;
@@ -23,11 +29,10 @@ export class SessionService {
     return SessionService.instance;
   }
 
-  public async getSessions(params?: {
-    roomId?: string;
-    zoneId?: string;
-  }): Promise<{ success: boolean; data: AttendanceSession[] }> {
-    return apiClient.get<{ success: boolean; data: AttendanceSession[] }>(
+  public async getSessions(
+    params?: GetSessionsParams,
+  ): Promise<PaginatedResponse<AttendanceSession>> {
+    return apiClient.get<PaginatedResponse<AttendanceSession>>(
       '/sessions',
       params,
     );
