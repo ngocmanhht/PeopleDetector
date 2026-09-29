@@ -26,6 +26,7 @@ import {
 import { addUserProfile } from '../../../store/slices/detectorSlice';
 import { profileService, uploadService } from '../../../services/api';
 import { PHOTO_CONFIG } from '../../../const/photo-config';
+import { UploadFolder } from '../../../const/upload-folder';
 import { ImagePickerService } from '../../../services/image-picker-service';
 import { appColors } from '../../../const/app-colors';
 import { useResponsive } from '../../../hooks/use-responsive';
@@ -185,14 +186,14 @@ export const AddUserModal: React.FC<AddUserModalProps> = ({
           serverPhotos.push(uri);
         } else if (uri.startsWith('data:image') || uri.length > 500) {
           try {
-            const res = await uploadService.uploadBase64(uri, 'profiles');
+            const res = await uploadService.uploadBase64(uri, UploadFolder.PROFILES);
             serverPhotos.push(res.url);
           } catch {
             serverPhotos.push(uri);
           }
         } else {
           try {
-            const res = await uploadService.uploadImage(uri, 'profiles');
+            const res = await uploadService.uploadImage(uri, UploadFolder.PROFILES);
             serverPhotos.push(res.url);
           } catch {
             serverPhotos.push(uri);

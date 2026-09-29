@@ -6,6 +6,7 @@ import {
 } from '@tanstack/react-query';
 import { useAppDispatch, useAppSelector } from '../store/hooks';
 import { DEFAULT_PAGE, DEFAULT_PAGE_SIZE, PaginationParams } from '../const/pagination';
+import { UploadFolder } from '../const/upload-folder';
 import {
   authService,
   zoneService,
@@ -514,11 +515,11 @@ export const useUploadImageMutation = () => {
   return useMutation({
     mutationFn: ({
       fileUri,
-      folder = 'profiles',
+      folder = UploadFolder.PROFILES,
       filename,
     }: {
       fileUri: string;
-      folder?: 'profiles' | 'attendance' | 'common';
+      folder?: UploadFolder;
       filename?: string;
     }) => uploadService.uploadImage(fileUri, folder, filename),
   });
@@ -528,10 +529,10 @@ export const useUploadImagesMutation = () => {
   return useMutation({
     mutationFn: ({
       fileUris,
-      folder = 'profiles',
+      folder = UploadFolder.PROFILES,
     }: {
       fileUris: string[];
-      folder?: 'profiles' | 'attendance' | 'common';
+      folder?: UploadFolder;
     }) => uploadService.uploadImages(fileUris, folder),
   });
 };
@@ -540,10 +541,10 @@ export const useUploadBase64Mutation = () => {
   return useMutation({
     mutationFn: ({
       base64,
-      folder = 'common',
+      folder = UploadFolder.COMMON,
     }: {
       base64: string;
-      folder?: 'profiles' | 'attendance' | 'common';
+      folder?: UploadFolder;
     }) => uploadService.uploadBase64(base64, folder),
   });
 };

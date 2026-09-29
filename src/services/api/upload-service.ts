@@ -1,4 +1,9 @@
 import { apiClient } from '../axios-services';
+import { UploadFolder } from '../../const/upload-folder';
+import { loadImage } from 'react-native-nitro-image';
+
+export const MAX_IMAGE_SIZE_BYTES = 5 * 1024 * 1024; // 5MB
+export const MAX_DIMENSION = 2048; // Max width/height cho ảnh nhận diện khuôn mặt
 
 export interface UploadFileResponse {
   success: boolean;
@@ -30,31 +35,75 @@ export class UploadService {
   }
 
   /**
+   * Chuẩn hóa ảnh trước khi tải lên:
+   * 1. Hỗ trợ mọi định dạng (HEIC, HEIF trên iPhone, PNG, WEBP) -> Convert sang .jpg chuẩn
+   * 2. Tự động resize và nén để dung lượng file luôn <= 5MB
+   */
+  public async prepareImageForUpload(fileUri: string): Promise<string> {
+    try {
+      if (!fileUri || fileUri.startsWith('http://') || fileUri.startsWith('https://')) {
+        return fileUri;
+      }
+
+      // Xóa tiền tố file:// nếu có để nạp vào native image loader
+      const cleanPath = fileUri.replace(/^file:\/\//, '');
+
+      // Native loader hỗ trợ tự động decode HEIC/HEIF/PNG/JPG trên iOS & Android
+      let img = await loadImage({ filePath: cleanPath });
+
+      // 1. Giới hạn độ phân giải (tối đa 2048px) giữ nguyên tỉ lệ khung hình
+      const maxDim = Math.max(img.width, img.height);
+      if (maxDim > MAX_DIMENSION) {
+        const scale = MAX_DIMENSION / maxDim;
+        const newWidth = Math.round(img.width * scale);
+        const newHeight = Math.round(img.height * scale);
+        img = await img.resizeAsync(newWidth, newHeight);
+      }
+
+      // 2. Nén sang định dạng 'jpg' với chất lượng khởi đầu 85%
+      let quality = 85;
+      let encoded = await img.toEncodedImageDataAsync('jpg', quality);
+
+      // 3. Nếu vượt quá 5MB, tiếp tục giảm quality xuống mức an toàn
+      while (encoded.buffer.byteLength > MAX_IMAGE_SIZE_BYTES && quality > 30) {
+        quality -= 15;
+        encoded = await img.toEncodedImageDataAsync('jpg', quality);
+      }
+
+      // 4. Lưu ra file tạm thời dạng .jpg
+      const tempPath = await img.saveToTemporaryFileAsync('jpg', quality);
+      return tempPath.startsWith('file://') ? tempPath : `file://${tempPath}`;
+    } catch (err) {
+      console.warn('[UploadService] Không thể convert/resize ảnh, dùng file gốc:', err);
+      return fileUri;
+    }
+  }
+
+  /**
    * Upload 1 file ảnh (từ file URI cục bộ của thiết bị)
-   * @param fileUri Đường dẫn file cục bộ (e.g. file:///... hoặc content://...)
-   * @param folder Thư mục lưu trên server (profiles, attendance, common)
+   * Tự động convert HEIC/HEIF sang JPG và resize <= 5MB trước khi upload
+   * @param fileUri Đường dẫn file cục bộ (e.g. file:///... hoặc ph://...)
+   * @param folder Thư mục lưu trên server (UploadFolder.PROFILES, etc.)
    * @param filename Tên file tùy chọn
    */
   public async uploadImage(
     fileUri: string,
-    folder: 'profiles' | 'attendance' | 'common' = 'profiles',
+    folder: UploadFolder = UploadFolder.PROFILES,
     filename?: string,
   ): Promise<UploadFileResponse> {
+    // 1. Chuẩn hóa sang JPG và nén <= 5MB
+    const readyUri = await this.prepareImageForUpload(fileUri);
+
     const formData = new FormData();
     const name =
-      filename || fileUri.split('/').pop() || `photo_${Date.now()}.jpg`;
-    const ext = name.split('.').pop()?.toLowerCase() || 'jpg';
-    const type =
-      ext === 'png'
-        ? 'image/png'
-        : ext === 'webp'
-        ? 'image/webp'
-        : 'image/jpeg';
+      filename ||
+      readyUri.split('/').pop()?.replace(/\.(heic|heif|png|webp)$/i, '.jpg') ||
+      `photo_${Date.now()}.jpg`;
 
     formData.append('file', {
-      uri: fileUri,
+      uri: readyUri,
       name,
-      type,
+      type: 'image/jpeg',
     } as any);
 
     return apiClient.postFormData<UploadFileResponse>(
@@ -64,28 +113,28 @@ export class UploadService {
   }
 
   /**
-   * Upload nhiều file ảnh cùng lúc
+   * Upload nhiều file ảnh cùng lúc (đều được convert sang JPG và nén <= 5MB)
    */
   public async uploadImages(
     fileUris: string[],
-    folder: 'profiles' | 'attendance' | 'common' = 'profiles',
+    folder: UploadFolder = UploadFolder.PROFILES,
   ): Promise<UploadFilesResponse> {
+    // Chuẩn hóa toàn bộ ảnh song song
+    const readyUris = await Promise.all(
+      fileUris.map((uri) => this.prepareImageForUpload(uri)),
+    );
+
     const formData = new FormData();
 
-    fileUris.forEach((uri, idx) => {
-      const name = uri.split('/').pop() || `photo_${Date.now()}_${idx}.jpg`;
-      const ext = name.split('.').pop()?.toLowerCase() || 'jpg';
-      const type =
-        ext === 'png'
-          ? 'image/png'
-          : ext === 'webp'
-          ? 'image/webp'
-          : 'image/jpeg';
+    readyUris.forEach((uri, idx) => {
+      const name =
+        uri.split('/').pop()?.replace(/\.(heic|heif|png|webp)$/i, '.jpg') ||
+        `photo_${Date.now()}_${idx}.jpg`;
 
       formData.append('files', {
         uri,
         name,
-        type,
+        type: 'image/jpeg',
       } as any);
     });
 
@@ -100,7 +149,7 @@ export class UploadService {
    */
   public async uploadBase64(
     base64: string,
-    folder: 'profiles' | 'attendance' | 'common' = 'common',
+    folder: UploadFolder = UploadFolder.COMMON,
   ): Promise<UploadFileResponse> {
     return apiClient.post<UploadFileResponse>('/upload/base64', {
       base64,
