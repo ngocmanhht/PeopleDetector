@@ -463,9 +463,9 @@ export const SessionDetailModal: React.FC<SessionDetailModalProps> = ({
                     {/* Detection info if attended */}
                     {Boolean(timestamp) && (
                       <AppText style={styles.detectTimeText} numberOfLines={1} ellipsizeMode="tail">
-                        Lúc: {timestamp}{' '}
+                        Lúc: {timestamp}
                         {confidence !== undefined
-                          ? `(${confidence > 1 ? Math.round(confidence) : Math.round(confidence * 100)}%)`
+                          ? ` • Độ khớp AI: ${confidence > 1 ? Math.round(confidence) : Math.round(confidence * 100)}%`
                           : ''}
                       </AppText>
                     )}

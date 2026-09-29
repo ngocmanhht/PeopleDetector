@@ -513,8 +513,8 @@ export const CameraViewFinder = forwardRef<
             <ScanLine size={13} color={appColors.green500} />
             <AppText style={styles.hudText}>
               {device
-                ? `VISION CAMERA [${cameraFacing.toUpperCase()}] • YOLO AI`
-                : 'VISION CAMERA [SIMULATOR] • YOLO AI'}
+                ? `VISION CAMERA [${cameraFacing.toUpperCase()}] • H2TECH AI`
+                : 'VISION CAMERA [SIMULATOR] • H2TECH AI'}
             </AppText>
           </View>
 

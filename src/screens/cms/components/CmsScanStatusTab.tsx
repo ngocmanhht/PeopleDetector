@@ -117,11 +117,15 @@ export const CmsScanStatusTab: React.FC<CmsScanStatusTabProps> = ({
 
       if (match && match.status === 'present' && match.userId) {
         onSelectUserId(match.userId);
+        const confPct =
+          match.confidence !== undefined
+            ? match.confidence > 1
+              ? Math.round(match.confidence)
+              : Math.round(match.confidence * 100)
+            : 95;
         Alert.alert(
           'Nhận diện thành công',
-          `Đã tìm thấy hồ sơ: ${match.fullName} (${Math.round(
-            (match.confidence || 0.95) * 100,
-          )}%)`,
+          `Đã tìm thấy hồ sơ: ${match.fullName} (${confPct}%)`,
         );
       } else {
         Alert.alert(
@@ -391,14 +395,22 @@ export const CmsScanStatusTab: React.FC<CmsScanStatusTabProps> = ({
                 userSessionHistory.map((item, idx) => {
                   const isPresent = item.status === 'present';
                   const isVerify = item.status === 'verify';
+                  const confPct =
+                    item.confidence !== undefined
+                      ? item.confidence > 1
+                        ? Math.round(item.confidence)
+                        : Math.round(item.confidence * 100)
+                      : null;
+
                   return (
                     <View key={idx} style={styles.historyItem}>
-                      <View style={{ flex: 1 }}>
+                      <View style={{ flex: 1, paddingRight: 8 }}>
                         <AppText style={styles.historySessionName}>
                           {item.session.name}
                         </AppText>
                         <AppText style={styles.historyMeta}>
                           Phòng {item.roomName} • {item.timestamp}
+                          {confPct !== null ? ` • Độ khớp AI: ${confPct}%` : ''}
                         </AppText>
                       </View>
 
@@ -430,9 +442,7 @@ export const CmsScanStatusTab: React.FC<CmsScanStatusTabProps> = ({
                           ]}
                         >
                           {isPresent
-                            ? `Có mặt (${Math.round(
-                                (item.confidence || 0.95) * 100,
-                              )}%)`
+                            ? 'Có mặt'
                             : isVerify
                             ? 'Cần xác minh'
                             : 'Vắng'}
