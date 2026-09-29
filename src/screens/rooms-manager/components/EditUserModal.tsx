@@ -206,13 +206,6 @@ export const EditUserModal: React.FC<EditUserModalProps> = ({
       for (const uri of photos) {
         if (uri.startsWith('http://') || uri.startsWith('https://')) {
           serverPhotos.push(uri);
-        } else if (uri.startsWith('data:image') || uri.length > 500) {
-          try {
-            const res = await uploadService.uploadBase64(uri, UploadFolder.PROFILES);
-            serverPhotos.push(res.path);
-          } catch {
-            serverPhotos.push(uri);
-          }
         } else {
           try {
             const res = await uploadService.uploadImage(uri, UploadFolder.PROFILES);

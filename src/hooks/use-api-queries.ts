@@ -537,15 +537,4 @@ export const useUploadImagesMutation = () => {
   });
 };
 
-export const useUploadBase64Mutation = () => {
-  return useMutation({
-    mutationFn: ({
-      base64,
-      folder = UploadFolder.COMMON,
-    }: {
-      base64: string;
-      folder?: UploadFolder;
-    }) => uploadService.uploadBase64(base64, folder),
-  });
-};
 

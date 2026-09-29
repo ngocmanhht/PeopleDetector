@@ -56,7 +56,7 @@ export class ImagePickerService {
       quality: PHOTO_CONFIG.IMAGE_QUALITY,
       maxWidth: PHOTO_CONFIG.MAX_WIDTH,
       maxHeight: PHOTO_CONFIG.MAX_HEIGHT,
-      includeBase64: true,
+      includeBase64: false,
     };
 
     try {
@@ -120,7 +120,7 @@ export class ImagePickerService {
       quality: PHOTO_CONFIG.IMAGE_QUALITY,
       maxWidth: PHOTO_CONFIG.MAX_WIDTH,
       maxHeight: PHOTO_CONFIG.MAX_HEIGHT,
-      includeBase64: true,
+      includeBase64: false,
     };
 
     try {

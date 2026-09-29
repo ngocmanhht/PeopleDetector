@@ -160,19 +160,6 @@ export class UploadService {
       formData,
     );
   }
-
-  /**
-   * Lưu ảnh từ chuỗi Base64 / Data URI
-   */
-  public async uploadBase64(
-    base64: string,
-    folder: UploadFolder = UploadFolder.COMMON,
-  ): Promise<UploadFileResponse> {
-    return apiClient.post<UploadFileResponse>('/upload/base64', {
-      base64,
-      folder,
-    });
-  }
 }
 
 export const uploadService = UploadService.getInstance();
