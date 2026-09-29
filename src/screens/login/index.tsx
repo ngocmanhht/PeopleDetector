@@ -6,6 +6,8 @@ import {
   TouchableOpacity,
   StatusBar,
   ScrollView,
+  KeyboardAvoidingView,
+  Platform,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { AppText } from '../../components/app-text';
@@ -181,74 +183,78 @@ export const LoginScreen = () => {
   return (
     <SafeAreaView style={styles.safeArea}>
       <StatusBar barStyle="light-content" />
+      <KeyboardAvoidingView
+        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        style={{ flex: 1 }}
+      >
+        {isPhone ? (
+          <ScrollView
+            style={styles.phoneScrollView}
+            contentContainerStyle={styles.phoneScrollContent}
+            keyboardShouldPersistTaps="handled"
+            showsVerticalScrollIndicator={false}
+          >
+            {/* Top Compact Brand Presentation for Phone */}
+            <View style={styles.phoneBrandWrap}>
+              <View style={styles.phoneIconCircle}>
+                <ScanFace size={38} color={appColors.sky400} />
+              </View>
 
-      {isPhone ? (
-        <ScrollView
-          style={styles.phoneScrollView}
-          contentContainerStyle={styles.phoneScrollContent}
-          keyboardShouldPersistTaps="handled"
-          showsVerticalScrollIndicator={false}
-        >
-          {/* Top Compact Brand Presentation for Phone */}
-          <View style={styles.phoneBrandWrap}>
-            <View style={styles.phoneIconCircle}>
-              <ScanFace size={38} color={appColors.sky400} />
+              <View style={styles.logoRow}>
+                <AppText style={styles.phoneBrandTitlePrimary}>VietCore</AppText>
+                <AppText style={styles.phoneBrandTitleSecondary}> AI</AppText>
+              </View>
+              <AppText style={styles.phoneBrandSub}>
+                HỆ THỐNG ĐIỂM DANH KHUÔN MẶT
+              </AppText>
             </View>
 
-            <View style={styles.logoRow}>
-              <AppText style={styles.phoneBrandTitlePrimary}>VietCore</AppText>
-              <AppText style={styles.phoneBrandTitleSecondary}> AI</AppText>
+            {renderFormContent(true)}
+          </ScrollView>
+        ) : (
+          /* Original Tablet 2-column Landscape */
+          <View style={styles.container}>
+            {/* Left Side: Brand presentation */}
+            <View style={styles.leftBrandCol}>
+              <View style={styles.iconCircle}>
+                <ScanFace size={52} color={appColors.sky400} />
+              </View>
+
+              <View style={styles.logoRow}>
+                <AppText style={styles.brandTitlePrimary}>H2Tech</AppText>
+                <AppText style={styles.brandTitleSecondary}> AI</AppText>
+              </View>
+              <AppText style={styles.brandSub}>
+                FACE CHECK • TABLET SYSTEM
+              </AppText>
+
+              <View style={styles.featuresList}>
+                <View style={styles.featureItem}>
+                  <CheckCircle2 size={18} color={appColors.emerald400} />
+                  <AppText style={styles.featureText}>
+                    Nhận diện khuôn mặt thời gian thực
+                  </AppText>
+                </View>
+                <View style={styles.featureItem}>
+                  <CheckCircle2 size={18} color={appColors.emerald400} />
+                  <AppText style={styles.featureText}>
+                    Quản lý Khu & Phòng học/làm việc linh hoạt
+                  </AppText>
+                </View>
+                <View style={styles.featureItem}>
+                  <CheckCircle2 size={18} color={appColors.emerald400} />
+                  <AppText style={styles.featureText}>
+                    Đối soát danh sách & cảnh báo vắng mặt tự động
+                  </AppText>
+                </View>
+              </View>
             </View>
-            <AppText style={styles.phoneBrandSub}>
-              HỆ THỐNG ĐIỂM DANH KHUÔN MẶT
-            </AppText>
+
+            {/* Right Side: Login Card */}
+            <View style={styles.rightFormCol}>{renderFormContent(false)}</View>
           </View>
-
-          {renderFormContent(true)}
-        </ScrollView>
-      ) : (
-        /* Original Tablet 2-column Landscape */
-        <View style={styles.container}>
-          {/* Left Side: Brand presentation */}
-          <View style={styles.leftBrandCol}>
-            <View style={styles.iconCircle}>
-              <ScanFace size={52} color={appColors.sky400} />
-            </View>
-
-            <View style={styles.logoRow}>
-              <AppText style={styles.brandTitlePrimary}>H2Tech</AppText>
-              <AppText style={styles.brandTitleSecondary}> AI</AppText>
-            </View>
-            <AppText style={styles.brandSub}>
-              FACE CHECK • TABLET SYSTEM
-            </AppText>
-
-            <View style={styles.featuresList}>
-              <View style={styles.featureItem}>
-                <CheckCircle2 size={18} color={appColors.emerald400} />
-                <AppText style={styles.featureText}>
-                  Nhận diện khuôn mặt thời gian thực
-                </AppText>
-              </View>
-              <View style={styles.featureItem}>
-                <CheckCircle2 size={18} color={appColors.emerald400} />
-                <AppText style={styles.featureText}>
-                  Quản lý Khu & Phòng học/làm việc linh hoạt
-                </AppText>
-              </View>
-              <View style={styles.featureItem}>
-                <CheckCircle2 size={18} color={appColors.emerald400} />
-                <AppText style={styles.featureText}>
-                  Đối soát danh sách & cảnh báo vắng mặt tự động
-                </AppText>
-              </View>
-            </View>
-          </View>
-
-          {/* Right Side: Login Card */}
-          <View style={styles.rightFormCol}>{renderFormContent(false)}</View>
-        </View>
-      )}
+        )}
+      </KeyboardAvoidingView>
     </SafeAreaView>
   );
 };

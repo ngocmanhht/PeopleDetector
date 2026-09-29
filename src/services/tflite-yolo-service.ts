@@ -143,6 +143,7 @@ export class TfliteYoloService {
   public faceRecognitionModel: TensorflowModel | null = null;
   public isInitialized = false;
   private initPromise: Promise<boolean> | null = null;
+  private isProcessingFrame = false;
 
   // In-memory cache of enrolled user face embeddings (512-d Float32Array)
   private profileEmbeddingsCache: Map<string, CachedProfileEmbedding> =
@@ -301,11 +302,46 @@ export class TfliteYoloService {
     const gOffset = totalPixels;
     const bOffset = 2 * totalPixels;
 
+    // Resolve channel offsets and byte step outside loop (avoids 409,600 function calls & allocations)
+    const fmt = (pixelFormat || 'RGBA').toUpperCase();
+    let rIdx = 0;
+    let gIdx = 1;
+    let bIdx = 2;
+    let step = 4;
+
+    if (fmt === 'BGRA' || fmt === 'BGRX') {
+      rIdx = 2;
+      gIdx = 1;
+      bIdx = 0;
+      step = 4;
+    } else if (fmt === 'ABGR' || fmt === 'XBGR') {
+      rIdx = 3;
+      gIdx = 2;
+      bIdx = 1;
+      step = 4;
+    } else if (fmt === 'ARGB' || fmt === 'XRGB') {
+      rIdx = 1;
+      gIdx = 2;
+      bIdx = 3;
+      step = 4;
+    } else if (fmt === 'RGB') {
+      rIdx = 0;
+      gIdx = 1;
+      bIdx = 2;
+      step = 3;
+    } else if (fmt === 'BGR') {
+      rIdx = 2;
+      gIdx = 1;
+      bIdx = 0;
+      step = 3;
+    }
+
+    const INV_255 = 1.0 / 255.0;
     for (let i = 0; i < totalPixels; i++) {
-      const { r, g, b } = extractRGB(u8, i, pixelFormat);
-      tensor[rOffset + i] = r / 255.0;
-      tensor[gOffset + i] = g / 255.0;
-      tensor[bOffset + i] = b / 255.0;
+      const base = i * step;
+      tensor[rOffset + i] = u8[base + rIdx] * INV_255;
+      tensor[gOffset + i] = u8[base + gIdx] * INV_255;
+      tensor[bOffset + i] = u8[base + bIdx] * INV_255;
     }
 
     return tensor;
@@ -474,12 +510,46 @@ export class TfliteYoloService {
     const facePixels = 112 * 112;
     const tensor = new Float32Array(facePixels * 3);
 
+    const fmt = (pixelFormat || 'RGBA').toUpperCase();
+    let rIdx = 0;
+    let gIdx = 1;
+    let bIdx = 2;
+    let step = 4;
+
+    if (fmt === 'BGRA' || fmt === 'BGRX') {
+      rIdx = 2;
+      gIdx = 1;
+      bIdx = 0;
+      step = 4;
+    } else if (fmt === 'ABGR' || fmt === 'XBGR') {
+      rIdx = 3;
+      gIdx = 2;
+      bIdx = 1;
+      step = 4;
+    } else if (fmt === 'ARGB' || fmt === 'XRGB') {
+      rIdx = 1;
+      gIdx = 2;
+      bIdx = 3;
+      step = 4;
+    } else if (fmt === 'RGB') {
+      rIdx = 0;
+      gIdx = 1;
+      bIdx = 2;
+      step = 3;
+    } else if (fmt === 'BGR') {
+      rIdx = 2;
+      gIdx = 1;
+      bIdx = 0;
+      step = 3;
+    }
+
+    const INV_128 = 1.0 / 128.0;
     for (let i = 0; i < facePixels; i++) {
-      const { r, g, b } = extractRGB(u8, i, pixelFormat);
+      const base = i * step;
       // Standard MobileFaceNet input normalization: (x - 127.5) / 128.0
-      tensor[i * 3 + 0] = (r - 127.5) / 128.0;
-      tensor[i * 3 + 1] = (g - 127.5) / 128.0;
-      tensor[i * 3 + 2] = (b - 127.5) / 128.0;
+      tensor[i * 3 + 0] = (u8[base + rIdx] - 127.5) * INV_128;
+      tensor[i * 3 + 1] = (u8[base + gIdx] - 127.5) * INV_128;
+      tensor[i * 3 + 2] = (u8[base + bIdx] - 127.5) * INV_128;
     }
 
     return tensor;
@@ -668,31 +738,51 @@ export class TfliteYoloService {
     roomProfiles: UserProfile[],
     isFrontCamera?: boolean,
   ): Promise<DetectionResult | null> {
-    if (roomProfiles.length === 0) return null;
+    if (roomProfiles.length === 0 || !photoPath) return null;
 
-    if (!this.isInitialized) {
-      await this.initModels();
-    }
-
-    // Ensure all room profiles are enrolled in cache
-    for (const p of roomProfiles) {
-      if (!this.profileEmbeddingsCache.has(p.id)) {
-        await this.enrollProfile(p);
-      }
-    }
-
-    const timeString = dayjs().format('HH:mm:ss');
-
-    // If native models are not loaded in the runtime, do NOT fake real camera detection!
-    if (!this.faceDetectorModel || !this.faceRecognitionModel) {
-      console.warn(
-        '[TFLite YOLO] AI models not loaded into native runtime. Cannot process camera frame.',
-      );
+    // 1. Reentrancy Lock: Drop frame if previous inference is still executing (prevents native C++ TFLite crashes)
+    if (this.isProcessingFrame) {
       return null;
     }
+    this.isProcessingFrame = true;
 
     try {
-      // 1. Load camera frame image
+      if (!this.isInitialized) {
+        await this.initModels();
+      }
+
+      // 2. Non-blocking embedding cache warm: restore 0ms from MMKV; background queue if new
+      for (const p of roomProfiles) {
+        if (!this.profileEmbeddingsCache.has(p.id)) {
+          const stored = this.loadEmbeddingsFromStorage(p.id);
+          if (stored && stored.length > 0) {
+            this.profileEmbeddingsCache.set(p.id, {
+              userId: p.id,
+              fullName: p.fullName,
+              code: p.code,
+              avatarUri: p.avatarUri,
+              zoneId: p.zoneId,
+              roomId: p.roomId,
+              embeddings: stored,
+            });
+          } else {
+            // Asynchronously enroll in background so the active camera frame does NOT freeze for seconds!
+            this.enrollProfile(p).catch(() => {});
+          }
+        }
+      }
+
+      const timeString = dayjs().format('HH:mm:ss');
+
+      // If native models are not loaded in the runtime, do NOT fake real camera detection!
+      if (!this.faceDetectorModel || !this.faceRecognitionModel) {
+        console.warn(
+          '[TFLite YOLO] AI models not loaded into native runtime. Cannot process camera frame.',
+        );
+        return null;
+      }
+
+      // 3. Load camera frame image
       let rawImage: Image;
       if (photoPath.startsWith('data:')) {
         const buffer = base64ToArrayBuffer(photoPath);
@@ -723,7 +813,7 @@ export class TfliteYoloService {
       }
       const frameImage = rawImage.resize(targetW, targetH);
 
-      // 2. Run YOLOv8-Face detection
+      // 4. Run YOLOv8-Face detection
       const yoloTensor = this.preprocessImageForYolo(frameImage);
       const yoloOutputs = await this.faceDetectorModel.run([
         yoloTensor.buffer as ArrayBuffer,
@@ -739,12 +829,14 @@ export class TfliteYoloService {
       );
 
       // If no face was detected in camera frame (score < 0.22), return null immediately
-      // This guarantees zero phantom triggers when the user steps away from camera
       if (!detectedFace) {
         return null;
       }
 
-      // 3. Crop detected face from real camera frame to get ACTUAL SCANNED PHOTO
+      // Raw bounding box in image percentage space (CameraViewFinder handles mirror projection on UI)
+      const uiBoundingBox = detectedFace.boundingBox;
+
+      // 5. Crop detected face from real camera frame to get ACTUAL SCANNED PHOTO
       let capturedPhotoUri = '';
       try {
         const crop = detectedFace.cropBox;
@@ -775,7 +867,8 @@ export class TfliteYoloService {
           }
         }
 
-        const encoded = croppedFaceImage.toEncodedImageData('jpg', 85);
+        // Quality 80 reduces memory footprint and Base64 size by ~30%
+        const encoded = croppedFaceImage.toEncodedImageData('jpg', 80);
         capturedPhotoUri = `data:image/jpeg;base64,${arrayBufferToBase64(
           encoded.buffer,
         )}`;
@@ -791,7 +884,7 @@ export class TfliteYoloService {
           : `file://${photoPath}`;
       }
 
-      // 4. Extract embedding from detected face region
+      // 6. Extract embedding from detected face region
       const liveEmbedding = await this.extractFaceEmbedding(
         frameImage,
         detectedFace.cropBox,
@@ -809,11 +902,11 @@ export class TfliteYoloService {
           confidence: 20,
           timestamp: timeString,
           status: 'verify',
-          boundingBox: detectedFace.boundingBox,
+          boundingBox: uiBoundingBox,
         };
       }
 
-      // 5. Compare with enrolled profiles using Cosine Similarity across all profile photos
+      // 7. Compare with enrolled profiles using Cosine Similarity across all profile photos
       let bestProfile: UserProfile | null = null;
       let maxSimilarity = -1;
 
@@ -829,12 +922,6 @@ export class TfliteYoloService {
           }
         }
       }
-
-      console.log(
-        `[TFLite YOLO] Best candidate: ${
-          bestProfile?.fullName || 'None'
-        } similarity: ${(maxSimilarity * 100).toFixed(1)}% (Threshold: 66.0%)`,
-      );
 
       // STRICT BIOMETRIC THRESHOLD:
       // MobileFaceNet 512-d normalized embeddings:
@@ -867,28 +954,60 @@ export class TfliteYoloService {
           confidence: confidencePct,
           timestamp: timeString,
           status: 'present',
-          boundingBox: detectedFace.boundingBox,
+          boundingBox: uiBoundingBox,
         };
       }
 
-      // Face detected, but not matched to any enrolled user in this room (or similarity < 0.55)
-      // Return status 'verify' with UNKNOWN name and the other person's scanned photo!
+      // Face detected, but not matched to any enrolled user in this room
       return {
         userId: 'unverified-unknown',
         fullName: 'Khuôn mặt chưa nhận diện',
         code: 'UNKNOWN',
-        avatarUri: capturedPhotoUri, // Real scanned camera photo of the other person!
+        avatarUri: capturedPhotoUri,
         zoneName: 'Khu vực',
         roomName: 'Phòng',
         confidence: Math.max(10, Math.round(maxSimilarity * 100)),
         timestamp: timeString,
         status: 'verify',
-        boundingBox: detectedFace.boundingBox,
+        boundingBox: uiBoundingBox,
       };
     } catch (err) {
       console.warn('[TFLite YOLO] processCapturedFrame error:', err);
       return null;
+    } finally {
+      this.isProcessingFrame = false;
     }
+  }
+
+  /**
+   * Warm-up room profile embeddings in advance (e.g. on entering room or login)
+   */
+  public async warmupRoomEmbeddings(roomProfiles: UserProfile[]): Promise<void> {
+    if (!this.isInitialized) {
+      await this.initModels();
+    }
+    for (const p of roomProfiles) {
+      if (!this.profileEmbeddingsCache.has(p.id)) {
+        await this.enrollProfile(p);
+      }
+    }
+  }
+
+  /**
+   * Match face: strictly requires a valid photoPath on production.
+   * If photoPath is missing, returns null instead of false phantom attendance!
+   */
+  public async matchFaceInRoom(
+    detectedBox: BoundingBox,
+    roomProfiles: UserProfile[],
+    targetUser?: UserProfile,
+    photoPath?: string,
+    isFrontCamera?: boolean,
+  ): Promise<DetectionResult | null> {
+    if (!photoPath) {
+      return null;
+    }
+    return this.processCapturedFrame(photoPath, roomProfiles, isFrontCamera);
   }
 
   /**
@@ -897,7 +1016,7 @@ export class TfliteYoloService {
   public simulateScanDetection(
     roomProfiles: UserProfile[],
   ): DetectionResult | null {
-    if (roomProfiles.length === 0) return null;
+    if (!__DEV__ || roomProfiles.length === 0) return null;
     const timeString = dayjs().format('HH:mm:ss');
     const targetUser = roomProfiles[0];
     const boundingBox: BoundingBox = {
@@ -919,22 +1038,6 @@ export class TfliteYoloService {
       status: 'present',
       boundingBox,
     };
-  }
-
-  /**
-   * Match face: supports real photo path or fallback simulator matching
-   */
-  public async matchFaceInRoom(
-    detectedBox: BoundingBox,
-    roomProfiles: UserProfile[],
-    targetUser?: UserProfile,
-    photoPath?: string,
-    isFrontCamera?: boolean,
-  ): Promise<DetectionResult | null> {
-    if (photoPath) {
-      return this.processCapturedFrame(photoPath, roomProfiles, isFrontCamera);
-    }
-    return this.simulateScanDetection(roomProfiles);
   }
 
   /**
@@ -1057,6 +1160,12 @@ export class TfliteYoloService {
       roomProfiles,
       isFrontCamera,
     );
+  }
+
+  public static async warmupRoomEmbeddings(
+    roomProfiles: UserProfile[],
+  ): Promise<void> {
+    return this.getInstance().warmupRoomEmbeddings(roomProfiles);
   }
 
   public static simulateScanDetection(

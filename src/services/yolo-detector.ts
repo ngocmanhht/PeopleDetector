@@ -37,12 +37,24 @@ export class YoloDetectorService {
   }
 
   /**
-   * Fallback simulator scan when no hardware camera device exists
+   * Pre-loads and extracts face embeddings for all profiles in the room in background
+   */
+  public static async warmupRoomEmbeddings(
+    roomProfiles: UserProfile[],
+  ): Promise<void> {
+    await TfliteYoloService.warmupRoomEmbeddings(roomProfiles);
+  }
+
+  /**
+   * Fallback simulator scan when no hardware camera device exists (debug only)
    */
   public static simulateScanDetection(
     roomProfiles: UserProfile[],
   ): DetectionResult | null {
-    return TfliteYoloService.simulateScanDetection(roomProfiles);
+    if (__DEV__) {
+      return TfliteYoloService.simulateScanDetection(roomProfiles);
+    }
+    return null;
   }
 
   /**
@@ -55,6 +67,7 @@ export class YoloDetectorService {
     photoPath?: string,
     isFrontCamera?: boolean,
   ): Promise<DetectionResult | null> {
+    if (!photoPath) return null;
     return TfliteYoloService.matchFaceInRoom(
       detectedBox,
       roomProfiles,

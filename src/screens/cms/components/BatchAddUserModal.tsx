@@ -10,7 +10,7 @@ import {
 } from 'react-native';
 import { AppText } from '../../../components/app-text';
 import { useAppDispatch, useAppSelector } from '../../../store/hooks';
-import { X, Users, Check, Plus, AlertCircle, FileSpreadsheet } from 'lucide-react-native';
+import { X, Check, Plus, AlertCircle, FileSpreadsheet } from 'lucide-react-native';
 import { upsertUserProfile } from '../../../store/slices/detectorSlice';
 import { profileService } from '../../../services/api';
 import { UserProfile } from '../../../model/detector';

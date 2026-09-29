@@ -9,6 +9,8 @@ import {
   Image,
   Alert,
   ActivityIndicator,
+  KeyboardAvoidingView,
+  Platform,
 } from 'react-native';
 import { AppText } from '../../../components/app-text';
 import { useAppDispatch, useAppSelector } from '../../../store/hooks';
@@ -246,35 +248,42 @@ export const AddUserModal: React.FC<AddUserModalProps> = ({
         'landscape-right',
       ]}
     >
-      <View style={[styles.overlay, isPhone && styles.overlayPhone]}>
-        <View
-          style={[styles.modalContent, isPhone && styles.modalContentPhone]}
-        >
-          {/* Header */}
-          <View style={styles.header}>
-            <View style={[styles.headerTitleRow, { flex: 1, paddingRight: 8 }]}>
-              <View style={styles.iconWrap}>
-                <UserPlus size={20} color={appColors.blue600} />
+      <KeyboardAvoidingView
+        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        style={{ flex: 1 }}
+      >
+        <View style={[styles.overlay, isPhone && styles.overlayPhone]}>
+          <View
+            style={[styles.modalContent, isPhone && styles.modalContentPhone]}
+          >
+            {/* Header */}
+            <View style={styles.header}>
+              <View style={[styles.headerTitleRow, { flex: 1, paddingRight: 8 }]}>
+                <View style={styles.iconWrap}>
+                  <UserPlus size={20} color={appColors.blue600} />
+                </View>
+                <View style={{ flex: 1 }}>
+                  <AppText
+                    style={[styles.title, isPhone && { fontSize: 16 }]}
+                    numberOfLines={1}
+                  >
+                    Thêm người
+                  </AppText>
+                  <AppText style={styles.subtitle} numberOfLines={1}>
+                    Nhập thông tin cá nhân & ảnh nhận diện
+                  </AppText>
+                </View>
               </View>
-              <View style={{ flex: 1 }}>
-                <AppText
-                  style={[styles.title, isPhone && { fontSize: 16 }]}
-                  numberOfLines={1}
-                >
-                  Thêm người
-                </AppText>
-                <AppText style={styles.subtitle} numberOfLines={1}>
-                  Nhập thông tin cá nhân & ảnh nhận diện
-                </AppText>
-              </View>
+
+              <TouchableOpacity style={styles.closeBtn} onPress={onClose}>
+                <X size={20} color={appColors.slate500} />
+              </TouchableOpacity>
             </View>
 
-            <TouchableOpacity style={styles.closeBtn} onPress={onClose}>
-              <X size={20} color={appColors.slate500} />
-            </TouchableOpacity>
-          </View>
-
-          <ScrollView showsVerticalScrollIndicator={false}>
+            <ScrollView
+              showsVerticalScrollIndicator={false}
+              keyboardShouldPersistTaps="handled"
+            >
             {error ? <AppText style={styles.errorText}>{error}</AppText> : null}
 
             {/* Photo Section */}
@@ -521,7 +530,8 @@ export const AddUserModal: React.FC<AddUserModalProps> = ({
           </View>
         </View>
       </View>
-    </Modal>
+    </KeyboardAvoidingView>
+  </Modal>
   );
 };
 

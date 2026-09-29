@@ -7,6 +7,8 @@ import {
   FlatList,
   TextInput,
   Image,
+  KeyboardAvoidingView,
+  Platform,
 } from 'react-native';
 import { AppText } from '../../../components/app-text';
 import { useAppDispatch, useAppSelector } from '../../../store/hooks';
@@ -82,55 +84,63 @@ export const UserListModal: React.FC<UserListModalProps> = ({
       supportedOrientations={['portrait', 'landscape', 'landscape-left', 'landscape-right']}
       onRequestClose={onClose}
     >
-      <View style={[styles.overlay, isPhone && styles.overlayPhone]}>
-        <View style={[styles.modalContent, isPhone && styles.modalContentPhone]}>
-          {/* Header */}
-          <View style={styles.header}>
-            <View style={{ flex: 1, paddingRight: 8 }}>
-              <AppText style={styles.title} numberOfLines={1}>
-                Danh sách: {currentRoom?.name || 'Phòng'} ({usersInRoom.length})
-              </AppText>
-              <AppText style={styles.subtitle} numberOfLines={1}>
-                {currentZone?.name || 'Khu vực'} • Quản lý học viên & điểm danh
-              </AppText>
+      <KeyboardAvoidingView
+        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        style={{ flex: 1 }}
+      >
+        <View style={[styles.overlay, isPhone && styles.overlayPhone]}>
+          <View style={[styles.modalContent, isPhone && styles.modalContentPhone]}>
+            {/* Header */}
+            <View style={styles.header}>
+              <View style={{ flex: 1, paddingRight: 8 }}>
+                <AppText style={styles.title} numberOfLines={1}>
+                  Danh sách: {currentRoom?.name || 'Phòng'} ({usersInRoom.length})
+                </AppText>
+                <AppText style={styles.subtitle} numberOfLines={1}>
+                  {currentZone?.name || 'Khu vực'} • Quản lý học viên & điểm danh
+                </AppText>
+              </View>
+
+              <View style={styles.headerActions}>
+                <TouchableOpacity
+                  style={styles.addUserBtn}
+                  onPress={() => {
+                    onClose();
+                    onOpenAddUser();
+                  }}
+                  activeOpacity={0.8}
+                >
+                  <UserPlus size={16} color={appColors.white} />
+                  <AppText style={styles.addUserText}>Thêm người</AppText>
+                </TouchableOpacity>
+
+                <TouchableOpacity style={styles.closeBtn} onPress={onClose}>
+                  <X size={22} color={appColors.slate500} />
+                </TouchableOpacity>
+              </View>
             </View>
 
-            <View style={styles.headerActions}>
-              <TouchableOpacity
-                style={styles.addUserBtn}
-                onPress={() => {
-                  onClose();
-                  onOpenAddUser();
-                }}
-                activeOpacity={0.8}
-              >
-                <UserPlus size={16} color={appColors.white} />
-                <AppText style={styles.addUserText}>Thêm người</AppText>
-              </TouchableOpacity>
-
-              <TouchableOpacity style={styles.closeBtn} onPress={onClose}>
-                <X size={22} color={appColors.slate500} />
-              </TouchableOpacity>
+            {/* Search Bar */}
+            <View style={styles.searchRow}>
+              <Search size={18} color={appColors.slate400} />
+              <TextInput
+                style={styles.searchInput}
+                placeholder="Tìm kiếm theo họ tên hoặc mã học viên..."
+                value={search}
+                onChangeText={setSearch}
+                placeholderTextColor={appColors.slate400}
+              />
             </View>
-          </View>
 
-          {/* Search Bar */}
-          <View style={styles.searchRow}>
-            <Search size={18} color={appColors.slate400} />
-            <TextInput
-              style={styles.searchInput}
-              placeholder="Tìm kiếm theo họ tên hoặc mã học viên..."
-              value={search}
-              onChangeText={setSearch}
-              placeholderTextColor={appColors.slate400}
-            />
-          </View>
-
-          {/* User List */}
-          <FlatList
-            data={filteredUsers}
-            keyExtractor={item => item.id}
-            contentContainerStyle={styles.listContainer}
+            {/* User List */}
+            <FlatList
+              data={filteredUsers}
+              keyExtractor={item => item.id}
+              contentContainerStyle={styles.listContainer}
+              initialNumToRender={10}
+              maxToRenderPerBatch={10}
+              windowSize={5}
+              removeClippedSubviews={true}
             renderItem={({ item }) => {
               const attendance = attendanceMap[item.id];
               const isPresent = attendance?.status === 'present';
@@ -206,7 +216,8 @@ export const UserListModal: React.FC<UserListModalProps> = ({
           />
         </View>
       </View>
-    </Modal>
+    </KeyboardAvoidingView>
+  </Modal>
   );
 };
 
