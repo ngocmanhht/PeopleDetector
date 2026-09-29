@@ -15,6 +15,7 @@ if linkage != nil
 end
 
 target 'PeopleDetector' do
+  pod 'SDWebImage', :modular_headers => true
   config = use_native_modules!
 
   use_react_native!(

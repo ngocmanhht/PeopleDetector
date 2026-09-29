@@ -91,15 +91,16 @@ const TabletDetectorScreen: React.FC<TabletDetectorScreenProps> = ({
 
   // Initialize YOLO & MobileFaceNet models on mount and pre-enroll room users
   React.useEffect(() => {
-    YoloDetectorService.initialize().then(ready => {
+    YoloDetectorService.initialize().then(async ready => {
       console.log('[TabletDetectorScreen] YOLO Engine ready:', ready);
       if (ready && currentRoomUsers.length > 0) {
-        currentRoomUsers.forEach(u => YoloDetectorService.enrollProfile(u));
+        await YoloDetectorService.warmupRoomEmbeddings(currentRoomUsers);
       }
     });
   }, [currentRoomUsers]);
 
   const isScanningRef = React.useRef(false);
+  const consecutiveMissedFramesRef = React.useRef(0);
   const attendanceMapRef = React.useRef(attendanceMap);
   attendanceMapRef.current = attendanceMap;
   const alertsRef = React.useRef(alerts);
@@ -130,6 +131,7 @@ const TabletDetectorScreen: React.FC<TabletDetectorScreenProps> = ({
           );
 
           if (realResult) {
+            consecutiveMissedFramesRef.current = 0;
             const attPayload = {
               sessionId: activeSessionId || undefined,
               userId: realResult.userId,
@@ -184,12 +186,17 @@ const TabletDetectorScreen: React.FC<TabletDetectorScreenProps> = ({
               }
             }
           } else {
-            // No face detected in this frame: reset bounding box and active card immediately
-            dispatch(setActiveDetection(null));
+            // Debounce 2 consecutive missed frames before clearing active detection
+            consecutiveMissedFramesRef.current += 1;
+            if (consecutiveMissedFramesRef.current >= 2) {
+              dispatch(setActiveDetection(null));
+            }
           }
         } else {
-          // Camera hardware not delivering frame: clear detection
-          dispatch(setActiveDetection(null));
+          consecutiveMissedFramesRef.current += 1;
+          if (consecutiveMissedFramesRef.current >= 2) {
+            dispatch(setActiveDetection(null));
+          }
         }
       } catch (err) {
         console.warn('[TabletDetectorScreen] auto-scan error:', err);

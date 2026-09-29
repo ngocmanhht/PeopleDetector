@@ -17,7 +17,12 @@ class AppUtils {
       url.startsWith('file://') ||
       url.startsWith('data:') ||
       url.startsWith('content://') ||
-      url.startsWith('ph://')
+      url.startsWith('ph://') ||
+      url.startsWith('/var/') ||
+      url.startsWith('/private/') ||
+      url.startsWith('/Users/') ||
+      url.startsWith('/data/') ||
+      url.startsWith('/storage/')
     ) {
       return url;
     }

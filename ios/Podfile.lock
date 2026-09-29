@@ -87,6 +87,32 @@ PODS:
     - ReactCommon/turbomodule/core
     - ReactNativeDependencies
     - Yoga
+  - NitroWebImage (0.15.2):
+    - hermes-engine
+    - NitroImage
+    - NitroModules
+    - RCTRequired
+    - RCTTypeSafety
+    - React-bridging
+    - React-callinvoker
+    - React-Core
+    - React-Core-prebuilt
+    - React-debug
+    - React-Fabric
+    - React-featureflags
+    - React-graphics
+    - React-ImageManager
+    - React-jsi
+    - React-NativeModulesApple
+    - React-RCTFabric
+    - React-renderercss
+    - React-rendererdebug
+    - React-utils
+    - ReactCodegen
+    - ReactCommon/turbomodule/core
+    - ReactNativeDependencies
+    - SDWebImage
+    - Yoga
   - RCT-Folly (2024.11.18.00):
     - RCT-Folly/Default (= 2024.11.18.00)
     - ReactNativeDependencies
@@ -123,6 +149,7 @@ PODS:
     - React-timing
     - ReactNativeDependencies
   - React-callinvoker (0.87.1)
+  - React-Codegen (0.1.0)
   - React-Core (0.87.1):
     - React-Core-prebuilt
     - React-Core/Default (= 0.87.1)
@@ -1366,6 +1393,30 @@ PODS:
     - ReactCommon/turbomodule/core
     - ReactNativeDependencies
     - Yoga
+  - react-native-image-resizer (3.0.11):
+    - hermes-engine
+    - RCT-Folly
+    - RCTRequired
+    - RCTTypeSafety
+    - React-bridging
+    - React-Codegen
+    - React-Core
+    - React-Core-prebuilt
+    - React-debug
+    - React-Fabric
+    - React-featureflags
+    - React-graphics
+    - React-ImageManager
+    - React-jsi
+    - React-NativeModulesApple
+    - React-RCTFabric
+    - React-renderercss
+    - React-rendererdebug
+    - React-utils
+    - ReactCodegen
+    - ReactCommon/turbomodule/core
+    - ReactNativeDependencies
+    - Yoga
   - react-native-safe-area-context (5.10.0):
     - hermes-engine
     - RCTRequired
@@ -1884,6 +1935,28 @@ PODS:
     - ReactCommon/turbomodule/core
     - ReactNativeDependencies
     - Yoga
+  - RNShare (12.3.1):
+    - hermes-engine
+    - RCTRequired
+    - RCTTypeSafety
+    - React-bridging
+    - React-Core
+    - React-Core-prebuilt
+    - React-debug
+    - React-Fabric
+    - React-featureflags
+    - React-graphics
+    - React-ImageManager
+    - React-jsi
+    - React-NativeModulesApple
+    - React-RCTFabric
+    - React-renderercss
+    - React-rendererdebug
+    - React-utils
+    - ReactCodegen
+    - ReactCommon/turbomodule/core
+    - ReactNativeDependencies
+    - Yoga
   - RNSVG (15.15.5):
     - hermes-engine
     - RCTRequired
@@ -1929,6 +2002,9 @@ PODS:
     - ReactCommon/turbomodule/core
     - ReactNativeDependencies
     - Yoga
+  - SDWebImage (5.21.7):
+    - SDWebImage/Core (= 5.21.7)
+  - SDWebImage/Core (5.21.7)
   - SocketRocket (0.7.1):
     - ReactNativeDependencies
   - TensorFlowLiteC (2.17.0):
@@ -1954,6 +2030,7 @@ DEPENDENCIES:
   - NitroImage (from `../node_modules/react-native-nitro-image`)
   - NitroMmkv (from `../node_modules/react-native-mmkv`)
   - NitroModules (from `../node_modules/react-native-nitro-modules`)
+  - NitroWebImage (from `../node_modules/react-native-nitro-web-image`)
   - RCT-Folly (from `build/rndeps-facades/RCT-Folly`)
   - RCTDeprecation (from `build/rncore-facades/RCTDeprecation`)
   - RCTRequired (from `build/rncore-facades/RCTRequired`)
@@ -1997,6 +2074,7 @@ DEPENDENCIES:
   - React-mutationobservernativemodule (from `../node_modules/react-native/ReactCommon/react/nativemodule/mutationobserver`)
   - react-native-fast-tflite (from `../node_modules/react-native-fast-tflite`)
   - react-native-image-picker (from `../node_modules/react-native-image-picker`)
+  - "react-native-image-resizer (from `../node_modules/@bam.tech/react-native-image-resizer`)"
   - react-native-safe-area-context (from `../node_modules/react-native-safe-area-context`)
   - React-NativeModulesApple (from `../node_modules/react-native/ReactCommon/react/nativemodule/core/platform/ios`)
   - React-networking (from `../node_modules/react-native/ReactCommon/react/networking`)
@@ -2037,7 +2115,9 @@ DEPENDENCIES:
   - "RNCMaskedView (from `../node_modules/@react-native-masked-view/masked-view`)"
   - RNGestureHandler (from `../node_modules/react-native-gesture-handler`)
   - RNScreens (from `../node_modules/react-native-screens`)
+  - RNShare (from `../node_modules/react-native-share`)
   - RNSVG (from `../node_modules/react-native-svg`)
+  - SDWebImage
   - SocketRocket (from `build/rndeps-facades/SocketRocket`)
   - VisionCamera (from `../node_modules/react-native-vision-camera`)
   - Yoga (from `build/rncore-facades/Yoga`)
@@ -2045,6 +2125,8 @@ DEPENDENCIES:
 SPEC REPOS:
   trunk:
     - MMKVCore
+    - React-Codegen
+    - SDWebImage
     - TensorFlowLiteC
 
 EXTERNAL SOURCES:
@@ -2069,6 +2151,8 @@ EXTERNAL SOURCES:
     :path: "../node_modules/react-native-mmkv"
   NitroModules:
     :path: "../node_modules/react-native-nitro-modules"
+  NitroWebImage:
+    :path: "../node_modules/react-native-nitro-web-image"
   RCT-Folly:
     :path: build/rndeps-facades/RCT-Folly
   RCTDeprecation:
@@ -2153,6 +2237,8 @@ EXTERNAL SOURCES:
     :path: "../node_modules/react-native-fast-tflite"
   react-native-image-picker:
     :path: "../node_modules/react-native-image-picker"
+  react-native-image-resizer:
+    :path: "../node_modules/@bam.tech/react-native-image-resizer"
   react-native-safe-area-context:
     :path: "../node_modules/react-native-safe-area-context"
   React-NativeModulesApple:
@@ -2233,6 +2319,8 @@ EXTERNAL SOURCES:
     :path: "../node_modules/react-native-gesture-handler"
   RNScreens:
     :path: "../node_modules/react-native-screens"
+  RNShare:
+    :path: "../node_modules/react-native-share"
   RNSVG:
     :path: "../node_modules/react-native-svg"
   SocketRocket:
@@ -2254,6 +2342,7 @@ SPEC CHECKSUMS:
   NitroImage: bb0b6d44556ba085e2c472451056bd5fc13e00db
   NitroMmkv: 70acd11bdb953854e3d75ec72eeaed4d5639d4b7
   NitroModules: b4d92f95f7e70027935b09736d7a589181bc0912
+  NitroWebImage: 91d7b9e7793d6d44112c0aa30cc3239da2ae5bac
   RCT-Folly: 82921e585c0400eda46fac1068297aa9dfb035e4
   RCTDeprecation: 5cc865306ce4974b7a57ddbc575fd1f3fef41957
   RCTRequired: ea6f2c41f2670961ce9a48a4bf17a190dd53e493
@@ -2263,6 +2352,7 @@ SPEC CHECKSUMS:
   React: 2de853bffdce9d79608a256892cadfdd42124fb1
   React-bridging: ad588ebf664b5339b159f7bb1076a52967a5e433
   React-callinvoker: 33c0c2c46a808f55ef5a2927fa373977a334ea3e
+  React-Codegen: 4b8b4817cea7a54b83851d4c1f91f79aa73de30a
   React-Core: 48305724ff82e5922efc52bf8d0e713fbf84be5a
   React-Core-prebuilt: cd44efd12c9bfad37c194372a6d3a18a6a6d5c00
   React-CoreModules: a190415306d55fbe58fb3d8eb045c0e46c5c8437
@@ -2296,6 +2386,7 @@ SPEC CHECKSUMS:
   React-mutationobservernativemodule: 877e9f730e0d8175c2e952901b55c170fc3d372f
   react-native-fast-tflite: 00040eceb794edc0f1c573d492b85f5401e97322
   react-native-image-picker: 870b31525256975a2d4b6b20a54db9b380cd725d
+  react-native-image-resizer: e27d74416398278e602d00b23b7ecc32acc03c32
   react-native-safe-area-context: b3e507b0dbfb44dfadb29f7a31e884ac13789723
   React-NativeModulesApple: adb1dd8361dff80e9f6652fb3fdbf033cfbe2a89
   React-networking: c00b437c4408f0640ba0d4158357133488521eca
@@ -2336,12 +2427,14 @@ SPEC CHECKSUMS:
   RNCMaskedView: d4884d6b3b256bd1830a211db3d5f551def82e36
   RNGestureHandler: c7a5370fc94f6b072d35dd22ef7310870ec7b36c
   RNScreens: 038dc998fe1ab34778d9e8f4a33318a6c7a5bde8
+  RNShare: 17b29dee409f837fad3971a41e6fed5c929e1dab
   RNSVG: 6c9bcbf53822153be6f6c1484f6b0b57c0040d21
+  SDWebImage: e9fc87c1aab89a8ab1bbd74eba378c6f53be8abf
   SocketRocket: 37aec555668fb852ec12e3c0de59a86ca58f0871
   TensorFlowLiteC: eac6d689a8d391d1b202dc59e3d9165ba64aaf73
   VisionCamera: 7187b3dac1ff3071234ead959ce311875748e14f
   Yoga: d1c536142c5ff8ec8cd856ab2a7c227a1d875c8e
 
-PODFILE CHECKSUM: 57108c6f6a6438a111329c1d1f43634d693ffdef
+PODFILE CHECKSUM: d234ab3839ef0444d49a056dd57540515e00c845
 
 COCOAPODS: 1.16.2

@@ -5964,6 +5964,11 @@ react-native-nitro-modules@^0.37.1:
   resolved "https://registry.npmjs.org/react-native-nitro-modules/-/react-native-nitro-modules-0.37.1.tgz"
   integrity sha512-KpW6EQVQ/bfegpCGxN9Be+ndvsfj56t4IESEvCASu9gWpJa/NDfHpIeIwCOvZQ3eXmLEj6YD4wCLqcC1FJPr2w==
 
+react-native-nitro-web-image@^0.15.2:
+  version "0.15.2"
+  resolved "https://registry.yarnpkg.com/react-native-nitro-web-image/-/react-native-nitro-web-image-0.15.2.tgz#aaaa4d4ffede3e8d965aeb3ef855678b42ec3803"
+  integrity sha512-Lw1tW3Z/y3AWDOpmAbz/ofya3WYfO5sEBlaFPhbLsz9c54u0BPuXQerLkDPy0WWAkVMrcBatR/yvTWNl3F1y8A==
+
 react-native-safe-area-context@^5.5.2:
   version "5.10.0"
   resolved "https://registry.npmjs.org/react-native-safe-area-context/-/react-native-safe-area-context-5.10.0.tgz"

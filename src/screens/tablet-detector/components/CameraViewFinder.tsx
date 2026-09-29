@@ -74,6 +74,12 @@ export const CameraViewFinder = forwardRef<
     const scanLineAnim = useRef(new Animated.Value(0)).current;
 
     const isFirstDetection = useRef(true);
+    const prevCoordsRef = useRef<{
+      left: number;
+      top: number;
+      width: number;
+      height: number;
+    } | null>(null);
     const [isBoxMounted, setIsBoxMounted] = useState(false);
 
     // Vision Camera Permission Hook
@@ -252,15 +258,24 @@ export const CameraViewFinder = forwardRef<
         return null;
       }
 
-      return {
-        left,
-        top,
-        width,
-        height,
-      };
+      // Deadband jitter filter: ignore micro-tremors (< 3.5px) when person holds still
+      const prev = prevCoordsRef.current;
+      if (
+        prev &&
+        Math.abs(left - prev.left) < 3.5 &&
+        Math.abs(top - prev.top) < 3.5 &&
+        Math.abs(width - prev.width) < 4.0 &&
+        Math.abs(height - prev.height) < 4.0
+      ) {
+        return prev;
+      }
+
+      const next = { left, top, width, height };
+      prevCoordsRef.current = next;
+      return next;
     }, [boundingBox, cameraFacing, containerLayout]);
 
-    // Butter-smooth Spring Physics Tracking & Fade Transitions
+    // Butter-smooth Glide Tracking & Fade Transitions
     useEffect(() => {
       if (hasDetectedFace && targetCoords) {
         setIsBoxMounted(true);
@@ -272,29 +287,30 @@ export const CameraViewFinder = forwardRef<
           animHeight.setValue(targetCoords.height);
           isFirstDetection.current = false;
         } else {
+          // Smooth glide with Animated.timing for predictable, butter-smooth tracking without jerk
           Animated.parallel([
-            Animated.spring(animLeft, {
+            Animated.timing(animLeft, {
               toValue: targetCoords.left,
-              friction: 12,
-              tension: 85,
+              duration: 260,
+              easing: Easing.out(Easing.quad),
               useNativeDriver: false,
             }),
-            Animated.spring(animTop, {
+            Animated.timing(animTop, {
               toValue: targetCoords.top,
-              friction: 12,
-              tension: 85,
+              duration: 260,
+              easing: Easing.out(Easing.quad),
               useNativeDriver: false,
             }),
-            Animated.spring(animWidth, {
+            Animated.timing(animWidth, {
               toValue: targetCoords.width,
-              friction: 12,
-              tension: 85,
+              duration: 260,
+              easing: Easing.out(Easing.quad),
               useNativeDriver: false,
             }),
-            Animated.spring(animHeight, {
+            Animated.timing(animHeight, {
               toValue: targetCoords.height,
-              friction: 12,
-              tension: 85,
+              duration: 260,
+              easing: Easing.out(Easing.quad),
               useNativeDriver: false,
             }),
           ]).start();
@@ -307,29 +323,30 @@ export const CameraViewFinder = forwardRef<
             duration: 220,
             useNativeDriver: false,
           }),
-          Animated.spring(animScale, {
+          Animated.timing(animScale, {
             toValue: 1,
-            friction: 7,
-            tension: 55,
+            duration: 220,
+            easing: Easing.out(Easing.quad),
             useNativeDriver: false,
           }),
         ]).start();
       } else {
-        isFirstDetection.current = true;
         Animated.parallel([
           Animated.timing(animOpacity, {
             toValue: 0,
-            duration: 320,
+            duration: 280,
             useNativeDriver: false,
           }),
           Animated.timing(animScale, {
-            toValue: 0.92,
-            duration: 320,
+            toValue: 0.95,
+            duration: 280,
             useNativeDriver: false,
           }),
         ]).start(({ finished }) => {
           if (finished) {
             setIsBoxMounted(false);
+            isFirstDetection.current = true;
+            prevCoordsRef.current = null;
           }
         });
       }

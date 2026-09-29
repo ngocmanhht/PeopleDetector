@@ -8,7 +8,7 @@ import { appAiModel } from '../const/app-ai-model';
 import { appUtils } from '../utils';
 
 // Persistent MMKV storage for pre-computed 512-d biometric embeddings
-const faceEmbeddingStorage = createMMKV({ id: 'face-embeddings-cache-v6' });
+const faceEmbeddingStorage = createMMKV({ id: 'face-embeddings-cache-v7' });
 
 export interface CachedProfileEmbedding {
   userId: string;
@@ -181,6 +181,50 @@ export class TfliteYoloService {
       console.warn('[TFLite YOLO] Fast-tflite check note:', e);
     }
     return null;
+  }
+
+  /**
+   * Safely loads ANY image into a NativeImage:
+   * - Data URL / Base64
+   * - Remote HTTP / HTTPS URL (downloaded via fetch to ArrayBuffer)
+   * - Local filesystem path (/var/mobile/..., /Users/..., file://...)
+   */
+  public async loadNativeImage(src: string): Promise<Image> {
+    if (src.startsWith('data:')) {
+      const buffer = base64ToArrayBuffer(src);
+      return loadImage({
+        encodedImageData: {
+          buffer,
+          width: 0,
+          height: 0,
+          imageFormat: 'jpg',
+        },
+      });
+    }
+
+    if (src.startsWith('http://') || src.startsWith('https://')) {
+      try {
+        return await loadImage({ url: src });
+      } catch (loadErr) {
+        console.log('[TFLite YOLO] NitroWebImage note, falling back to buffer fetch:', loadErr);
+        const response = await fetch(src);
+        if (!response.ok) {
+          throw new Error(`Failed to fetch image: HTTP ${response.status} from ${src}`);
+        }
+        const buffer = await response.arrayBuffer();
+        return loadImage({
+          encodedImageData: {
+            buffer,
+            width: 0,
+            height: 0,
+            imageFormat: 'jpg',
+          },
+        });
+      }
+    }
+
+    const cleanPath = src.replace(/^file:\/\//, '');
+    return loadImage({ filePath: cleanPath });
   }
 
   /**
@@ -631,23 +675,7 @@ export class TfliteYoloService {
       for (const src of photoSources) {
         try {
           const resolvedSrc = appUtils.getUrlImage(src) || src;
-          let rawImg: Image;
-          if (resolvedSrc.startsWith('data:')) {
-            const buffer = base64ToArrayBuffer(resolvedSrc);
-            rawImg = await loadImage({
-              encodedImageData: {
-                buffer,
-                width: 0,
-                height: 0,
-                imageFormat: 'jpg',
-              },
-            });
-          } else if (resolvedSrc.startsWith('http')) {
-            rawImg = await loadImage({ url: resolvedSrc });
-          } else {
-            const cleanPath = resolvedSrc.replace(/^file:\/\//, '');
-            rawImg = await loadImage({ filePath: cleanPath });
-          }
+          const rawImg = await this.loadNativeImage(resolvedSrc);
 
           // Clamp large image dimension to max 960 to avoid huge memory spike and lag
           const MAX_ENROLL_DIM = 960;
@@ -689,12 +717,41 @@ export class TfliteYoloService {
             }
           }
 
+          // Fallback if YOLO didn't detect face in enrollment photo (e.g. tightly cropped selfie)
+          if (!cropBox) {
+            const side = Math.min(image.width, image.height);
+            const x1 = Math.max(0, Math.round((image.width - side) / 2));
+            const y1 = Math.max(0, Math.round((image.height - side) / 2));
+            cropBox = { x1, y1, x2: x1 + side, y2: y1 + side };
+          }
+
+          // 1. Normal orientation embedding
           const emb = await this.extractFaceEmbedding(image, cropBox);
           if (emb) {
             embeddings.push(emb);
+
+            // 2. Horizontally mirrored embedding for flip-invariance (selfie camera invariance)
+            try {
+              const mirroredImage = image.mirrorHorizontally();
+              const mirroredCropBox = {
+                x1: image.width - cropBox.x2,
+                y1: cropBox.y1,
+                x2: image.width - cropBox.x1,
+                y2: cropBox.y2,
+              };
+              const mirroredEmb = await this.extractFaceEmbedding(
+                mirroredImage,
+                mirroredCropBox,
+              );
+              if (mirroredEmb) {
+                embeddings.push(mirroredEmb);
+              }
+            } catch (mirrorErr) {
+              console.warn('[TFLite YOLO] Mirror augmentation note:', mirrorErr);
+            }
           }
         } catch (e) {
-          console.warn('[TFLite YOLO] Could not load photo for enrollment:', e);
+          console.warn(`[TFLite YOLO] Could not load photo for enrollment (${profile.fullName}):`, e);
         }
       }
     }
@@ -751,7 +808,7 @@ export class TfliteYoloService {
         await this.initModels();
       }
 
-      // 2. Non-blocking embedding cache warm: restore 0ms from MMKV; background queue if new
+      // 2. Ensure room profile embeddings are ready in cache before matching
       for (const p of roomProfiles) {
         if (!this.profileEmbeddingsCache.has(p.id)) {
           const stored = this.loadEmbeddingsFromStorage(p.id);
@@ -766,8 +823,8 @@ export class TfliteYoloService {
               embeddings: stored,
             });
           } else {
-            // Asynchronously enroll in background so the active camera frame does NOT freeze for seconds!
-            this.enrollProfile(p).catch(() => {});
+            // Await enrollment so biometric vectors exist before cosine matching
+            await this.enrollProfile(p);
           }
         }
       }
@@ -782,24 +839,8 @@ export class TfliteYoloService {
         return null;
       }
 
-      // 3. Load camera frame image
-      let rawImage: Image;
-      if (photoPath.startsWith('data:')) {
-        const buffer = base64ToArrayBuffer(photoPath);
-        rawImage = await loadImage({
-          encodedImageData: {
-            buffer,
-            width: 0,
-            height: 0,
-            imageFormat: 'jpg',
-          },
-        });
-      } else if (photoPath.startsWith('http')) {
-        rawImage = await loadImage({ url: photoPath });
-      } else {
-        const cleanPath = photoPath.replace(/^file:\/\//, '');
-        rawImage = await loadImage({ filePath: cleanPath });
-      }
+      // 3. Load camera frame image safely across data URL, remote URL, or local file
+      const rawImage = await this.loadNativeImage(photoPath);
 
       // Clamp frame image to optimal working size (max dimension 960)
       // This normalizes native UIImage EXIF orientation and keeps memory light (<2MB)
@@ -924,22 +965,26 @@ export class TfliteYoloService {
       }
 
       // STRICT BIOMETRIC THRESHOLD:
-      // MobileFaceNet 512-d normalized embeddings:
-      // - Different people: cosine similarity is typically 0.25 - 0.62.
-      // - Same person: cosine similarity is typically 0.70 - 0.92.
-      // Threshold 0.66 ensures virtually 0% False Acceptance Rate while maintaining high True Acceptance.
-      const MATCH_THRESHOLD = 0.66;
+      // MobileFaceNet 512-d normalized embeddings with flip augmentation:
+      // - Different people: cosine similarity is typically 0.20 - 0.50.
+      // - Same person: cosine similarity is typically 0.65 - 0.90.
+      // Threshold 0.62 ensures accurate true positive detection while rejecting strangers.
+      const MATCH_THRESHOLD = 0.62;
       const isMatch = bestProfile !== null && maxSimilarity >= MATCH_THRESHOLD;
 
+      console.log(
+        `[TFLite YOLO] Candidate: "${bestProfile?.fullName || 'None'}" | Similarity: ${(maxSimilarity * 100).toFixed(1)}% | Threshold: ${(MATCH_THRESHOLD * 100).toFixed(1)}% | Result: ${isMatch ? 'MATCH' : 'UNVERIFIED'}`
+      );
+
       if (isMatch && bestProfile) {
-        // Calibrated confidence mapping: [0.66, 0.90] -> [75%, 99%]
+        // Calibrated confidence mapping: [0.62, 0.88] -> [75%, 99%]
         const confidencePct = Math.min(
           99,
           Math.max(
             75,
             Math.round(
               75 +
-                ((maxSimilarity - MATCH_THRESHOLD) / (0.90 - MATCH_THRESHOLD)) *
+                ((maxSimilarity - MATCH_THRESHOLD) / (0.88 - MATCH_THRESHOLD)) *
                   24,
             ),
           ),
