@@ -71,10 +71,13 @@ export const appColors = {
   slate400: '#94A3B8',
   slate300: '#CBD5E1',
   slate200: '#E2E8F0',
+  slate150: '#EAEFF5',
   slate100: '#F1F5F9',
   slate50: '#F8FAFC',
 
   // Blue & Sky Palette
+  blue900: '#1E3A8A',
+  blue800: '#1E40AF',
   blue700: '#1D4ED8',
   blue600: '#2563EB',
   blue500: '#2196F3',
@@ -86,10 +89,15 @@ export const appColors = {
   sky400: '#38BDF8',
 
   // Green & Emerald Palette
+  emerald900: '#064E3B',
+  emerald800: '#065F46',
+  emerald700: '#047857',
   emerald600: '#059669',
   emerald500: '#10B981',
   emerald400: '#34D399',
+  emerald300: '#6EE7B7',
   emerald200: '#A7F3D0',
+  emerald100: '#D1FAE5',
   emerald50: '#ECFDF5',
   green700: '#15803D',
   green600: '#16A34A',
@@ -100,8 +108,12 @@ export const appColors = {
   green50: '#F0FDF4',
 
   // Amber & Yellow Palette
+  amber900: '#78350F',
+  amber800: '#92400E',
+  amber700: '#B45309',
   amber600: '#D97706',
   amber500: '#FF9800',
+  amber300: '#FCD34D',
   amber200: '#FDE68A',
   amber100: '#FEF3C7',
   amber50: '#FFFBEB',
@@ -117,6 +129,24 @@ export const appColors = {
   red200: '#FECACA',
   red100: '#FEE2E2',
   red50: '#FEF2F2',
+
+  // Rose Palette
+  rose900: '#881337',
+  rose800: '#9F1239',
+  rose700: '#BE123C',
+  rose600: '#E11D48',
+  rose500: '#F43F5E',
+  rose200: '#FECDD3',
+  rose100: '#FFE4E6',
+  rose50: '#FFF1F2',
+
+  // Purple Palette
+  purple800: '#6B21A8',
+  purple700: '#7E22CE',
+  purple600: '#9333EA',
+  purple500: '#A855F7',
+  purple100: '#F3E8FF',
+  purple50: '#FAF5FF',
 
   // Gray Palette
   gray700: '#4B5563',

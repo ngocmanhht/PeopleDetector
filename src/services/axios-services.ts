@@ -12,6 +12,8 @@ import { setToken, logout } from '../store/slices/appSlice';
 import { Token } from '../model/token';
 import { navigationService } from '../navigation/navigation-service';
 import { appScreens } from '../const/app-screens';
+import { deviceIdService } from './device-id-service';
+import { setDeviceAuthorized } from '../store/slices/detectorSlice';
 
 class ApiClient {
   private instance: AxiosInstance;
@@ -70,6 +72,15 @@ class ApiClient {
           }
         } catch (e) {
           // If store is not initialized yet, proceed
+        }
+
+        try {
+          const deviceId = deviceIdService.getDeviceId();
+          if (deviceId) {
+            config.headers.set('x-device-id', deviceId);
+          }
+        } catch (e) {
+          // Ignore
         }
 
         console.log(
@@ -179,6 +190,23 @@ class ApiClient {
 
         let networkError: Error;
         switch (status) {
+          case 403: {
+            const errorMsg =
+              data?.message ??
+              'Thiết bị chưa được cấp quyền truy cập hệ thống (403 Forbidden)';
+            networkError = new Error(errorMsg);
+            try {
+              store.dispatch(
+                setDeviceAuthorized({
+                  authorized: false,
+                  message: errorMsg,
+                }),
+              );
+            } catch {
+              // Ignore
+            }
+            break;
+          }
           case StatusCode.FAILED_VALIDATION:
           case 422:
             const firstField = Object.keys(data?.errors || {})[0];

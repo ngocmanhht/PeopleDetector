@@ -12,6 +12,7 @@ import {
   TouchableOpacity,
   Animated,
   Easing,
+  Platform,
 } from 'react-native';
 import { AppText } from '../../../components/app-text';
 import { BoundingBox, DetectionResult } from '../../../model/detector';
@@ -21,6 +22,7 @@ import {
   Camera as CameraIcon,
   ShieldAlert,
   AlertTriangle,
+  UserPlus,
 } from 'lucide-react-native';
 import {
   Camera,
@@ -40,6 +42,7 @@ export interface CameraViewFinderProps {
   onManualScan?: (photoPath?: string) => void;
   cameraFacing?: 'front' | 'back';
   isTabFocused?: boolean;
+  onEnrollStranger?: (photoUri?: string, defaultName?: string) => void;
 }
 
 export const CameraViewFinder = forwardRef<
@@ -53,6 +56,7 @@ export const CameraViewFinder = forwardRef<
       isSessionActive,
       cameraFacing = 'front',
       isTabFocused = true,
+      onEnrollStranger,
     },
     ref,
   ) => {
@@ -85,20 +89,49 @@ export const CameraViewFinder = forwardRef<
     // Vision Camera Permission Hook
     const { hasPermission, requestPermission } = useCameraPermission();
 
-    // Vision Camera Device Hook
-    const device = useCameraDevice(cameraFacing);
+    // Vision Camera Device Hook with automatic fallback for tablets/emulators
+    const frontDevice = useCameraDevice('front');
+    const backDevice = useCameraDevice('back');
+    const device =
+      (cameraFacing === 'front' ? frontDevice : backDevice) ??
+      (cameraFacing === 'front' ? backDevice : frontDevice);
 
     // Expose captureFrame to parent via ref
     useImperativeHandle(ref, () => ({
       captureFrame: async (): Promise<string | null> => {
-        if (cameraRef.current && hasPermission && device) {
+        if (!cameraRef.current || !hasPermission || !device) {
+          return null;
+        }
+
+        // On Android, takeSnapshot gets the GPU preview bitmap directly without locking Camera2 hardware
+        // Provides instant (~20ms) zero-latency capture and exact preview orientation matching.
+        if (Platform.OS === 'android') {
           try {
-            const photo = await cameraRef.current.takePhoto({
-              enableShutterSound: false,
+            const snapshot = await cameraRef.current.takeSnapshot({
+              quality: 85,
             });
-            return photo.path;
-          } catch (err) {
-            console.warn('[VisionCamera] captureFrame error:', err);
+            if (snapshot?.path) {
+              return snapshot.path;
+            }
+          } catch (snapErr) {
+            console.log(
+              '[VisionCamera] Android takeSnapshot note, falling back to takePhoto:',
+              snapErr,
+            );
+          }
+        }
+
+        try {
+          const photo = await cameraRef.current.takePhoto({
+            enableShutterSound: false,
+          });
+          return photo.path;
+        } catch {
+          try {
+            const fallbackPhoto = await cameraRef.current.takePhoto();
+            return fallbackPhoto.path;
+          } catch (photoErr) {
+            console.warn('[VisionCamera] captureFrame error:', photoErr);
           }
         }
         return null;
@@ -258,14 +291,14 @@ export const CameraViewFinder = forwardRef<
         return null;
       }
 
-      // Deadband jitter filter: ignore micro-tremors (< 3.5px) when person holds still
+      // Deadband jitter filter: ignore micro-tremors (< 2.5px) when person holds still
       const prev = prevCoordsRef.current;
       if (
         prev &&
-        Math.abs(left - prev.left) < 3.5 &&
-        Math.abs(top - prev.top) < 3.5 &&
-        Math.abs(width - prev.width) < 4.0 &&
-        Math.abs(height - prev.height) < 4.0
+        Math.abs(left - prev.left) < 2.5 &&
+        Math.abs(top - prev.top) < 2.5 &&
+        Math.abs(width - prev.width) < 3.0 &&
+        Math.abs(height - prev.height) < 3.0
       ) {
         return prev;
       }
@@ -287,29 +320,29 @@ export const CameraViewFinder = forwardRef<
           animHeight.setValue(targetCoords.height);
           isFirstDetection.current = false;
         } else {
-          // Smooth glide with Animated.timing for predictable, butter-smooth tracking without jerk
+          // Snappy, butter-smooth glide matching high-FPS detection loop
           Animated.parallel([
             Animated.timing(animLeft, {
               toValue: targetCoords.left,
-              duration: 260,
+              duration: 180,
               easing: Easing.out(Easing.quad),
               useNativeDriver: false,
             }),
             Animated.timing(animTop, {
               toValue: targetCoords.top,
-              duration: 260,
+              duration: 180,
               easing: Easing.out(Easing.quad),
               useNativeDriver: false,
             }),
             Animated.timing(animWidth, {
               toValue: targetCoords.width,
-              duration: 260,
+              duration: 180,
               easing: Easing.out(Easing.quad),
               useNativeDriver: false,
             }),
             Animated.timing(animHeight, {
               toValue: targetCoords.height,
-              duration: 260,
+              duration: 180,
               easing: Easing.out(Easing.quad),
               useNativeDriver: false,
             }),
@@ -379,6 +412,7 @@ export const CameraViewFinder = forwardRef<
             device={device}
             isActive={isSessionActive && isTabFocused && !cameraError}
             photo={true}
+            photoQualityBalance="speed"
             outputOrientation="preview"
             onError={error => {
               console.warn('[VisionCamera Error]:', error);
@@ -503,9 +537,48 @@ export const CameraViewFinder = forwardRef<
                   ? `${detection.fullName} (${detection.confidence}%)`
                   : 'Phát hiện mặt'}
               </AppText>
+              {!isVerified && onEnrollStranger && (
+                <TouchableOpacity
+                  style={styles.boxEnrollBtn}
+                  onPress={() =>
+                    onEnrollStranger(detection?.avatarUri, detection?.fullName)
+                  }
+                  activeOpacity={0.8}
+                >
+                  <UserPlus size={11} color={appColors.white} />
+                  <AppText style={styles.boxEnrollBtnText}>+ Thêm</AppText>
+                </TouchableOpacity>
+              )}
             </View>
           </Animated.View>
         )}
+
+        {/* Quick stranger alert banner at bottom of camera */}
+        {isSessionActive &&
+          detection &&
+          detection.status === 'verify' &&
+          onEnrollStranger && (
+            <View style={styles.cameraStrangerAlertBanner}>
+              <View style={styles.cameraStrangerAlertLeft}>
+                <AlertTriangle size={15} color={appColors.amber500} />
+                <AppText style={styles.cameraStrangerAlertText} numberOfLines={1}>
+                  Khuôn mặt chưa có hồ sơ ({detection.confidence}%)
+                </AppText>
+              </View>
+              <TouchableOpacity
+                style={styles.cameraStrangerAlertBtn}
+                onPress={() =>
+                  onEnrollStranger(detection.avatarUri, detection.fullName)
+                }
+                activeOpacity={0.85}
+              >
+                <UserPlus size={13} color={appColors.white} />
+                <AppText style={styles.cameraStrangerAlertBtnText}>
+                  + Thêm vào User
+                </AppText>
+              </TouchableOpacity>
+            </View>
+          )}
 
         {/* 4. HUD Top Bar */}
         <View style={styles.hudTop}>
@@ -513,8 +586,8 @@ export const CameraViewFinder = forwardRef<
             <ScanLine size={13} color={appColors.green500} />
             <AppText style={styles.hudText}>
               {device
-                ? `VISION CAMERA [${cameraFacing.toUpperCase()}] • H2TECH AI`
-                : 'VISION CAMERA [SIMULATOR] • H2TECH AI'}
+                ? `VISION CAMERA [${cameraFacing.toUpperCase()}] • AI`
+                : 'VISION CAMERA [SIMULATOR] • AI'}
             </AppText>
           </View>
 
@@ -745,5 +818,66 @@ const styles = StyleSheet.create({
     fontSize: 11,
     fontWeight: '700',
     letterSpacing: 0.5,
+  },
+  boxEnrollBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 3,
+    backgroundColor: appColors.blue600,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 4,
+    marginLeft: 6,
+  },
+  boxEnrollBtnText: {
+    color: appColors.white,
+    fontSize: 10,
+    fontWeight: '700',
+  },
+  cameraStrangerAlertBanner: {
+    position: 'absolute',
+    bottom: 14,
+    left: 14,
+    right: 14,
+    backgroundColor: 'rgba(15, 23, 42, 0.94)',
+    borderRadius: 12,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    borderWidth: 1,
+    borderColor: appColors.amber500,
+    shadowColor: appColors.black,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.25,
+    shadowRadius: 4,
+    elevation: 4,
+  },
+  cameraStrangerAlertLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    flex: 1,
+    marginRight: 8,
+  },
+  cameraStrangerAlertText: {
+    color: appColors.white,
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  cameraStrangerAlertBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: appColors.blue600,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 8,
+  },
+  cameraStrangerAlertBtnText: {
+    color: appColors.white,
+    fontSize: 12,
+    fontWeight: '700',
   },
 });

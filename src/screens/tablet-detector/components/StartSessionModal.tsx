@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   StyleSheet,
   View,
@@ -23,6 +23,7 @@ import { appColors } from '../../../const/app-colors';
 
 interface StartSessionModalProps {
   visible: boolean;
+  scanMode?: 'all' | 'room';
   roomName: string;
   zoneName: string;
   memberCount: number;
@@ -32,20 +33,28 @@ interface StartSessionModalProps {
 
 export const StartSessionModal: React.FC<StartSessionModalProps> = ({
   visible,
+  scanMode = 'room',
   roomName,
   zoneName,
   memberCount,
   onClose,
   onStart,
 }) => {
-  const getDefaultName = () => `Phiên ${dayjs().format('HH:mm DD-MM-YYYY')}`;
+  const isAllMode = scanMode === 'all';
+  const getDefaultName = useCallback(
+    () =>
+      isAllMode
+        ? `Phiên vào cơ sở ${dayjs().format('HH:mm DD-MM-YYYY')}`
+        : `Phiên ${dayjs().format('HH:mm DD-MM-YYYY')}`,
+    [isAllMode],
+  );
   const [sessionName, setSessionName] = useState(getDefaultName());
 
   useEffect(() => {
     if (visible) {
       setSessionName(getDefaultName());
     }
-  }, [visible]);
+  }, [visible, getDefaultName]);
 
   const handleStart = () => {
     const finalName = sessionName.trim() || getDefaultName();
@@ -70,13 +79,24 @@ export const StartSessionModal: React.FC<StartSessionModalProps> = ({
             {/* Header */}
             <View style={styles.header}>
               <View style={styles.headerTitleWrap}>
-                <View style={styles.headerIcon}>
+                <View
+                  style={[
+                    styles.headerIcon,
+                    isAllMode && { backgroundColor: appColors.blue600 },
+                  ]}
+                >
                   <Play size={20} color={appColors.white} fill={appColors.white} />
                 </View>
                 <View>
-                  <AppText style={styles.title}>Bắt đầu phiên điểm danh</AppText>
+                  <AppText style={styles.title}>
+                    {isAllMode
+                      ? 'Bắt đầu phiên quét vào cơ sở'
+                      : 'Bắt đầu phiên điểm danh'}
+                  </AppText>
                   <AppText style={styles.subtitle}>
-                    Khởi tạo phiên nhận diện khuôn mặt tự động
+                    {isAllMode
+                      ? 'Xác nhận vào cơ sở cho toàn bộ phòng ban / nhân sự'
+                      : 'Khởi tạo phiên nhận diện khuôn mặt tự động'}
                   </AppText>
                 </View>
               </View>

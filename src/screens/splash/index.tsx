@@ -1,12 +1,12 @@
-import { StyleSheet, View, ActivityIndicator } from 'react-native';
+import { StyleSheet, View, ActivityIndicator, Image } from 'react-native';
 import React, { useEffect } from 'react';
 import { useCustomNavigation } from '../../hooks/use-custom-navigation';
 import { appScreens } from '../../const/app-screens';
 import { RootNavigatorParamList } from '../../navigation/types/root';
 import { useAppSelector } from '../../store/hooks';
 import { AppText } from '../../components/app-text';
-import { ScanFace } from 'lucide-react-native';
 import { appColors } from '../../const/app-colors';
+import { appImages } from '../../const/app-images';
 
 const SplashScreen = () => {
   const navigation = useCustomNavigation<RootNavigatorParamList>();
@@ -38,13 +38,13 @@ const SplashScreen = () => {
   return (
     <View style={styles.container}>
       <View style={styles.logoWrap}>
-        <ScanFace size={60} color={appColors.blue600} />
+        <Image
+          source={appImages.logo}
+          style={{ width: 60, height: 60, resizeMode: 'contain' }}
+        />
       </View>
-      <View style={styles.brandRow}>
-        <AppText style={styles.brandTitlePrimary}>H2Tech</AppText>
-        <AppText style={styles.brandTitleSecondary}> AI</AppText>
-      </View>
-      <AppText style={styles.brandSub}>FACE CHECK SYSTEM</AppText>
+
+      <AppText style={styles.brandSub}>Hệ thống nhận diện CS2</AppText>
       <ActivityIndicator
         size="small"
         color={appColors.blue600}

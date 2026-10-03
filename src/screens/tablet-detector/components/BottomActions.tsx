@@ -1,17 +1,19 @@
 import React from 'react';
 import { StyleSheet, View, TouchableOpacity } from 'react-native';
 import { AppText } from '../../../components/app-text';
-import { List, Bell } from 'lucide-react-native';
+import { List, Bell, History } from 'lucide-react-native';
 import { appColors } from '../../../const/app-colors';
 
 interface BottomActionsProps {
   onOpenList: () => void;
+  onOpenSessionsHistory?: () => void;
   onOpenAlerts: () => void;
   unreadAlertsCount?: number;
 }
 
 export const BottomActions: React.FC<BottomActionsProps> = ({
   onOpenList,
+  onOpenSessionsHistory,
   onOpenAlerts,
   unreadAlertsCount = 0,
 }) => {
@@ -22,16 +24,29 @@ export const BottomActions: React.FC<BottomActionsProps> = ({
         onPress={onOpenList}
         activeOpacity={0.8}
       >
-        <List size={20} color={appColors.slate800} />
+        <List size={18} color={appColors.slate800} />
         <AppText style={styles.btnText}>Danh sách</AppText>
       </TouchableOpacity>
+
+      {Boolean(onOpenSessionsHistory) && (
+        <TouchableOpacity
+          style={styles.actionBtn}
+          onPress={onOpenSessionsHistory}
+          activeOpacity={0.8}
+        >
+          <History size={18} color={appColors.blue600} />
+          <AppText style={[styles.btnText, { color: appColors.blue700 }]}>
+            Lịch sử phiên
+          </AppText>
+        </TouchableOpacity>
+      )}
 
       <TouchableOpacity
         style={styles.actionBtn}
         onPress={onOpenAlerts}
         activeOpacity={0.8}
       >
-        <Bell size={20} color={appColors.slate800} />
+        <Bell size={18} color={appColors.slate800} />
         <AppText style={styles.btnText}>Cảnh báo</AppText>
         {unreadAlertsCount > 0 && (
           <View style={styles.alertBadge}>
@@ -46,18 +61,18 @@ export const BottomActions: React.FC<BottomActionsProps> = ({
 const styles = StyleSheet.create({
   container: {
     flexDirection: 'row',
-    gap: 12,
-    marginTop: 12,
+    gap: 8,
+    marginTop: 10,
   },
   actionBtn: {
     flex: 1,
-    height: 52,
+    height: 48,
     backgroundColor: appColors.white,
-    borderRadius: 14,
+    borderRadius: 12,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 10,
+    gap: 6,
     borderWidth: 1,
     borderColor: appColors.slate200,
     shadowColor: appColors.black,
@@ -66,26 +81,27 @@ const styles = StyleSheet.create({
     shadowRadius: 3,
     elevation: 2,
     position: 'relative',
+    paddingHorizontal: 4,
   },
   btnText: {
-    fontSize: 15,
+    fontSize: 13,
     fontWeight: '700',
     color: appColors.slate800,
   },
   alertBadge: {
     position: 'absolute',
-    top: 10,
-    right: 18,
+    top: 8,
+    right: 12,
     backgroundColor: appColors.red500,
-    width: 20,
-    height: 20,
-    borderRadius: 10,
+    width: 18,
+    height: 18,
+    borderRadius: 9,
     justifyContent: 'center',
     alignItems: 'center',
   },
   alertBadgeText: {
     color: appColors.white,
-    fontSize: 11,
+    fontSize: 10,
     fontWeight: '800',
   },
 });

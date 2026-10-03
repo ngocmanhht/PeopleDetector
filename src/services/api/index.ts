@@ -6,3 +6,5 @@ export * from './session-service';
 export * from './attendance-service';
 export * from './alert-service';
 export * from './upload-service';
+export * from './stats-service';
+export * from './device-service';

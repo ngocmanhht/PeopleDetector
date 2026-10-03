@@ -4,6 +4,7 @@ import { appColors } from '../../const/app-colors';
 export enum CmsSubTab {
   SCAN_STATUS = 'scan_status',
   USER_LIST = 'user_list',
+  STATS = 'stats',
   REPORTS = 'reports',
 }
 

@@ -15,6 +15,7 @@ export interface RecordAttendancePayload {
   timestamp: string;
   avatarUri?: string;
   detectedImageUrl?: string;
+  direction?: 'in' | 'out';
 }
 
 export class AttendanceService {

@@ -12,7 +12,7 @@ export interface StartSessionPayload {
   name?: string;
   zoneId?: string;
   zoneName?: string;
-  roomId: string;
+  roomId?: string;
   roomName?: string;
   startTime?: string;
 }

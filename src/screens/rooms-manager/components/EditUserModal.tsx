@@ -11,6 +11,7 @@ import {
   ActivityIndicator,
   KeyboardAvoidingView,
   Platform,
+  Switch,
 } from 'react-native';
 import { AppText } from '../../../components/app-text';
 import { useAppDispatch, useAppSelector } from '../../../store/hooks';
@@ -24,7 +25,9 @@ import {
   UserCheck,
   FlipHorizontal,
   RotateCw,
+  ChevronDown,
 } from 'lucide-react-native';
+import { PickerModal } from '../../tablet-detector/components/PickerModal';
 import { updateUserProfile } from '../../../store/slices/detectorSlice';
 import { profileService, uploadService } from '../../../services/api';
 import { UserProfile } from '../../../model/detector';
@@ -49,20 +52,29 @@ export const EditUserModal: React.FC<EditUserModalProps> = ({
 }) => {
   const { isPhone } = useResponsive();
   const dispatch = useAppDispatch();
-  const { rooms } = useAppSelector(state => state.detector);
+  const { rooms, userProfiles } = useAppSelector(state => state.detector);
 
   const [fullName, setFullName] = useState('');
   const [code, setCode] = useState('');
   const [roomId, setRoomId] = useState('');
   const [photos, setPhotos] = useState<string[]>([]);
   const [avatarUri, setAvatarUri] = useState('');
+  const [isVisitor, setIsVisitor] = useState(false);
+  const [visitedProfileId, setVisitedProfileId] = useState<string | null>(null);
+  const [showVisitorPicker, setShowVisitorPicker] = useState(false);
   const [error, setError] = useState('');
+
+  const officialProfiles = (userProfiles || []).filter(
+    u => u.id !== user?.id && !u.isVisitor,
+  );
 
   useEffect(() => {
     if (user && visible) {
       setFullName(user.fullName);
       setCode(user.code);
       setRoomId(user.roomId);
+      setIsVisitor(!!user.isVisitor);
+      setVisitedProfileId(user.visitedProfileId || null);
       const initialPhotos =
         user.photos && user.photos.length > 0
           ? [...user.photos]
@@ -198,6 +210,10 @@ export const EditUserModal: React.FC<EditUserModalProps> = ({
       setError('Vui lòng nhập mã định danh');
       return;
     }
+    if (isVisitor && !visitedProfileId) {
+      setError('Vui lòng chọn người được thân nhân');
+      return;
+    }
 
     setIsSubmitting(true);
     try {
@@ -208,7 +224,10 @@ export const EditUserModal: React.FC<EditUserModalProps> = ({
           serverPhotos.push(uri);
         } else {
           try {
-            const res = await uploadService.uploadImage(uri, UploadFolder.PROFILES);
+            const res = await uploadService.uploadImage(
+              uri,
+              UploadFolder.PROFILES,
+            );
             serverPhotos.push(res.path);
           } catch {
             serverPhotos.push(uri);
@@ -224,12 +243,30 @@ export const EditUserModal: React.FC<EditUserModalProps> = ({
           ? avatarUri
           : serverPhotos[0] || '';
 
+      const visitedUser = officialProfiles.find(u => u.id === visitedProfileId);
       const updatedData = {
         fullName: fullName.trim(),
         code: code.trim(),
-        roomId: roomId || user.roomId,
+        roomId:
+          isVisitor && visitedUser?.roomId
+            ? visitedUser.roomId
+            : roomId || user.roomId,
+        zoneId:
+          isVisitor && visitedUser?.zoneId ? visitedUser.zoneId : user.zoneId,
         avatarUri: finalAvatar,
         photos: serverPhotos,
+        isVisitor,
+        visitedProfileId: isVisitor ? visitedProfileId : null,
+        visitedProfile:
+          isVisitor && visitedUser
+            ? {
+                id: visitedUser.id,
+                fullName: visitedUser.fullName,
+                code: visitedUser.code,
+                roomName:
+                  rooms.find(r => r.id === visitedUser.roomId)?.name || '',
+              }
+            : null,
       };
 
       tfliteYoloService.invalidateProfileCache(user.id);
@@ -275,7 +312,9 @@ export const EditUserModal: React.FC<EditUserModalProps> = ({
           >
             {/* Header */}
             <View style={styles.header}>
-              <View style={[styles.headerTitleRow, { flex: 1, paddingRight: 8 }]}>
+              <View
+                style={[styles.headerTitleRow, { flex: 1, paddingRight: 8 }]}
+              >
                 <View style={styles.iconWrap}>
                   <UserCheck size={20} color={appColors.blue600} />
                 </View>
@@ -301,206 +340,312 @@ export const EditUserModal: React.FC<EditUserModalProps> = ({
               showsVerticalScrollIndicator={false}
               keyboardShouldPersistTaps="handled"
             >
-            {error ? <AppText style={styles.errorText}>{error}</AppText> : null}
+              {error ? (
+                <AppText style={styles.errorText}>{error}</AppText>
+              ) : null}
 
-            {/* Photos Management */}
-            <View style={styles.photoSection}>
-              <View
-                style={[
-                  styles.photoHeaderRow,
-                  isPhone && styles.photoHeaderRowPhone,
-                ]}
-              >
-                <View>
-                  <AppText style={styles.sectionLabel}>
-                    Bộ ảnh nhận diện ({photos.length}/
-                    {PHOTO_CONFIG.MAX_PHOTOS_PER_USER} ảnh)
-                  </AppText>
-                  <AppText style={styles.sectionDesc}>
-                    Thêm ảnh mới hoặc xóa ảnh cũ để tối ưu độ chính xác
-                  </AppText>
+              {/* Photos Management */}
+              <View style={styles.photoSection}>
+                <View
+                  style={[
+                    styles.photoHeaderRow,
+                    isPhone && styles.photoHeaderRowPhone,
+                  ]}
+                >
+                  <View>
+                    <AppText style={styles.sectionLabel}>
+                      Bộ ảnh nhận diện ({photos.length}/
+                      {PHOTO_CONFIG.MAX_PHOTOS_PER_USER} ảnh)
+                    </AppText>
+                    <AppText style={styles.sectionDesc}>
+                      Thêm ảnh mới hoặc xóa ảnh cũ để tối ưu độ chính xác
+                    </AppText>
+                  </View>
+
+                  <View style={styles.photoActions}>
+                    <TouchableOpacity
+                      style={styles.actionBtnCamera}
+                      onPress={handleCapturePhoto}
+                      disabled={
+                        photos.length >= PHOTO_CONFIG.MAX_PHOTOS_PER_USER
+                      }
+                    >
+                      <Camera size={16} color={appColors.white} />
+                      <AppText style={styles.actionBtnCameraText}>
+                        Chụp thêm
+                      </AppText>
+                    </TouchableOpacity>
+
+                    <TouchableOpacity
+                      style={styles.actionBtnLibrary}
+                      onPress={handlePickPhotos}
+                      disabled={
+                        photos.length >= PHOTO_CONFIG.MAX_PHOTOS_PER_USER
+                      }
+                    >
+                      <ImageIcon size={16} color={appColors.blue600} />
+                      <AppText style={styles.actionBtnLibraryText}>
+                        Chọn thêm
+                      </AppText>
+                    </TouchableOpacity>
+                  </View>
                 </View>
 
-                <View style={styles.photoActions}>
-                  <TouchableOpacity
-                    style={styles.actionBtnCamera}
-                    onPress={handleCapturePhoto}
-                    disabled={photos.length >= PHOTO_CONFIG.MAX_PHOTOS_PER_USER}
-                  >
-                    <Camera size={16} color={appColors.white} />
-                    <AppText style={styles.actionBtnCameraText}>
-                      Chụp thêm
+                {photos.length === 0 ? (
+                  <View style={styles.emptyPhotoBox}>
+                    <ImageIcon size={36} color={appColors.slate300} />
+                    <AppText style={styles.emptyPhotoText}>
+                      Chưa có ảnh nào. Vui lòng chụp hoặc chọn ảnh nhận diện.
                     </AppText>
-                  </TouchableOpacity>
+                  </View>
+                ) : (
+                  <ScrollView
+                    horizontal
+                    showsHorizontalScrollIndicator={false}
+                    style={styles.photosScroll}
+                  >
+                    <View style={styles.photosRow}>
+                      {photos.map((uri, idx) => {
+                        const isMain = uri === avatarUri;
+                        return (
+                          <View key={`${uri}-${idx}`} style={styles.photoCard}>
+                            <Image
+                              source={{ uri: appUtils.getUrlImage(uri) }}
+                              style={styles.photoThumb}
+                            />
 
-                  <TouchableOpacity
-                    style={styles.actionBtnLibrary}
-                    onPress={handlePickPhotos}
-                    disabled={photos.length >= PHOTO_CONFIG.MAX_PHOTOS_PER_USER}
-                  >
-                    <ImageIcon size={16} color={appColors.blue600} />
-                    <AppText style={styles.actionBtnLibraryText}>
-                      Chọn thêm
-                    </AppText>
-                  </TouchableOpacity>
+                            {isMain ? (
+                              <View style={styles.mainBadge}>
+                                <Star size={10} color={appColors.white} />
+                                <AppText style={styles.mainBadgeText}>
+                                  Chính
+                                </AppText>
+                              </View>
+                            ) : (
+                              <TouchableOpacity
+                                style={styles.setMainBtn}
+                                onPress={() => setAvatarUri(uri)}
+                                activeOpacity={0.8}
+                              >
+                                <AppText style={styles.setMainText}>
+                                  Đặt chính
+                                </AppText>
+                              </TouchableOpacity>
+                            )}
+
+                            <TouchableOpacity
+                              style={styles.deletePhotoBtn}
+                              onPress={() => handleDeletePhoto(uri)}
+                              activeOpacity={0.8}
+                            >
+                              <Trash2 size={12} color={appColors.red600} />
+                            </TouchableOpacity>
+
+                            {/* Bottom Action Tools: Flip and Rotate */}
+                            <View style={styles.photoBottomTools}>
+                              <TouchableOpacity
+                                style={styles.toolIconBtn}
+                                onPress={() => handleFlipPhoto(uri)}
+                                activeOpacity={0.7}
+                              >
+                                <FlipHorizontal
+                                  size={12}
+                                  color={appColors.white}
+                                />
+                              </TouchableOpacity>
+                              <TouchableOpacity
+                                style={styles.toolIconBtn}
+                                onPress={() => handleRotatePhoto(uri)}
+                                activeOpacity={0.7}
+                              >
+                                <RotateCw size={12} color={appColors.white} />
+                              </TouchableOpacity>
+                            </View>
+                          </View>
+                        );
+                      })}
+                    </View>
+                  </ScrollView>
+                )}
+              </View>
+
+              {/* Information Inputs */}
+              <View style={styles.formRow}>
+                <View style={styles.formGroup}>
+                  <AppText style={styles.label}>Họ và tên *</AppText>
+                  <TextInput
+                    style={styles.input}
+                    value={fullName}
+                    onChangeText={setFullName}
+                    placeholderTextColor={appColors.slate400}
+                  />
+                </View>
+
+                <View style={styles.formGroup}>
+                  <AppText style={styles.label}>Mã định danh / ID *</AppText>
+                  <TextInput
+                    style={styles.input}
+                    value={code}
+                    onChangeText={setCode}
+                    placeholderTextColor={appColors.slate400}
+                  />
                 </View>
               </View>
 
-              {photos.length === 0 ? (
-                <View style={styles.emptyPhotoBox}>
-                  <ImageIcon size={36} color={appColors.slate300} />
-                  <AppText style={styles.emptyPhotoText}>
-                    Chưa có ảnh nào. Vui lòng chụp hoặc chọn ảnh nhận diện.
+              {/* Visitor Switch Section */}
+              <View style={styles.visitorSwitchRow}>
+                <View style={{ flex: 1, paddingRight: 8 }}>
+                  <AppText style={styles.visitorSwitchTitle}>Thân nhân</AppText>
+                  <AppText style={styles.visitorSwitchSub}>
+                    Bật nếu là người thân / khách đến thân nhân nhân sự
                   </AppText>
                 </View>
-              ) : (
-                <ScrollView
-                  horizontal
-                  showsHorizontalScrollIndicator={false}
-                  style={styles.photosScroll}
-                >
-                  <View style={styles.photosRow}>
-                    {photos.map((uri, idx) => {
-                      const isMain = uri === avatarUri;
+                <Switch
+                  value={isVisitor}
+                  onValueChange={val => {
+                    setIsVisitor(val);
+                    if (!val) {
+                      setVisitedProfileId(null);
+                    }
+                  }}
+                  trackColor={{
+                    false: appColors.slate300,
+                    true: appColors.blue600,
+                  }}
+                  thumbColor={appColors.white}
+                />
+              </View>
+
+              {/* If Visitor: Select Visited Person */}
+              {isVisitor && (
+                <View style={styles.formGroupSpacing}>
+                  <AppText style={styles.label}>Người được thân nhân *</AppText>
+                  <TouchableOpacity
+                    style={styles.visitorPickerTrigger}
+                    onPress={() => setShowVisitorPicker(true)}
+                    activeOpacity={0.8}
+                  >
+                    <View
+                      style={{
+                        flex: 1,
+                        flexDirection: 'row',
+                        alignItems: 'center',
+                        gap: 6,
+                      }}
+                    >
+                      <UserCheck
+                        size={16}
+                        color={
+                          visitedProfileId
+                            ? appColors.purple700
+                            : appColors.slate400
+                        }
+                      />
+                      <AppText
+                        style={[
+                          styles.visitorPickerValue,
+                          !visitedProfileId && styles.visitorPickerPlaceholder,
+                        ]}
+                        numberOfLines={1}
+                      >
+                        {visitedProfileId &&
+                        officialProfiles.find(u => u.id === visitedProfileId)
+                          ? `${
+                              officialProfiles.find(
+                                u => u.id === visitedProfileId,
+                              )?.fullName
+                            } (${
+                              officialProfiles.find(
+                                u => u.id === visitedProfileId,
+                              )?.code
+                            })`
+                          : 'Nhấn để chọn nhân sự được thăm...'}
+                      </AppText>
+                    </View>
+                    <ChevronDown size={18} color={appColors.slate500} />
+                  </TouchableOpacity>
+
+                  {showVisitorPicker && (
+                    <PickerModal
+                      visible={showVisitorPicker}
+                      title="Chọn người được thân nhân"
+                      items={officialProfiles.map(u => ({
+                        id: u.id,
+                        label: `${u.fullName} (${u.code})`,
+                        subtitle:
+                          rooms.find(r => r.id === u.roomId)?.name ||
+                          'Chưa gán phòng',
+                      }))}
+                      selectedId={visitedProfileId || ''}
+                      onSelect={id => {
+                        setVisitedProfileId(id);
+                        const target = officialProfiles.find(u => u.id === id);
+                        if (target?.roomId) {
+                          setRoomId(target.roomId);
+                        }
+                      }}
+                      onClose={() => setShowVisitorPicker(false)}
+                    />
+                  )}
+                </View>
+              )}
+
+              {/* Room Change */}
+              {rooms.length > 0 && (
+                <View style={styles.formGroupSpacing}>
+                  <AppText style={styles.label}>
+                    Chuyển sang phòng khác:
+                  </AppText>
+                  <View style={styles.chipsRow}>
+                    {rooms.map(r => {
+                      const isSelected = r.id === roomId;
                       return (
-                        <View key={`${uri}-${idx}`} style={styles.photoCard}>
-                          <Image
-                            source={{ uri: appUtils.getUrlImage(uri) }}
-                            style={styles.photoThumb}
-                          />
-
-                          {isMain ? (
-                            <View style={styles.mainBadge}>
-                              <Star size={10} color={appColors.white} />
-                              <AppText style={styles.mainBadgeText}>
-                                Chính
-                              </AppText>
-                            </View>
-                          ) : (
-                            <TouchableOpacity
-                              style={styles.setMainBtn}
-                              onPress={() => setAvatarUri(uri)}
-                              activeOpacity={0.8}
-                            >
-                              <AppText style={styles.setMainText}>
-                                Đặt chính
-                              </AppText>
-                            </TouchableOpacity>
-                          )}
-
-                          <TouchableOpacity
-                            style={styles.deletePhotoBtn}
-                            onPress={() => handleDeletePhoto(uri)}
-                            activeOpacity={0.8}
+                        <TouchableOpacity
+                          key={r.id}
+                          style={[styles.chip, isSelected && styles.chipActive]}
+                          onPress={() => setRoomId(r.id)}
+                        >
+                          <AppText
+                            style={[
+                              styles.chipText,
+                              isSelected && styles.chipTextActive,
+                            ]}
                           >
-                            <Trash2 size={12} color={appColors.red600} />
-                          </TouchableOpacity>
-
-                          {/* Bottom Action Tools: Flip and Rotate */}
-                          <View style={styles.photoBottomTools}>
-                            <TouchableOpacity
-                              style={styles.toolIconBtn}
-                              onPress={() => handleFlipPhoto(uri)}
-                              activeOpacity={0.7}
-                            >
-                              <FlipHorizontal
-                                size={12}
-                                color={appColors.white}
-                              />
-                            </TouchableOpacity>
-                            <TouchableOpacity
-                              style={styles.toolIconBtn}
-                              onPress={() => handleRotatePhoto(uri)}
-                              activeOpacity={0.7}
-                            >
-                              <RotateCw size={12} color={appColors.white} />
-                            </TouchableOpacity>
-                          </View>
-                        </View>
+                            {r.name}
+                          </AppText>
+                        </TouchableOpacity>
                       );
                     })}
                   </View>
-                </ScrollView>
-              )}
-            </View>
-
-            {/* Information Inputs */}
-            <View style={styles.formRow}>
-              <View style={styles.formGroup}>
-                <AppText style={styles.label}>Họ và tên *</AppText>
-                <TextInput
-                  style={styles.input}
-                  value={fullName}
-                  onChangeText={setFullName}
-                  placeholderTextColor={appColors.slate400}
-                />
-              </View>
-
-              <View style={styles.formGroup}>
-                <AppText style={styles.label}>Mã định danh / ID *</AppText>
-                <TextInput
-                  style={styles.input}
-                  value={code}
-                  onChangeText={setCode}
-                  placeholderTextColor={appColors.slate400}
-                />
-              </View>
-            </View>
-
-            {/* Room Change */}
-            {rooms.length > 0 && (
-              <View style={styles.formGroupSpacing}>
-                <AppText style={styles.label}>Chuyển sang phòng khác:</AppText>
-                <View style={styles.chipsRow}>
-                  {rooms.map(r => {
-                    const isSelected = r.id === roomId;
-                    return (
-                      <TouchableOpacity
-                        key={r.id}
-                        style={[styles.chip, isSelected && styles.chipActive]}
-                        onPress={() => setRoomId(r.id)}
-                      >
-                        <AppText
-                          style={[
-                            styles.chipText,
-                            isSelected && styles.chipTextActive,
-                          ]}
-                        >
-                          {r.name}
-                        </AppText>
-                      </TouchableOpacity>
-                    );
-                  })}
                 </View>
-              </View>
-            )}
-          </ScrollView>
-
-          {/* Footer Save Button */}
-          <View style={styles.footer}>
-            <TouchableOpacity style={styles.cancelBtn} onPress={onClose}>
-              <AppText style={styles.cancelBtnText}>Hủy</AppText>
-            </TouchableOpacity>
-
-            <TouchableOpacity
-              style={[styles.saveBtn, isSubmitting && { opacity: 0.7 }]}
-              onPress={handleSave}
-              disabled={isSubmitting}
-            >
-              {isSubmitting ? (
-                <ActivityIndicator size="small" color={appColors.white} />
-              ) : (
-                <Check size={18} color={appColors.white} />
               )}
-              <AppText style={styles.saveBtnText}>
-                {isSubmitting ? 'Đang lưu & tải ảnh...' : 'Lưu thay đổi'}
-              </AppText>
-            </TouchableOpacity>
+            </ScrollView>
+
+            {/* Footer Save Button */}
+            <View style={styles.footer}>
+              <TouchableOpacity style={styles.cancelBtn} onPress={onClose}>
+                <AppText style={styles.cancelBtnText}>Hủy</AppText>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={[styles.saveBtn, isSubmitting && { opacity: 0.7 }]}
+                onPress={handleSave}
+                disabled={isSubmitting}
+              >
+                {isSubmitting ? (
+                  <ActivityIndicator size="small" color={appColors.white} />
+                ) : (
+                  <Check size={18} color={appColors.white} />
+                )}
+                <AppText style={styles.saveBtnText}>
+                  {isSubmitting ? 'Đang lưu & tải ảnh...' : 'Lưu thay đổi'}
+                </AppText>
+              </TouchableOpacity>
+            </View>
           </View>
         </View>
-      </View>
-    </KeyboardAvoidingView>
-  </Modal>
+      </KeyboardAvoidingView>
+    </Modal>
   );
 };
 
@@ -834,5 +979,47 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: '700',
     color: appColors.white,
+  },
+  visitorSwitchRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: '#F8FAFC',
+    padding: 12,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+    marginTop: 12,
+  },
+  visitorSwitchTitle: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: appColors.slate800,
+  },
+  visitorSwitchSub: {
+    fontSize: 11,
+    color: appColors.slate500,
+    marginTop: 2,
+  },
+  visitorPickerTrigger: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: appColors.white,
+    paddingHorizontal: 12,
+    paddingVertical: 11,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: appColors.slate300,
+    marginTop: 4,
+  },
+  visitorPickerValue: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: appColors.slate900,
+  },
+  visitorPickerPlaceholder: {
+    color: appColors.slate400,
+    fontWeight: '400',
   },
 });

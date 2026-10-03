@@ -83,4 +83,20 @@ export class YoloDetectorService {
   public static generateYoloBoundingBox(): BoundingBox {
     return TfliteYoloService.generateBoundingBox();
   }
+
+  /**
+   * Selects which biometric feature extractor to use: 'mobilefacenet' or 'ghostfacenet'
+   */
+  public static async setBiometricModel(
+    type: 'mobilefacenet' | 'ghostfacenet',
+  ): Promise<void> {
+    await TfliteYoloService.getInstance().setBiometricModel(type);
+  }
+
+  /**
+   * Returns currently active biometric model name
+   */
+  public static getBiometricModel(): 'mobilefacenet' | 'ghostfacenet' {
+    return TfliteYoloService.getInstance().biometricModelType;
+  }
 }

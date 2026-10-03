@@ -9,20 +9,24 @@ import {
   ChevronDown,
   Play,
   Sliders,
+  Cpu,
+  Tablet,
 } from 'lucide-react-native';
 import { useAppDispatch, useAppSelector } from '../../../store/hooks';
-import { startSession } from '../../../store/slices/detectorSlice';
+import { startSession, setScanMode } from '../../../store/slices/detectorSlice';
 import { sessionService } from '../../../services/api';
 import { appColors } from '../../../const/app-colors';
 import { useAppToast } from '../../../hooks/use-app-toast';
 import { useResponsive } from '../../../hooks/use-responsive';
 import { StartSessionModal } from './StartSessionModal';
+import { YoloDetectorService } from '../../../services/yolo-detector';
 
 interface HeaderBarProps {
   onOpenManageRooms: () => void;
   onToggleCamera: () => void;
   onSelectZone: () => void;
   onSelectRoom: () => void;
+  onOpenDeviceInfo?: () => void;
 }
 
 export const HeaderBar: React.FC<HeaderBarProps> = ({
@@ -30,6 +34,7 @@ export const HeaderBar: React.FC<HeaderBarProps> = ({
   onToggleCamera,
   onSelectZone,
   onSelectRoom,
+  onOpenDeviceInfo,
 }) => {
   const { isPhone } = useResponsive();
   const dispatch = useAppDispatch();
@@ -41,10 +46,28 @@ export const HeaderBar: React.FC<HeaderBarProps> = ({
     selectedRoomId,
     isSessionActive,
     activeSessionName,
+    scanMode,
   } = useAppSelector(state => state.detector);
 
-  const { showWarnToast } = useAppToast();
+  const { showWarnToast, showSuccessToast } = useAppToast();
   const [showStartSessionModal, setShowStartSessionModal] = useState(false);
+
+  const [activeModel, setActiveModel] = useState<
+    'mobilefacenet' | 'ghostfacenet'
+  >(() => YoloDetectorService.getBiometricModel());
+
+  const handleToggleModel = async () => {
+    const nextModel =
+      activeModel === 'mobilefacenet' ? 'ghostfacenet' : 'mobilefacenet';
+    await YoloDetectorService.setBiometricModel(nextModel);
+    setActiveModel(nextModel);
+    showSuccessToast(
+      'Đã đổi mô hình sinh trắc',
+      nextModel === 'ghostfacenet'
+        ? 'Kích hoạt GhostFaceNetV1-512d (SOTA 2023)'
+        : 'Kích hoạt MobileFaceNet (InsightFace 512d)',
+    );
+  };
 
   const [currentTime, setCurrentTime] = useState<string>(() =>
     dayjs().format('HH:mm:ss'),
@@ -69,10 +92,10 @@ export const HeaderBar: React.FC<HeaderBarProps> = ({
   const selectedRoom = rooms.find(r => r.id === selectedRoomId) || rooms[0];
 
   const handleStartPress = () => {
-    if (!selectedRoom || !selectedRoom.id) {
+    if (scanMode === 'room' && (!selectedRoom || !selectedRoom.id)) {
       showWarnToast(
         'Chưa chọn phòng',
-        'Vui lòng tạo hoặc chọn phòng trước khi bắt đầu phiên!',
+        'Vui lòng tạo hoặc chọn phòng trước khi bắt đầu phiên theo phòng!',
       );
       onOpenManageRooms();
       return;
@@ -80,24 +103,55 @@ export const HeaderBar: React.FC<HeaderBarProps> = ({
     setShowStartSessionModal(true);
   };
 
+  const handleStartSessionConfirm = async (sessionName: string) => {
+    setShowStartSessionModal(false);
+    try {
+      const isRoomMode = scanMode === 'room';
+      const payload = {
+        name: sessionName,
+        roomId: isRoomMode ? selectedRoom?.id : selectedRoom?.id || undefined,
+        roomName: isRoomMode ? selectedRoom?.name : 'Toàn cơ sở',
+        zoneId: isRoomMode ? selectedZone?.id : undefined,
+        zoneName: isRoomMode ? selectedZone?.name : 'Toàn cơ sở',
+        startTime: new Date().toISOString(),
+      };
+      const res = await sessionService.startSession(payload);
+      const beId = res?.data?.id;
+      dispatch(startSession({ id: beId, name: sessionName, scanMode }));
+      showSuccessToast(
+        'Bắt đầu phiên',
+        `Đã khởi tạo phiên trên hệ thống: ${sessionName}`,
+      );
+    } catch (err: any) {
+      console.log(
+        '[HeaderBar] BE start session error, running offline session:',
+        err?.message || err,
+      );
+      dispatch(startSession({ name: sessionName, scanMode }));
+      showSuccessToast(
+        'Bắt đầu phiên (Offline)',
+        `Đang chạy phiên cục bộ: ${sessionName}`,
+      );
+    }
+  };
+
   if (isPhone) {
     return (
       <View style={styles.phoneHeader}>
         {/* Phone Row 1: Brand & Online dot & Session Button & Camera */}
         <View style={styles.phoneRow1}>
-          <View style={styles.brandContainer}>
-            <View style={styles.logoRow}>
-              <AppText style={styles.brandTitlePrimary}>H2Tech</AppText>
-              <AppText style={styles.brandTitleSecondary}> AI</AppText>
-            </View>
-          </View>
-
-          <View style={styles.onlineBadge}>
-            <View style={styles.onlineDot} />
-            <AppText style={styles.onlineText}>ONLINE</AppText>
-          </View>
-
           <View style={styles.phoneRow1Actions}>
+            <TouchableOpacity
+              style={styles.modelToggleBtnPhone}
+              onPress={handleToggleModel}
+              activeOpacity={0.75}
+            >
+              <Cpu size={14} color={appColors.blue600} />
+              <AppText style={styles.modelToggleTextPhone}>
+                {activeModel === 'ghostfacenet' ? 'Ghost' : 'Mobile'}
+              </AppText>
+            </TouchableOpacity>
+
             <TouchableOpacity
               style={styles.iconAction}
               onPress={onToggleCamera}
@@ -105,6 +159,16 @@ export const HeaderBar: React.FC<HeaderBarProps> = ({
             >
               <Camera size={18} color={appColors.gray600} />
             </TouchableOpacity>
+
+            {Boolean(onOpenDeviceInfo) && (
+              <TouchableOpacity
+                style={styles.iconAction}
+                onPress={onOpenDeviceInfo}
+                activeOpacity={0.7}
+              >
+                <Tablet size={18} color={appColors.blue600} />
+              </TouchableOpacity>
+            )}
 
             {!isSessionActive ? (
               <TouchableOpacity
@@ -135,100 +199,165 @@ export const HeaderBar: React.FC<HeaderBarProps> = ({
           </View>
         </View>
 
-        {/* Phone Row 2: Selectors for Zone & Room & Manage */}
-        <View style={styles.phoneRow2}>
+        {/* Phone Mode Toggle Row: Quét All (Cơ sở) vs Theo phòng */}
+        <View style={styles.modeToggleWrapPhone}>
           <TouchableOpacity
-            style={styles.dropdownBtnPhone}
-            onPress={onSelectZone}
+            style={[
+              styles.modeToggleTabPhone,
+              scanMode === 'all' && styles.modeToggleTabActiveAll,
+            ]}
+            onPress={() => {
+              dispatch(setScanMode('all'));
+              showSuccessToast(
+                'Chế độ Quét All',
+                'Xác nhận vào cơ sở cho toàn bộ nhân sự!',
+              );
+            }}
             activeOpacity={0.8}
           >
             <Building2
-              size={15}
-              color={appColors.blue600}
-              style={{ flexShrink: 0 }}
+              size={13}
+              color={scanMode === 'all' ? appColors.white : appColors.slate600}
             />
             <AppText
-              style={styles.dropdownTextPhone}
-              numberOfLines={1}
-              ellipsizeMode="tail"
+              style={[
+                styles.modeToggleTextPhone,
+                scanMode === 'all' && styles.modeToggleTextActive,
+              ]}
             >
-              {selectedZone ? selectedZone.name : 'Chọn Khu'}
+              Quét All (Vào cơ sở)
             </AppText>
-            <ChevronDown
-              size={14}
-              color={appColors.gray500}
-              style={{ flexShrink: 0 }}
-            />
           </TouchableOpacity>
 
           <TouchableOpacity
-            style={styles.dropdownBtnPhone}
-            onPress={onSelectRoom}
+            style={[
+              styles.modeToggleTabPhone,
+              scanMode === 'room' && styles.modeToggleTabActiveRoom,
+            ]}
+            onPress={() => {
+              dispatch(setScanMode('room'));
+              showSuccessToast(
+                'Chế độ Theo phòng',
+                'Chỉ điểm danh nhân sự thuộc phòng đã chọn!',
+              );
+            }}
             activeOpacity={0.8}
           >
             <DoorOpen
-              size={15}
-              color={appColors.blue600}
-              style={{ flexShrink: 0 }}
+              size={13}
+              color={scanMode === 'room' ? appColors.white : appColors.slate600}
             />
             <AppText
-              style={styles.dropdownTextPhone}
-              numberOfLines={1}
-              ellipsizeMode="tail"
+              style={[
+                styles.modeToggleTextPhone,
+                scanMode === 'room' && styles.modeToggleTextActive,
+              ]}
             >
-              {selectedRoom ? selectedRoom.name : 'Chọn Phòng'}
+              Theo phòng
             </AppText>
-            <ChevronDown
-              size={14}
-              color={appColors.gray500}
-              style={{ flexShrink: 0 }}
-            />
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            style={styles.manageBtnPhone}
-            onPress={onOpenManageRooms}
-            activeOpacity={0.8}
-          >
-            <Sliders
-              size={16}
-              color={appColors.gray600}
-              style={{ flexShrink: 0 }}
-            />
           </TouchableOpacity>
         </View>
+
+        {/* Phone Row 2: Selectors for Zone & Room & Manage (only when in room mode) */}
+        {scanMode === 'room' ? (
+          <View style={styles.phoneRow2}>
+            <TouchableOpacity
+              style={styles.dropdownBtnPhone}
+              onPress={onSelectZone}
+              activeOpacity={0.8}
+            >
+              <Building2
+                size={15}
+                color={appColors.blue600}
+                style={{ flexShrink: 0 }}
+              />
+              <AppText
+                style={styles.dropdownTextPhone}
+                numberOfLines={1}
+                ellipsizeMode="tail"
+              >
+                {selectedZone ? selectedZone.name : 'Chọn Khu'}
+              </AppText>
+              <ChevronDown
+                size={14}
+                color={appColors.gray500}
+                style={{ flexShrink: 0 }}
+              />
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={styles.dropdownBtnPhone}
+              onPress={onSelectRoom}
+              activeOpacity={0.8}
+            >
+              <DoorOpen
+                size={15}
+                color={appColors.blue600}
+                style={{ flexShrink: 0 }}
+              />
+              <AppText
+                style={styles.dropdownTextPhone}
+                numberOfLines={1}
+                ellipsizeMode="tail"
+              >
+                {selectedRoom ? selectedRoom.name : 'Chọn Phòng'}
+              </AppText>
+              <ChevronDown
+                size={14}
+                color={appColors.gray500}
+                style={{ flexShrink: 0 }}
+              />
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={styles.manageBtnPhone}
+              onPress={onOpenManageRooms}
+              activeOpacity={0.8}
+            >
+              <Sliders
+                size={16}
+                color={appColors.gray600}
+                style={{ flexShrink: 0 }}
+              />
+            </TouchableOpacity>
+          </View>
+        ) : (
+          <View style={styles.phoneFacilityBanner}>
+            <Building2 size={13} color={appColors.blue600} />
+            <AppText style={styles.phoneFacilityBannerText}>
+              Toàn bộ cơ sở • {userProfiles?.length || 0} nhân sự
+            </AppText>
+          </View>
+        )}
 
         {/* Start Session Modal */}
         <StartSessionModal
           visible={showStartSessionModal}
-          roomName={selectedRoom ? selectedRoom.name : ''}
-          zoneName={selectedZone ? selectedZone.name : ''}
+          scanMode={scanMode}
+          roomName={
+            scanMode === 'all'
+              ? 'Tất cả phòng ban'
+              : selectedRoom
+              ? selectedRoom.name
+              : ''
+          }
+          zoneName={
+            scanMode === 'all'
+              ? 'Toàn cơ sở'
+              : selectedZone
+              ? selectedZone.name
+              : ''
+          }
           memberCount={
-            selectedRoom
-              ? userProfiles.filter(u => u.roomId === selectedRoom.id).length
+            scanMode === 'all'
+              ? (userProfiles || []).length
+              : selectedRoom
+              ? (userProfiles || []).filter(u => u.roomId === selectedRoom.id)
+                  .length
               : 0
           }
           onClose={() => setShowStartSessionModal(false)}
-          onStart={(sessionName: string) => {
-            setShowStartSessionModal(false);
-            dispatch(startSession({ name: sessionName }));
-            if (selectedRoom) {
-              sessionService
-                .startSession({
-                  name: sessionName,
-                  roomId: selectedRoom.id,
-                  roomName: selectedRoom.name,
-                  zoneId: selectedZone?.id,
-                  zoneName: selectedZone?.name,
-                })
-                .catch(err => {
-                  console.log(
-                    '[HeaderBar] Failed to start session on BE:',
-                    err,
-                  );
-                });
-            }
-          }}
+          onStart={handleStartSessionConfirm}
         />
       </View>
     );
@@ -237,83 +366,141 @@ export const HeaderBar: React.FC<HeaderBarProps> = ({
   return (
     <View style={styles.header}>
       {/* Brand logo & status */}
-      <View style={styles.brandContainer}>
-        <View style={styles.logoRow}>
-          <AppText style={styles.brandTitlePrimary}>H2Tech</AppText>
-          <AppText style={styles.brandTitleSecondary}> AI</AppText>
-        </View>
-        <AppText style={styles.brandSub}>FACE CHECK</AppText>
-      </View>
 
-      <View style={styles.onlineBadge}>
-        <View style={styles.onlineDot} />
-        <AppText style={styles.onlineText}>ONLINE</AppText>
-      </View>
-
-      {/* Selectors for Zone & Room */}
+      {/* Selectors for Zone & Room & Mode */}
       <View style={styles.selectorsRow}>
-        {/* Zone Selector */}
-        <TouchableOpacity
-          style={styles.dropdownBtn}
-          onPress={onSelectZone}
-          activeOpacity={0.8}
-        >
-          <Building2
-            size={18}
-            color={appColors.blue600}
-            style={{ flexShrink: 0 }}
-          />
-          <AppText
-            style={styles.dropdownText}
-            numberOfLines={1}
-            ellipsizeMode="tail"
+        {/* Mode Toggle: Quét All (Cơ sở) vs Theo phòng */}
+        <View style={styles.modeToggleWrapTablet}>
+          <TouchableOpacity
+            style={[
+              styles.modeToggleTabTablet,
+              scanMode === 'all' && styles.modeToggleTabActiveAll,
+            ]}
+            onPress={() => {
+              dispatch(setScanMode('all'));
+              showSuccessToast(
+                'Chế độ Quét All',
+                'Xác nhận vào cơ sở cho toàn bộ nhân sự!',
+              );
+            }}
+            activeOpacity={0.8}
           >
-            {selectedZone ? selectedZone.name : 'Chọn Khu'}
-          </AppText>
-          <ChevronDown
-            size={18}
-            color={appColors.gray500}
-            style={{ flexShrink: 0 }}
-          />
-        </TouchableOpacity>
+            <Building2
+              size={14}
+              color={scanMode === 'all' ? appColors.white : appColors.slate600}
+            />
+            <AppText
+              style={[
+                styles.modeToggleTextTablet,
+                scanMode === 'all' && styles.modeToggleTextActive,
+              ]}
+            >
+              Quét All (Cơ sở)
+            </AppText>
+          </TouchableOpacity>
 
-        {/* Room Selector */}
-        <TouchableOpacity
-          style={styles.dropdownBtn}
-          onPress={onSelectRoom}
-          activeOpacity={0.8}
-        >
-          <DoorOpen
-            size={18}
-            color={appColors.blue600}
-            style={{ flexShrink: 0 }}
-          />
-          <AppText
-            style={styles.dropdownText}
-            numberOfLines={1}
-            ellipsizeMode="tail"
+          <TouchableOpacity
+            style={[
+              styles.modeToggleTabTablet,
+              scanMode === 'room' && styles.modeToggleTabActiveRoom,
+            ]}
+            onPress={() => {
+              dispatch(setScanMode('room'));
+              showSuccessToast(
+                'Chế độ Theo phòng',
+                'Chỉ điểm danh nhân sự thuộc phòng đã chọn!',
+              );
+            }}
+            activeOpacity={0.8}
           >
-            {selectedRoom ? selectedRoom.name : 'Chọn Phòng'}
-          </AppText>
-          <ChevronDown
-            size={18}
-            color={appColors.gray500}
-            style={{ flexShrink: 0 }}
-          />
-        </TouchableOpacity>
+            <DoorOpen
+              size={14}
+              color={scanMode === 'room' ? appColors.white : appColors.slate600}
+            />
+            <AppText
+              style={[
+                styles.modeToggleTextTablet,
+                scanMode === 'room' && styles.modeToggleTextActive,
+              ]}
+            >
+              Theo phòng
+            </AppText>
+          </TouchableOpacity>
+        </View>
 
-        {/* Manage Zones & Rooms */}
-        <TouchableOpacity
-          style={styles.manageBtn}
-          onPress={onOpenManageRooms}
-          activeOpacity={0.8}
-        >
-          <Sliders
-            size={16}
-            color={appColors.gray600}
-            style={{ flexShrink: 0 }}
-          />
-        </TouchableOpacity>
+        {scanMode === 'room' ? (
+          <>
+            {/* Zone Selector */}
+            <TouchableOpacity
+              style={styles.dropdownBtn}
+              onPress={onSelectZone}
+              activeOpacity={0.8}
+            >
+              <Building2
+                size={16}
+                color={appColors.blue600}
+                style={{ flexShrink: 0 }}
+              />
+              <AppText
+                style={styles.dropdownText}
+                numberOfLines={1}
+                ellipsizeMode="tail"
+              >
+                {selectedZone ? selectedZone.name : 'Chọn Khu'}
+              </AppText>
+              <ChevronDown
+                size={16}
+                color={appColors.gray500}
+                style={{ flexShrink: 0 }}
+              />
+            </TouchableOpacity>
+
+            {/* Room Selector */}
+            <TouchableOpacity
+              style={styles.dropdownBtn}
+              onPress={onSelectRoom}
+              activeOpacity={0.8}
+            >
+              <DoorOpen
+                size={16}
+                color={appColors.blue600}
+                style={{ flexShrink: 0 }}
+              />
+              <AppText
+                style={styles.dropdownText}
+                numberOfLines={1}
+                ellipsizeMode="tail"
+              >
+                {selectedRoom ? selectedRoom.name : 'Chọn Phòng'}
+              </AppText>
+              <ChevronDown
+                size={16}
+                color={appColors.gray500}
+                style={{ flexShrink: 0 }}
+              />
+            </TouchableOpacity>
+
+            {/* Manage Zones & Rooms */}
+            <TouchableOpacity
+              style={styles.manageBtn}
+              onPress={onOpenManageRooms}
+              activeOpacity={0.8}
+            >
+              <Sliders
+                size={16}
+                color={appColors.gray600}
+                style={{ flexShrink: 0 }}
+              />
+            </TouchableOpacity>
+          </>
+        ) : (
+          <View style={styles.tabletFacilityBanner}>
+            <Building2 size={16} color={appColors.blue600} />
+            <AppText style={styles.tabletFacilityBannerText}>
+              Toàn bộ cơ sở • {userProfiles?.length || 0} nhân sự
+            </AppText>
+          </View>
+        )}
 
         {/* Session Action Button */}
         {!isSessionActive ? (
@@ -323,7 +510,7 @@ export const HeaderBar: React.FC<HeaderBarProps> = ({
             activeOpacity={0.85}
           >
             <Play
-              size={16}
+              size={15}
               color={appColors.white}
               fill={appColors.white}
               style={{ flexShrink: 0 }}
@@ -343,12 +530,33 @@ export const HeaderBar: React.FC<HeaderBarProps> = ({
       {/* System utilities & Live Clock */}
       <View style={styles.systemInfoRow}>
         <TouchableOpacity
+          style={styles.modelToggleBtn}
+          onPress={handleToggleModel}
+          activeOpacity={0.75}
+        >
+          <Cpu size={15} color={appColors.blue600} />
+          <AppText style={styles.modelToggleText}>
+            {activeModel === 'ghostfacenet' ? 'GhostFaceNet' : 'MobileFaceNet'}
+          </AppText>
+        </TouchableOpacity>
+
+        <TouchableOpacity
           style={styles.iconAction}
           onPress={onToggleCamera}
           activeOpacity={0.7}
         >
           <Camera size={20} color={appColors.gray600} />
         </TouchableOpacity>
+
+        {Boolean(onOpenDeviceInfo) && (
+          <TouchableOpacity
+            style={styles.iconAction}
+            onPress={onOpenDeviceInfo}
+            activeOpacity={0.7}
+          >
+            <Tablet size={20} color={appColors.blue600} />
+          </TouchableOpacity>
+        )}
 
         {/* Real-time Clock */}
         <View style={styles.clockContainer}>
@@ -360,31 +568,31 @@ export const HeaderBar: React.FC<HeaderBarProps> = ({
       {/* Start Session Modal */}
       <StartSessionModal
         visible={showStartSessionModal}
-        roomName={selectedRoom ? selectedRoom.name : ''}
-        zoneName={selectedZone ? selectedZone.name : ''}
+        scanMode={scanMode}
+        roomName={
+          scanMode === 'all'
+            ? 'Tất cả phòng ban'
+            : selectedRoom
+            ? selectedRoom.name
+            : ''
+        }
+        zoneName={
+          scanMode === 'all'
+            ? 'Toàn cơ sở'
+            : selectedZone
+            ? selectedZone.name
+            : ''
+        }
         memberCount={
-          selectedRoom
-            ? userProfiles.filter(u => u.roomId === selectedRoom.id).length
+          scanMode === 'all'
+            ? (userProfiles || []).length
+            : selectedRoom
+            ? (userProfiles || []).filter(u => u.roomId === selectedRoom.id)
+                .length
             : 0
         }
         onClose={() => setShowStartSessionModal(false)}
-        onStart={(sessionName: string) => {
-          setShowStartSessionModal(false);
-          dispatch(startSession({ name: sessionName }));
-          if (selectedRoom) {
-            sessionService
-              .startSession({
-                name: sessionName,
-                roomId: selectedRoom.id,
-                roomName: selectedRoom.name,
-                zoneId: selectedZone?.id,
-                zoneName: selectedZone?.name,
-              })
-              .catch(err => {
-                console.log('[HeaderBar] Failed to start session on BE:', err);
-              });
-          }
-        }}
+        onStart={handleStartSessionConfirm}
       />
     </View>
   );
@@ -646,5 +854,122 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     borderWidth: 1,
     borderColor: appColors.slate200,
+  },
+  modelToggleBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: appColors.blue50,
+    borderWidth: 1,
+    borderColor: appColors.blue200,
+    paddingHorizontal: 10,
+    paddingVertical: 7,
+    borderRadius: 9,
+    gap: 6,
+  },
+  modelToggleText: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: appColors.blue700,
+  },
+  modelToggleBtnPhone: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: appColors.blue50,
+    borderWidth: 1,
+    borderColor: appColors.blue200,
+    paddingHorizontal: 8,
+    paddingVertical: 5,
+    borderRadius: 8,
+    gap: 4,
+  },
+  modelToggleTextPhone: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: appColors.blue700,
+  },
+  modeToggleWrapPhone: {
+    flexDirection: 'row',
+    backgroundColor: appColors.slate100,
+    borderRadius: 10,
+    padding: 3,
+    gap: 4,
+  },
+  modeToggleTabPhone: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 6,
+    paddingHorizontal: 8,
+    borderRadius: 8,
+    gap: 5,
+  },
+  modeToggleTabActiveAll: {
+    backgroundColor: appColors.blue600,
+  },
+  modeToggleTabActiveRoom: {
+    backgroundColor: appColors.emerald600,
+  },
+  modeToggleTextPhone: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: appColors.slate600,
+  },
+  modeToggleTextActive: {
+    color: appColors.white,
+  },
+  phoneFacilityBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: appColors.blue50,
+    borderRadius: 9,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    gap: 7,
+    borderWidth: 1,
+    borderColor: appColors.blue200,
+  },
+  phoneFacilityBannerText: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: appColors.blue700,
+  },
+  modeToggleWrapTablet: {
+    flexDirection: 'row',
+    backgroundColor: appColors.slate100,
+    borderRadius: 12,
+    padding: 3,
+    gap: 4,
+    borderWidth: 1,
+    borderColor: appColors.slate200,
+  },
+  modeToggleTabTablet: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 7,
+    paddingHorizontal: 12,
+    borderRadius: 9,
+    gap: 6,
+  },
+  modeToggleTextTablet: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: appColors.slate600,
+  },
+  tabletFacilityBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: appColors.blue50,
+    borderRadius: 12,
+    paddingHorizontal: 14,
+    paddingVertical: 9,
+    gap: 8,
+    borderWidth: 1,
+    borderColor: appColors.blue200,
+  },
+  tabletFacilityBannerText: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: appColors.blue700,
   },
 });

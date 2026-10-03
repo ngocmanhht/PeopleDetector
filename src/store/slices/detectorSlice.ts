@@ -6,6 +6,10 @@ import {
   AttendanceStatus,
   DetectionResult,
   Room,
+  ScanDirection,
+  ScanEvent,
+  ScanHistoryItem,
+  ScanMode,
   UserProfile,
   Zone,
 } from '../../model/detector';
@@ -17,14 +21,21 @@ export interface DetectorState {
   userProfiles: UserProfile[];
   selectedZoneId: string;
   selectedRoomId: string;
+  scanMode: ScanMode; // 'all' (Quét xác nhận vào cơ sở) | 'room' (Quét theo phòng)
+  scanDirection: ScanDirection; // Chốt quét hiện tại: 'in' (vào) | 'out' (ra)
   isSessionActive: boolean;
   activeSessionId: string | null;
   activeSessionName: string | null;
   sessionStartTime: string | null;
+  sessionStartEpoch: number | null;
+  sessionDurationSeconds: number; // Đếm giây thời gian phiên quét
   attendanceMap: Record<string, AttendanceRecord>; // key: userId
   activeDetection: DetectionResult | null;
   alerts: AlertLog[];
   sessions: AttendanceSession[];
+  scanHistory: ScanHistoryItem[]; // Lịch sử các người/khuôn mặt quét được trong phiên kèm IN/OUT
+  isDeviceAuthorized: boolean | null; // null = chưa kiểm tra, true = hợp lệ, false = chưa được cấp quyền/bị khóa
+  deviceLockMessage: string;
 }
 
 import { PHOTO_CONFIG } from '../../const/photo-config';
@@ -35,14 +46,21 @@ const initialState: DetectorState = {
   userProfiles: [],
   selectedZoneId: '',
   selectedRoomId: '',
+  scanMode: 'all',
+  scanDirection: 'in',
   isSessionActive: false,
   activeSessionId: null,
   activeSessionName: null,
   sessionStartTime: null,
+  sessionStartEpoch: null,
+  sessionDurationSeconds: 0,
   attendanceMap: {},
   activeDetection: null,
   alerts: [],
   sessions: [],
+  scanHistory: [],
+  isDeviceAuthorized: null,
+  deviceLockMessage: '',
 };
 
 const detectorSlice = createSlice({
@@ -65,7 +83,28 @@ const detectorSlice = createSlice({
       state.userProfiles = action.payload;
     },
     setSessions: (state, action: PayloadAction<AttendanceSession[]>) => {
-      state.sessions = action.payload;
+      // BE không lưu chiều IN/OUT nên giữ lại scanHistory cục bộ theo id phiên
+      const local = new Map(
+        (state.sessions || []).map(s => [s.id, s] as const),
+      );
+      const merged = action.payload.map(s => {
+        const prev = local.get(s.id);
+        return prev?.scanHistory?.length
+          ? {
+              ...s,
+              scanHistory: prev.scanHistory,
+              scanMode: s.scanMode || prev.scanMode,
+              durationSeconds: s.durationSeconds ?? prev.durationSeconds,
+              totalScansCount: prev.totalScansCount,
+            }
+          : s;
+      });
+      // Giữ các phiên chỉ có ở máy (chưa/không đồng bộ được lên BE)
+      const remoteIds = new Set(action.payload.map(s => s.id));
+      const localOnly = (state.sessions || []).filter(
+        s => !remoteIds.has(s.id),
+      );
+      state.sessions = [...merged, ...localOnly];
     },
     setAlerts: (state, action: PayloadAction<AlertLog[]>) => {
       state.alerts = action.payload;
@@ -80,6 +119,17 @@ const detectorSlice = createSlice({
     },
     setSelectedRoomId: (state, action: PayloadAction<string>) => {
       state.selectedRoomId = action.payload;
+    },
+    setScanMode: (state, action: PayloadAction<ScanMode>) => {
+      state.scanMode = action.payload;
+    },
+    setScanDirection: (state, action: PayloadAction<ScanDirection>) => {
+      state.scanDirection = action.payload;
+    },
+    tickSessionDuration: (state) => {
+      if (state.isSessionActive) {
+        state.sessionDurationSeconds += 1;
+      }
     },
     addZone: (
       state,
@@ -150,6 +200,9 @@ const detectorSlice = createSlice({
         zoneId?: string;
         avatarUri?: string;
         photos?: string[];
+        isVisitor?: boolean;
+        visitedProfileId?: string | null;
+        visitedProfile?: { id: string; fullName: string; code: string; roomName?: string } | null;
       }>
     ) => {
       const user = state.userProfiles.find(u => u.id === action.payload.id);
@@ -160,6 +213,9 @@ const detectorSlice = createSlice({
         if (action.payload.zoneId !== undefined) user.zoneId = action.payload.zoneId;
         if (action.payload.avatarUri !== undefined) user.avatarUri = action.payload.avatarUri;
         if (action.payload.photos !== undefined) user.photos = action.payload.photos;
+        if (action.payload.isVisitor !== undefined) user.isVisitor = action.payload.isVisitor;
+        if (action.payload.visitedProfileId !== undefined) user.visitedProfileId = action.payload.visitedProfileId;
+        if (action.payload.visitedProfile !== undefined) user.visitedProfile = action.payload.visitedProfile;
       }
     },
     addPhotosToProfile: (
@@ -337,42 +393,60 @@ const detectorSlice = createSlice({
       state.alerts = [];
       state.sessions = [];
     },
-    startSession: (state, action: PayloadAction<{ name?: string } | undefined>) => {
+    startSession: (
+      state,
+      action: PayloadAction<
+        { id?: string; name?: string; scanMode?: ScanMode } | undefined
+      >,
+    ) => {
       state.isSessionActive = true;
       const now = dayjs();
+      const currentMode = action?.payload?.scanMode || state.scanMode || 'all';
+      state.scanMode = currentMode;
+      const isAll = currentMode === 'all';
+
       // Rule: Nếu không đặt tên phiên thì mặc định là "Phiên HH:mm dd-mm-yyyy"
-      const defaultName = `Phiên ${now.format('HH:mm DD-MM-YYYY')}`;
+      const defaultName = isAll
+        ? `Phiên vào cơ sở ${now.format('HH:mm DD-MM-YYYY')}`
+        : `Phiên ${now.format('HH:mm DD-MM-YYYY')}`;
       const sessionName = action?.payload?.name?.trim() || defaultName;
 
       state.activeSessionName = sessionName;
       state.sessionStartTime = now.format('HH:mm:ss DD/MM/YYYY');
+      state.sessionStartEpoch = Date.now();
+      state.sessionDurationSeconds = 0;
       state.attendanceMap = {};
       state.activeDetection = null;
+      state.scanHistory = [];
 
       const room = state.rooms.find(r => r.id === state.selectedRoomId);
       const zone =
         state.zones.find(z => z.id === state.selectedZoneId) ||
         state.zones.find(z => z.id === room?.zoneId);
-      const roomUsers = state.userProfiles.filter(u => u.roomId === state.selectedRoomId);
+      const targetUsers = isAll
+        ? state.userProfiles.filter(u => !u.isVisitor)
+        : state.userProfiles.filter(u => u.roomId === state.selectedRoomId);
 
-      const sessionId = `session-${Date.now()}`;
+      const sessionId = action?.payload?.id || `session-${Date.now()}`;
       state.activeSessionId = sessionId;
 
       const newSession: AttendanceSession = {
         id: sessionId,
         name: sessionName,
-        zoneId: zone?.id || '',
-        zoneName: zone?.name || '',
-        roomId: room?.id || state.selectedRoomId,
-        roomName: room?.name || 'Phòng',
+        zoneId: isAll ? undefined : (zone?.id || ''),
+        zoneName: isAll ? 'Toàn cơ sở' : (zone?.name || ''),
+        roomId: isAll ? undefined : (room?.id || state.selectedRoomId),
+        roomName: isAll ? 'Toàn cơ sở' : (room?.name || 'Phòng'),
         startTime: now.format('HH:mm:ss DD/MM/YYYY'),
         createdAt: now.toISOString(),
         isActive: true,
         attendanceMap: {},
-        totalCount: roomUsers.length,
+        totalCount: targetUsers.length,
         presentCount: 0,
-        missingCount: roomUsers.length,
+        missingCount: targetUsers.length,
         verifyCount: 0,
+        scanMode: currentMode,
+        durationSeconds: 0,
       };
 
       if (!Array.isArray(state.sessions)) {
@@ -383,7 +457,9 @@ const detectorSlice = createSlice({
       state.alerts.unshift({
         id: `alert-${Date.now()}`,
         title: 'Bắt đầu phiên',
-        message: `Khởi tạo "${sessionName}" cho ${room?.name || 'phòng'}`,
+        message: isAll
+          ? `Bắt đầu "${sessionName}" - Chế độ Quét All (Vào cơ sở)`
+          : `Khởi tạo "${sessionName}" cho ${room?.name || 'phòng'}`,
         timestamp: now.format('HH:mm:ss'),
         type: 'info',
       });
@@ -396,17 +472,232 @@ const detectorSlice = createSlice({
         if (activeSess) {
           activeSess.isActive = false;
           activeSess.endTime = now.format('HH:mm:ss DD/MM/YYYY');
+          activeSess.durationSeconds = state.sessionDurationSeconds;
+          activeSess.attendanceMap = { ...state.attendanceMap };
+          activeSess.scanHistory = [...state.scanHistory];
+
+          const verifiedItems = state.scanHistory.filter(i => i.status === 'present');
+          const unverifiedItems = state.scanHistory.filter(i => i.status === 'verify');
+          const totalScans = state.scanHistory.reduce(
+            (sum, item) => sum + item.scanCount,
+            0,
+          );
+
+          activeSess.presentCount = verifiedItems.length;
+          activeSess.verifyCount = unverifiedItems.length;
+          activeSess.totalScansCount = totalScans;
+
+          if (activeSess.scanMode === 'all') {
+            const officialUsers = state.userProfiles.filter(u => !u.isVisitor);
+            activeSess.totalCount = officialUsers.length;
+            activeSess.missingCount = Math.max(
+              0,
+              officialUsers.length - verifiedItems.length,
+            );
+          } else {
+            const roomMembers = state.userProfiles.filter(
+              u => u.roomId === activeSess.roomId,
+            );
+            activeSess.totalCount = roomMembers.length;
+            activeSess.missingCount = Math.max(
+              0,
+              roomMembers.length - verifiedItems.length,
+            );
+          }
         }
       }
+      const durSec = state.sessionDurationSeconds;
+      const minStr = Math.floor(durSec / 60);
+      const secStr = durSec % 60;
       state.alerts.unshift({
         id: `alert-${Date.now()}`,
         title: 'Kết thúc phiên',
-        message: `Phiên "${state.activeSessionName || 'Điểm danh'}" đã kết thúc thành công`,
+        message: `Phiên "${state.activeSessionName || 'Điểm danh'}" đã kết thúc. Thời gian quét: ${minStr}p ${secStr}s.`,
         timestamp: now.format('HH:mm:ss'),
         type: 'info',
       });
       state.activeSessionId = null;
       state.activeSessionName = null;
+      state.sessionStartEpoch = null;
+    },
+    recordScanEvent: (
+      state,
+      action: PayloadAction<{
+        userId?: string;
+        fullName?: string;
+        code?: string;
+        avatarUri?: string;
+        roomId?: string;
+        roomName?: string;
+        zoneId?: string;
+        zoneName?: string;
+        status: AttendanceStatus;
+        confidence: number;
+        timestamp: string;
+        scanMode: ScanMode;
+        direction?: ScanDirection;
+        isVisitor?: boolean;
+        visitedProfileName?: string;
+      }>
+    ) => {
+      const {
+        userId,
+        fullName,
+        code,
+        avatarUri,
+        roomId,
+        roomName,
+        zoneId,
+        zoneName,
+        status,
+        confidence,
+        timestamp,
+        scanMode,
+        isVisitor,
+        visitedProfileName,
+      } = action.payload;
+      const direction: ScanDirection =
+        action.payload.direction || state.scanDirection || 'in';
+
+      const nowEpoch = Date.now();
+      const isAll = scanMode === 'all';
+      if (!Array.isArray(state.scanHistory)) {
+        state.scanHistory = [];
+      }
+
+      const event: ScanEvent = {
+        id: `scan-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
+        timestamp,
+        epochTime: nowEpoch,
+        confidence,
+        avatarUri,
+        scanMode,
+        direction,
+        isVisitor,
+        visitedProfileName,
+      };
+
+      if (userId && status === 'present') {
+        const existingIdx = state.scanHistory.findIndex(
+          item => item.userId === userId
+        );
+
+        if (existingIdx >= 0) {
+          const existing = state.scanHistory[existingIdx];
+          existing.scanCount += 1;
+          existing.lastScanTime = timestamp;
+          existing.confidence = Math.max(existing.confidence, confidence);
+          if (avatarUri) existing.avatarUri = avatarUri;
+          if (isVisitor !== undefined) existing.isVisitor = isVisitor;
+          if (visitedProfileName !== undefined) existing.visitedProfileName = visitedProfileName;
+          existing.lastDirection = direction;
+
+          if (direction === 'in') {
+            existing.inCount = (existing.inCount || 0) + 1;
+            if (!existing.firstInTime) {
+              existing.firstInTime = timestamp;
+              existing.firstInEpoch = nowEpoch;
+            }
+          } else {
+            existing.outCount = (existing.outCount || 0) + 1;
+            existing.lastOutTime = timestamp;
+            existing.lastOutEpoch = nowEpoch;
+          }
+
+          existing.history.unshift(event);
+          // Move to top of the list for fresh real-time feed
+          state.scanHistory.splice(existingIdx, 1);
+          state.scanHistory.unshift(existing);
+        } else {
+          const newItem: ScanHistoryItem = {
+            id: userId,
+            userId,
+            fullName: fullName || 'Nhân sự',
+            code: code || '',
+            avatarUri,
+            roomId,
+            roomName,
+            zoneId,
+            zoneName,
+            status: 'present',
+            confidence,
+            firstInTime: direction === 'in' ? timestamp : undefined,
+            firstInEpoch: direction === 'in' ? nowEpoch : undefined,
+            lastOutTime: direction === 'out' ? timestamp : undefined,
+            lastOutEpoch: direction === 'out' ? nowEpoch : undefined,
+            lastDirection: direction,
+            inCount: direction === 'in' ? 1 : 0,
+            outCount: direction === 'out' ? 1 : 0,
+            scanCount: 1,
+            history: [event],
+            lastScanTime: timestamp,
+            isFacilityEntry: isAll,
+            isVisitor,
+            visitedProfileName,
+          };
+          state.scanHistory.unshift(newItem);
+        }
+      } else {
+        // Unverified stranger
+        const recentStranger = state.scanHistory.find(
+          item => item.status === 'verify' && nowEpoch - (item.firstInEpoch || item.lastOutEpoch || 0) < 4000
+        );
+
+        if (recentStranger) {
+          recentStranger.scanCount += 1;
+          recentStranger.lastScanTime = timestamp;
+          recentStranger.lastDirection = direction;
+          if (direction === 'in') {
+            recentStranger.inCount = (recentStranger.inCount || 0) + 1;
+            if (!recentStranger.firstInTime) {
+              recentStranger.firstInTime = timestamp;
+              recentStranger.firstInEpoch = nowEpoch;
+            }
+          } else {
+            recentStranger.outCount = (recentStranger.outCount || 0) + 1;
+            recentStranger.lastOutTime = timestamp;
+            recentStranger.lastOutEpoch = nowEpoch;
+          }
+          if (avatarUri) recentStranger.avatarUri = avatarUri;
+          recentStranger.history.unshift(event);
+        } else {
+          const newStranger: ScanHistoryItem = {
+            id: `stranger-${Date.now()}-${Math.random().toString(36).substring(2, 5)}`,
+            fullName: 'Chưa xác minh',
+            code: 'STRANGER',
+            avatarUri,
+            status: 'verify',
+            confidence,
+            firstInTime: direction === 'in' ? timestamp : undefined,
+            firstInEpoch: direction === 'in' ? nowEpoch : undefined,
+            lastOutTime: direction === 'out' ? timestamp : undefined,
+            lastOutEpoch: direction === 'out' ? nowEpoch : undefined,
+            lastDirection: direction,
+            inCount: direction === 'in' ? 1 : 0,
+            outCount: direction === 'out' ? 1 : 0,
+            scanCount: 1,
+            history: [event],
+            lastScanTime: timestamp,
+            isFacilityEntry: isAll,
+          };
+          state.scanHistory.unshift(newStranger);
+        }
+      }
+
+      // Keep active session in sessions array synced with latest scanHistory
+      if (state.activeSessionId && state.sessions) {
+        const activeSess = state.sessions.find(s => s.id === state.activeSessionId);
+        if (activeSess) {
+          activeSess.scanHistory = [...state.scanHistory];
+          activeSess.totalScansCount = state.scanHistory.reduce(
+            (sum, item) => sum + item.scanCount,
+            0,
+          );
+        }
+      }
+    },
+    clearScanHistory: (state) => {
+      state.scanHistory = [];
     },
     deleteSession: (state, action: PayloadAction<string>) => {
       if (state.sessions) {
@@ -499,10 +790,20 @@ const detectorSlice = createSlice({
     clearAlerts: (state) => {
       state.alerts = [];
     },
+    setDeviceAuthorized: (
+      state,
+      action: PayloadAction<{ authorized: boolean; message?: string }>,
+    ) => {
+      state.isDeviceAuthorized = action.payload.authorized;
+      if (action.payload.message !== undefined) {
+        state.deviceLockMessage = action.payload.message;
+      }
+    },
   },
 });
 
 export const {
+  setDeviceAuthorized,
   setZones,
   setRooms,
   setUserProfiles,
@@ -510,6 +811,11 @@ export const {
   setAlerts,
   setSelectedZoneId,
   setSelectedRoomId,
+  setScanMode,
+  setScanDirection,
+  tickSessionDuration,
+  recordScanEvent,
+  clearScanHistory,
   addZone,
   addRoom,
   addUserProfile,

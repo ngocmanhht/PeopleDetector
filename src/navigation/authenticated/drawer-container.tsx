@@ -5,6 +5,7 @@ import {
   TouchableOpacity,
   Animated,
   StatusBar,
+  Image,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { AppText } from '../../components/app-text';
@@ -16,7 +17,6 @@ import {
   Settings,
   PanelLeftClose,
   PanelLeftOpen,
-  ScanFace,
   ChevronRight,
   ShieldCheck,
 } from 'lucide-react-native';
@@ -30,6 +30,7 @@ import { CmsScreen } from '../../screens/cms';
 import { AlertsScreen } from '../../screens/alerts';
 import { SettingsScreen } from '../../screens/settings';
 import { useBackendSync } from '../../hooks/use-backend-sync';
+import { appImages } from '../../const/app-images';
 
 export type DrawerTabKey = 'home' | 'rooms' | 'cms' | 'alerts' | 'settings';
 
@@ -107,11 +108,19 @@ export const DrawerContainer: React.FC = () => {
               {isExpanded ? (
                 <View style={styles.expandedBrand}>
                   <View style={styles.brandIconWrap}>
-                    <ScanFace size={24} color={appColors.blue600} />
+                    <Image
+                      source={appImages.logo}
+                      style={{
+                        width: '100%',
+                        height: undefined,
+                        resizeMode: 'contain',
+                        aspectRatio: 1,
+                      }}
+                    />
                   </View>
                   <View style={{ flex: 1 }}>
-                    <AppText style={styles.brandTitle}>VietCore AI</AppText>
-                    <AppText style={styles.brandSubtitle}>FACE CHECK</AppText>
+                    <AppText style={styles.brandTitle}>HT nhận diện</AppText>
+                    <AppText style={styles.brandSubtitle}>CS2</AppText>
                   </View>
                   <TouchableOpacity
                     style={styles.toggleBtn}
@@ -200,7 +209,9 @@ export const DrawerContainer: React.FC = () => {
                         <AppText
                           style={[
                             styles.badgePillText,
-                            item.badgeDanger ? styles.badgePillTextDanger : null,
+                            item.badgeDanger
+                              ? styles.badgePillTextDanger
+                              : null,
                           ]}
                         >
                           {item.badge}
@@ -308,7 +319,9 @@ export const DrawerContainer: React.FC = () => {
                           item.badgeDanger ? styles.badgePillDanger : null,
                         ]}
                       >
-                        <AppText style={styles.bottomBadgeText}>{item.badge}</AppText>
+                        <AppText style={styles.bottomBadgeText}>
+                          {item.badge}
+                        </AppText>
                       </View>
                     )}
                   </View>

@@ -11,6 +11,7 @@ import {
   ActivityIndicator,
   KeyboardAvoidingView,
   Platform,
+  Switch,
 } from 'react-native';
 import { AppText } from '../../../components/app-text';
 import { useAppDispatch, useAppSelector } from '../../../store/hooks';
@@ -24,7 +25,10 @@ import {
   UserPlus,
   FlipHorizontal,
   RotateCw,
+  ChevronDown,
+  UserCheck,
 } from 'lucide-react-native';
+import { PickerModal } from './PickerModal';
 import { addUserProfile } from '../../../store/slices/detectorSlice';
 import { profileService, uploadService } from '../../../services/api';
 import { PHOTO_CONFIG } from '../../../const/photo-config';
@@ -37,17 +41,20 @@ import { appUtils } from '../../../utils';
 interface AddUserModalProps {
   visible: boolean;
   onClose: () => void;
+  initialPhotoUri?: string | null;
+  initialFullName?: string;
 }
 
 export const AddUserModal: React.FC<AddUserModalProps> = ({
   visible,
   onClose,
+  initialPhotoUri,
+  initialFullName,
 }) => {
   const { isPhone } = useResponsive();
   const dispatch = useAppDispatch();
-  const { zones, rooms, selectedZoneId, selectedRoomId } = useAppSelector(
-    state => state.detector,
-  );
+  const { zones, rooms, userProfiles, selectedZoneId, selectedRoomId } =
+    useAppSelector(state => state.detector);
 
   const [fullName, setFullName] = useState('');
   const [code, setCode] = useState('');
@@ -55,7 +62,12 @@ export const AddUserModal: React.FC<AddUserModalProps> = ({
   const [roomId, setRoomId] = useState(selectedRoomId || (rooms[0]?.id ?? ''));
   const [photos, setPhotos] = useState<string[]>([]);
   const [selectedAvatarIndex, setSelectedAvatarIndex] = useState(0);
+  const [isVisitor, setIsVisitor] = useState(false);
+  const [visitedProfileId, setVisitedProfileId] = useState<string | null>(null);
+  const [showVisitorPicker, setShowVisitorPicker] = useState(false);
   const [error, setError] = useState('');
+
+  const officialProfiles = (userProfiles || []).filter(u => !u.isVisitor);
 
   // Keep zone and room in sync when modal opens
   React.useEffect(() => {
@@ -65,8 +77,18 @@ export const AddUserModal: React.FC<AddUserModalProps> = ({
       setCode(prev =>
         prev ? prev : `NS-${Math.floor(1000 + Math.random() * 9000)}`,
       );
+      setIsVisitor(false);
+      setVisitedProfileId(null);
+      if (initialPhotoUri) {
+        setPhotos([initialPhotoUri]);
+        setSelectedAvatarIndex(0);
+      } else {
+        setPhotos([]);
+      }
+      setFullName(initialFullName || '');
+      setError('');
     }
-  }, [visible, selectedZoneId, selectedRoomId]);
+  }, [visible, selectedZoneId, selectedRoomId, initialPhotoUri, initialFullName]);
 
   const roomsInZone = rooms.filter(r => r.zoneId === zoneId);
 
@@ -175,6 +197,10 @@ export const AddUserModal: React.FC<AddUserModalProps> = ({
       setError('Vui lòng nhập mã định danh / mã nhân sự');
       return;
     }
+    if (isVisitor && !visitedProfileId) {
+      setError('Vui lòng chọn người được thân nhân');
+      return;
+    }
     if (!roomId) {
       setError('Vui lòng chọn Phòng');
       return;
@@ -189,7 +215,10 @@ export const AddUserModal: React.FC<AddUserModalProps> = ({
           serverPhotos.push(uri);
         } else {
           try {
-            const res = await uploadService.uploadImage(uri, UploadFolder.PROFILES);
+            const res = await uploadService.uploadImage(
+              uri,
+              UploadFolder.PROFILES,
+            );
             serverPhotos.push(res.path);
           } catch {
             serverPhotos.push(uri);
@@ -202,13 +231,27 @@ export const AddUserModal: React.FC<AddUserModalProps> = ({
           ? serverPhotos[selectedAvatarIndex] || serverPhotos[0]
           : '';
 
+      const visitedUser = officialProfiles.find(u => u.id === visitedProfileId);
       const newProfileData = {
         fullName: fullName.trim(),
         code: code.trim(),
-        zoneId: zoneId || '',
-        roomId,
+        zoneId:
+          isVisitor && visitedUser?.zoneId ? visitedUser.zoneId : zoneId || '',
+        roomId: isVisitor && visitedUser?.roomId ? visitedUser.roomId : roomId,
         avatarUri: mainAvatar,
         photos: serverPhotos,
+        isVisitor,
+        visitedProfileId: isVisitor ? visitedProfileId : null,
+        visitedProfile:
+          isVisitor && visitedUser
+            ? {
+                id: visitedUser.id,
+                fullName: visitedUser.fullName,
+                code: visitedUser.code,
+                roomName:
+                  rooms.find(r => r.id === visitedUser.roomId)?.name || '',
+              }
+            : null,
       };
 
       dispatch(addUserProfile(newProfileData));
@@ -221,6 +264,8 @@ export const AddUserModal: React.FC<AddUserModalProps> = ({
       setCode('');
       setPhotos([]);
       setSelectedAvatarIndex(0);
+      setIsVisitor(false);
+      setVisitedProfileId(null);
       setError('');
       onClose();
     } finally {
@@ -251,7 +296,9 @@ export const AddUserModal: React.FC<AddUserModalProps> = ({
           >
             {/* Header */}
             <View style={styles.header}>
-              <View style={[styles.headerTitleRow, { flex: 1, paddingRight: 8 }]}>
+              <View
+                style={[styles.headerTitleRow, { flex: 1, paddingRight: 8 }]}
+              >
                 <View style={styles.iconWrap}>
                   <UserPlus size={20} color={appColors.blue600} />
                 </View>
@@ -277,254 +324,362 @@ export const AddUserModal: React.FC<AddUserModalProps> = ({
               showsVerticalScrollIndicator={false}
               keyboardShouldPersistTaps="handled"
             >
-            {error ? <AppText style={styles.errorText}>{error}</AppText> : null}
+              {error ? (
+                <AppText style={styles.errorText}>{error}</AppText>
+              ) : null}
 
-            {/* Photo Section */}
-            <View style={styles.photoSection}>
-              <View
-                style={[
-                  styles.photoHeaderRow,
-                  isPhone && styles.photoHeaderRowPhone,
-                ]}
-              >
-                <View>
-                  <AppText style={styles.sectionLabel}>
-                    Ảnh nhận diện ({photos.length}/
-                    {PHOTO_CONFIG.MAX_PHOTOS_PER_USER} ảnh)
-                  </AppText>
-                  <AppText style={styles.sectionDesc}>
-                    Chụp hoặc chọn nhiều góc mặt để tăng độ chính xác nhận diện
-                  </AppText>
+              {/* Photo Section */}
+              <View style={styles.photoSection}>
+                <View
+                  style={[
+                    styles.photoHeaderRow,
+                    isPhone && styles.photoHeaderRowPhone,
+                  ]}
+                >
+                  <View>
+                    <AppText style={styles.sectionLabel}>
+                      Ảnh nhận diện ({photos.length}/
+                      {PHOTO_CONFIG.MAX_PHOTOS_PER_USER} ảnh)
+                    </AppText>
+                    <AppText style={styles.sectionDesc}>
+                      Chụp hoặc chọn nhiều góc mặt để tăng độ chính xác nhận
+                      diện
+                    </AppText>
+                  </View>
+
+                  {/* Camera and Gallery buttons */}
+                  <View style={styles.photoActions}>
+                    <TouchableOpacity
+                      style={styles.actionBtnCamera}
+                      onPress={handleCapturePhoto}
+                      disabled={
+                        photos.length >= PHOTO_CONFIG.MAX_PHOTOS_PER_USER
+                      }
+                    >
+                      <Camera size={16} color={appColors.white} />
+                      <AppText style={styles.actionBtnCameraText}>
+                        Chụp ảnh
+                      </AppText>
+                    </TouchableOpacity>
+
+                    <TouchableOpacity
+                      style={styles.actionBtnLibrary}
+                      onPress={handlePickPhotos}
+                      disabled={
+                        photos.length >= PHOTO_CONFIG.MAX_PHOTOS_PER_USER
+                      }
+                    >
+                      <ImageIcon size={16} color={appColors.blue600} />
+                      <AppText style={styles.actionBtnLibraryText}>
+                        Chọn ảnh
+                      </AppText>
+                    </TouchableOpacity>
+                  </View>
                 </View>
 
-                {/* Camera and Gallery buttons */}
-                <View style={styles.photoActions}>
-                  <TouchableOpacity
-                    style={styles.actionBtnCamera}
-                    onPress={handleCapturePhoto}
-                    disabled={photos.length >= PHOTO_CONFIG.MAX_PHOTOS_PER_USER}
-                  >
-                    <Camera size={16} color={appColors.white} />
-                    <AppText style={styles.actionBtnCameraText}>
-                      Chụp ảnh
+                {/* Photos Grid / List */}
+                {photos.length === 0 ? (
+                  <View style={styles.emptyPhotoBox}>
+                    <ImageIcon size={36} color={appColors.slate300} />
+                    <AppText style={styles.emptyPhotoText}>
+                      Chưa có ảnh nào. Nhấn "Chụp ảnh" hoặc "Chọn ảnh" (tối đa{' '}
+                      {PHOTO_CONFIG.MAX_PHOTOS_PER_USER} ảnh)
                     </AppText>
-                  </TouchableOpacity>
+                  </View>
+                ) : (
+                  <ScrollView
+                    horizontal
+                    showsHorizontalScrollIndicator={false}
+                    style={styles.photosScroll}
+                  >
+                    <View style={styles.photosRow}>
+                      {photos.map((uri, idx) => {
+                        const isMain = idx === selectedAvatarIndex;
+                        return (
+                          <View key={`${uri}-${idx}`} style={styles.photoCard}>
+                            <Image
+                              source={{ uri: appUtils.getUrlImage(uri) }}
+                              style={styles.photoThumb}
+                            />
 
-                  <TouchableOpacity
-                    style={styles.actionBtnLibrary}
-                    onPress={handlePickPhotos}
-                    disabled={photos.length >= PHOTO_CONFIG.MAX_PHOTOS_PER_USER}
-                  >
-                    <ImageIcon size={16} color={appColors.blue600} />
-                    <AppText style={styles.actionBtnLibraryText}>
-                      Chọn ảnh
-                    </AppText>
-                  </TouchableOpacity>
+                            {/* Main badge or Set Main */}
+                            {isMain ? (
+                              <View style={styles.mainBadge}>
+                                <Star size={10} color={appColors.white} />
+                                <AppText style={styles.mainBadgeText}>
+                                  Chính
+                                </AppText>
+                              </View>
+                            ) : (
+                              <TouchableOpacity
+                                style={styles.setMainBtn}
+                                onPress={() => setSelectedAvatarIndex(idx)}
+                                activeOpacity={0.8}
+                              >
+                                <AppText style={styles.setMainText}>
+                                  Đặt chính
+                                </AppText>
+                              </TouchableOpacity>
+                            )}
+
+                            {/* Delete button */}
+                            <TouchableOpacity
+                              style={styles.deletePhotoBtn}
+                              onPress={() => handleDeletePhoto(idx)}
+                              activeOpacity={0.8}
+                            >
+                              <Trash2 size={12} color={appColors.red600} />
+                            </TouchableOpacity>
+
+                            {/* Bottom Action Tools: Flip and Rotate */}
+                            <View style={styles.photoBottomTools}>
+                              <TouchableOpacity
+                                style={styles.toolIconBtn}
+                                onPress={() => handleFlipPhoto(idx)}
+                                activeOpacity={0.7}
+                              >
+                                <FlipHorizontal
+                                  size={12}
+                                  color={appColors.white}
+                                />
+                              </TouchableOpacity>
+                              <TouchableOpacity
+                                style={styles.toolIconBtn}
+                                onPress={() => handleRotatePhoto(idx)}
+                                activeOpacity={0.7}
+                              >
+                                <RotateCw size={12} color={appColors.white} />
+                              </TouchableOpacity>
+                            </View>
+                          </View>
+                        );
+                      })}
+                    </View>
+                  </ScrollView>
+                )}
+              </View>
+
+              {/* Full Name & Code */}
+              <View style={styles.formRow}>
+                <View style={styles.formGroup}>
+                  <AppText style={styles.label}>Họ và tên *</AppText>
+                  <TextInput
+                    style={styles.input}
+                    placeholder="Ví dụ: Nguyễn Văn An"
+                    value={fullName}
+                    onChangeText={setFullName}
+                    placeholderTextColor={appColors.slate400}
+                  />
+                </View>
+
+                <View style={styles.formGroup}>
+                  <AppText style={styles.label}>
+                    Mã người dùng / CCCD / ID *
+                  </AppText>
+                  <TextInput
+                    style={styles.input}
+                    placeholder="Ví dụ: NS-1024"
+                    value={code}
+                    onChangeText={setCode}
+                    placeholderTextColor={appColors.slate400}
+                  />
                 </View>
               </View>
 
-              {/* Photos Grid / List */}
-              {photos.length === 0 ? (
-                <View style={styles.emptyPhotoBox}>
-                  <ImageIcon size={36} color={appColors.slate300} />
-                  <AppText style={styles.emptyPhotoText}>
-                    Chưa có ảnh nào. Nhấn "Chụp ảnh" hoặc "Chọn ảnh" (tối đa{' '}
-                    {PHOTO_CONFIG.MAX_PHOTOS_PER_USER} ảnh)
+              {/* Visitor Switch Section */}
+              <View style={styles.visitorSwitchRow}>
+                <View style={{ flex: 1, paddingRight: 8 }}>
+                  <AppText style={styles.visitorSwitchTitle}>Thân nhân</AppText>
+                  <AppText style={styles.visitorSwitchSub}>
+                    Bật nếu là người thân / khách đến thân nhân nhân sự
                   </AppText>
                 </View>
-              ) : (
-                <ScrollView
-                  horizontal
-                  showsHorizontalScrollIndicator={false}
-                  style={styles.photosScroll}
-                >
-                  <View style={styles.photosRow}>
-                    {photos.map((uri, idx) => {
-                      const isMain = idx === selectedAvatarIndex;
+                <Switch
+                  value={isVisitor}
+                  onValueChange={val => {
+                    setIsVisitor(val);
+                    if (!val) {
+                      setVisitedProfileId(null);
+                    }
+                  }}
+                  trackColor={{
+                    false: appColors.slate300,
+                    true: appColors.blue600,
+                  }}
+                  thumbColor={appColors.white}
+                />
+              </View>
+
+              {/* If Visitor: Select Visited Person */}
+              {isVisitor && (
+                <View style={styles.formGroupSpacing}>
+                  <AppText style={styles.label}>Người được thân nhân *</AppText>
+                  <TouchableOpacity
+                    style={styles.visitorPickerTrigger}
+                    onPress={() => setShowVisitorPicker(true)}
+                    activeOpacity={0.8}
+                  >
+                    <View
+                      style={{
+                        flex: 1,
+                        flexDirection: 'row',
+                        alignItems: 'center',
+                        gap: 6,
+                      }}
+                    >
+                      <UserCheck
+                        size={16}
+                        color={
+                          visitedProfileId
+                            ? appColors.purple700
+                            : appColors.slate400
+                        }
+                      />
+                      <AppText
+                        style={[
+                          styles.visitorPickerValue,
+                          !visitedProfileId && styles.visitorPickerPlaceholder,
+                        ]}
+                        numberOfLines={1}
+                      >
+                        {visitedProfileId &&
+                        officialProfiles.find(u => u.id === visitedProfileId)
+                          ? `${
+                              officialProfiles.find(
+                                u => u.id === visitedProfileId,
+                              )?.fullName
+                            } (${
+                              officialProfiles.find(
+                                u => u.id === visitedProfileId,
+                              )?.code
+                            })`
+                          : 'Nhấn để chọn nhân sự được thăm...'}
+                      </AppText>
+                    </View>
+                    <ChevronDown size={18} color={appColors.slate500} />
+                  </TouchableOpacity>
+
+                  {showVisitorPicker && (
+                    <PickerModal
+                      visible={showVisitorPicker}
+                      title="Chọn người được thân nhân"
+                      items={officialProfiles.map(u => ({
+                        id: u.id,
+                        label: `${u.fullName} (${u.code})`,
+                        subtitle:
+                          rooms.find(r => r.id === u.roomId)?.name ||
+                          'Chưa gán phòng',
+                      }))}
+                      selectedId={visitedProfileId || ''}
+                      onSelect={id => {
+                        setVisitedProfileId(id);
+                        const target = officialProfiles.find(u => u.id === id);
+                        if (target?.roomId) {
+                          setRoomId(target.roomId);
+                        }
+                        if (target?.zoneId) {
+                          setZoneId(target.zoneId);
+                        }
+                      }}
+                      onClose={() => setShowVisitorPicker(false)}
+                    />
+                  )}
+                </View>
+              )}
+
+              {/* Zone Selector */}
+              {zones.length > 0 && (
+                <View style={styles.formGroupSpacing}>
+                  <AppText style={styles.label}>Khu vực (Zone)</AppText>
+                  <View style={styles.chipsRow}>
+                    {zones.map(z => {
+                      const isSelected = z.id === zoneId;
                       return (
-                        <View key={`${uri}-${idx}`} style={styles.photoCard}>
-                          <Image
-                            source={{ uri: appUtils.getUrlImage(uri) }}
-                            style={styles.photoThumb}
-                          />
-
-                          {/* Main badge or Set Main */}
-                          {isMain ? (
-                            <View style={styles.mainBadge}>
-                              <Star size={10} color={appColors.white} />
-                              <AppText style={styles.mainBadgeText}>
-                                Chính
-                              </AppText>
-                            </View>
-                          ) : (
-                            <TouchableOpacity
-                              style={styles.setMainBtn}
-                              onPress={() => setSelectedAvatarIndex(idx)}
-                              activeOpacity={0.8}
-                            >
-                              <AppText style={styles.setMainText}>
-                                Đặt chính
-                              </AppText>
-                            </TouchableOpacity>
-                          )}
-
-                          {/* Delete button */}
-                          <TouchableOpacity
-                            style={styles.deletePhotoBtn}
-                            onPress={() => handleDeletePhoto(idx)}
-                            activeOpacity={0.8}
+                        <TouchableOpacity
+                          key={z.id}
+                          style={[styles.chip, isSelected && styles.chipActive]}
+                          onPress={() => {
+                            setZoneId(z.id);
+                            const firstR = rooms.find(r => r.zoneId === z.id);
+                            if (firstR) setRoomId(firstR.id);
+                          }}
+                        >
+                          <AppText
+                            style={[
+                              styles.chipText,
+                              isSelected && styles.chipTextActive,
+                            ]}
                           >
-                            <Trash2 size={12} color={appColors.red600} />
-                          </TouchableOpacity>
-
-                          {/* Bottom Action Tools: Flip and Rotate */}
-                          <View style={styles.photoBottomTools}>
-                            <TouchableOpacity
-                              style={styles.toolIconBtn}
-                              onPress={() => handleFlipPhoto(idx)}
-                              activeOpacity={0.7}
-                            >
-                              <FlipHorizontal
-                                size={12}
-                                color={appColors.white}
-                              />
-                            </TouchableOpacity>
-                            <TouchableOpacity
-                              style={styles.toolIconBtn}
-                              onPress={() => handleRotatePhoto(idx)}
-                              activeOpacity={0.7}
-                            >
-                              <RotateCw size={12} color={appColors.white} />
-                            </TouchableOpacity>
-                          </View>
-                        </View>
+                            {z.name}
+                          </AppText>
+                        </TouchableOpacity>
                       );
                     })}
                   </View>
-                </ScrollView>
+                </View>
               )}
-            </View>
 
-            {/* Full Name & Code */}
-            <View style={styles.formRow}>
-              <View style={styles.formGroup}>
-                <AppText style={styles.label}>Họ và tên *</AppText>
-                <TextInput
-                  style={styles.input}
-                  placeholder="Ví dụ: Nguyễn Văn An"
-                  value={fullName}
-                  onChangeText={setFullName}
-                  placeholderTextColor={appColors.slate400}
-                />
-              </View>
-
-              <View style={styles.formGroup}>
-                <AppText style={styles.label}>
-                  Mã người dùng / CCCD / ID *
-                </AppText>
-                <TextInput
-                  style={styles.input}
-                  placeholder="Ví dụ: NS-1024"
-                  value={code}
-                  onChangeText={setCode}
-                  placeholderTextColor={appColors.slate400}
-                />
-              </View>
-            </View>
-
-            {/* Zone Selector */}
-            {zones.length > 0 && (
-              <View style={styles.formGroupSpacing}>
-                <AppText style={styles.label}>Khu vực (Zone)</AppText>
-                <View style={styles.chipsRow}>
-                  {zones.map(z => {
-                    const isSelected = z.id === zoneId;
-                    return (
-                      <TouchableOpacity
-                        key={z.id}
-                        style={[styles.chip, isSelected && styles.chipActive]}
-                        onPress={() => {
-                          setZoneId(z.id);
-                          const firstR = rooms.find(r => r.zoneId === z.id);
-                          if (firstR) setRoomId(firstR.id);
-                        }}
-                      >
-                        <AppText
-                          style={[
-                            styles.chipText,
-                            isSelected && styles.chipTextActive,
-                          ]}
+              {/* Room Selector */}
+              {rooms.length > 0 ? (
+                <View style={styles.formGroupSpacing}>
+                  <AppText style={styles.label}>Phòng trực thuộc *</AppText>
+                  <View style={styles.chipsRow}>
+                    {(roomsInZone.length > 0 ? roomsInZone : rooms).map(r => {
+                      const isSelected = r.id === roomId;
+                      return (
+                        <TouchableOpacity
+                          key={r.id}
+                          style={[styles.chip, isSelected && styles.chipActive]}
+                          onPress={() => setRoomId(r.id)}
                         >
-                          {z.name}
-                        </AppText>
-                      </TouchableOpacity>
-                    );
-                  })}
+                          <AppText
+                            style={[
+                              styles.chipText,
+                              isSelected && styles.chipTextActive,
+                            ]}
+                          >
+                            {r.name}
+                          </AppText>
+                        </TouchableOpacity>
+                      );
+                    })}
+                  </View>
                 </View>
-              </View>
-            )}
-
-            {/* Room Selector */}
-            {rooms.length > 0 ? (
-              <View style={styles.formGroupSpacing}>
-                <AppText style={styles.label}>Phòng trực thuộc *</AppText>
-                <View style={styles.chipsRow}>
-                  {(roomsInZone.length > 0 ? roomsInZone : rooms).map(r => {
-                    const isSelected = r.id === roomId;
-                    return (
-                      <TouchableOpacity
-                        key={r.id}
-                        style={[styles.chip, isSelected && styles.chipActive]}
-                        onPress={() => setRoomId(r.id)}
-                      >
-                        <AppText
-                          style={[
-                            styles.chipText,
-                            isSelected && styles.chipTextActive,
-                          ]}
-                        >
-                          {r.name}
-                        </AppText>
-                      </TouchableOpacity>
-                    );
-                  })}
-                </View>
-              </View>
-            ) : (
-              <View style={styles.warningBox}>
-                <AppText style={styles.warningText}>
-                  Chưa có phòng nào được tạo. Bạn vui lòng tạo phòng trước ở mục
-                  "Danh sách phòng".
-                </AppText>
-              </View>
-            )}
-          </ScrollView>
-
-          {/* Footer Save Button */}
-          <View style={styles.footer}>
-            <TouchableOpacity style={styles.cancelBtn} onPress={onClose}>
-              <AppText style={styles.cancelBtnText}>Hủy</AppText>
-            </TouchableOpacity>
-
-            <TouchableOpacity
-              style={[styles.saveBtn, isSubmitting && { opacity: 0.7 }]}
-              onPress={handleSave}
-              disabled={isSubmitting}
-            >
-              {isSubmitting ? (
-                <ActivityIndicator size="small" color={appColors.white} />
               ) : (
-                <Check size={18} color={appColors.white} />
+                <View style={styles.warningBox}>
+                  <AppText style={styles.warningText}>
+                    Chưa có phòng nào được tạo. Bạn vui lòng tạo phòng trước ở
+                    mục "Danh sách phòng".
+                  </AppText>
+                </View>
               )}
-              <AppText style={styles.saveBtnText}>
-                {isSubmitting ? 'Đang lưu & tải ảnh...' : 'Lưu hồ sơ'}
-              </AppText>
-            </TouchableOpacity>
+            </ScrollView>
+
+            {/* Footer Save Button */}
+            <View style={styles.footer}>
+              <TouchableOpacity style={styles.cancelBtn} onPress={onClose}>
+                <AppText style={styles.cancelBtnText}>Hủy</AppText>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={[styles.saveBtn, isSubmitting && { opacity: 0.7 }]}
+                onPress={handleSave}
+                disabled={isSubmitting}
+              >
+                {isSubmitting ? (
+                  <ActivityIndicator size="small" color={appColors.white} />
+                ) : (
+                  <Check size={18} color={appColors.white} />
+                )}
+                <AppText style={styles.saveBtnText}>
+                  {isSubmitting ? 'Đang lưu & tải ảnh...' : 'Lưu hồ sơ'}
+                </AppText>
+              </TouchableOpacity>
+            </View>
           </View>
         </View>
-      </View>
-    </KeyboardAvoidingView>
-  </Modal>
+      </KeyboardAvoidingView>
+    </Modal>
   );
 };
 
@@ -869,5 +1024,47 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: '700',
     color: appColors.white,
+  },
+  visitorSwitchRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: '#F8FAFC',
+    padding: 12,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+    marginTop: 12,
+  },
+  visitorSwitchTitle: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: appColors.slate800,
+  },
+  visitorSwitchSub: {
+    fontSize: 11,
+    color: appColors.slate500,
+    marginTop: 2,
+  },
+  visitorPickerTrigger: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: appColors.white,
+    paddingHorizontal: 12,
+    paddingVertical: 11,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: appColors.slate300,
+    marginTop: 4,
+  },
+  visitorPickerValue: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: appColors.slate900,
+  },
+  visitorPickerPlaceholder: {
+    color: appColors.slate400,
+    fontWeight: '400',
   },
 });

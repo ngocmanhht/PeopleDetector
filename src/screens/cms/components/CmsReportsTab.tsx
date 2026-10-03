@@ -25,6 +25,7 @@ export const CmsReportsTab: React.FC = () => {
   const [exportMonth, setExportMonth] = useState<number>(now.getMonth() + 1);
   const [exportYear, setExportYear] = useState<number>(now.getFullYear());
   const [exportRoomId, setExportRoomId] = useState<string>('all');
+  const [exportUserType, setExportUserType] = useState<'all' | 'official' | 'visitor'>('all');
   const [isExporting, setIsExporting] = useState(false);
 
   // Export Excel handler
@@ -35,6 +36,7 @@ export const CmsReportsTab: React.FC = () => {
         month: exportMonth,
         year: exportYear,
         roomId: exportRoomId === 'all' ? undefined : exportRoomId,
+        userType: exportUserType,
         sessions,
         userProfiles,
         rooms,
@@ -129,6 +131,65 @@ export const CmsReportsTab: React.FC = () => {
                 </TouchableOpacity>
               ))}
             </View>
+          </View>
+        </View>
+
+        {/* User Type Filter */}
+        <View style={{ marginTop: 14 }}>
+          <AppText style={styles.fieldLabel}>
+            Phân loại đối tượng xuất báo cáo:
+          </AppText>
+          <View style={{ flexDirection: 'row', gap: 8, marginTop: 4 }}>
+            <TouchableOpacity
+              style={[
+                styles.roomFilterChip,
+                exportUserType === 'all' && styles.roomFilterChipActive,
+              ]}
+              onPress={() => setExportUserType('all')}
+            >
+              <AppText
+                style={[
+                  styles.roomFilterChipText,
+                  exportUserType === 'all' && styles.roomFilterChipTextActive,
+                ]}
+              >
+                Tất cả ({userProfiles.length})
+              </AppText>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={[
+                styles.roomFilterChip,
+                exportUserType === 'official' && styles.roomFilterChipActive,
+              ]}
+              onPress={() => setExportUserType('official')}
+            >
+              <AppText
+                style={[
+                  styles.roomFilterChipText,
+                  exportUserType === 'official' && styles.roomFilterChipTextActive,
+                ]}
+              >
+                Chính thức ({userProfiles.filter(u => !u.isVisitor).length})
+              </AppText>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={[
+                styles.roomFilterChip,
+                exportUserType === 'visitor' && { backgroundColor: '#F3E8FF', borderColor: '#C084FC' },
+              ]}
+              onPress={() => setExportUserType('visitor')}
+            >
+              <AppText
+                style={[
+                  styles.roomFilterChipText,
+                  exportUserType === 'visitor' && { color: '#7E22CE', fontWeight: '700' },
+                ]}
+              >
+                Khách thăm ({userProfiles.filter(u => !!u.isVisitor).length})
+              </AppText>
+            </TouchableOpacity>
           </View>
         </View>
 

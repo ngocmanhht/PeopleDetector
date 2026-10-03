@@ -1,17 +1,13 @@
 import * as XLSX from 'xlsx';
 import Share from 'react-native-share';
 import dayjs from 'dayjs';
-import {
-  AttendanceSession,
-  Room,
-  UserProfile,
-  Zone,
-} from '../model/detector';
+import { AttendanceSession, Room, UserProfile, Zone } from '../model/detector';
 
 export interface MonthlyExportOptions {
   month: number; // 1 - 12
   year: number; // e.g. 2026
   roomId?: string; // Optional: filter by room
+  userType?: 'all' | 'official' | 'visitor'; // Optional: filter by user type
   zones: Zone[];
   rooms: Room[];
   userProfiles: UserProfile[];
@@ -39,6 +35,7 @@ export const exportMonthlyAttendanceExcel = async ({
   month,
   year,
   roomId,
+  userType = 'all',
   zones,
   rooms,
   userProfiles,
@@ -61,10 +58,16 @@ export const exportMonthlyAttendanceExcel = async ({
       return matchRoom && matchDate;
     });
 
-    // Users to export
-    const targetUsers = roomId
+    // Users to export with userType filter
+    let targetUsers = roomId
       ? userProfiles.filter(u => u.roomId === roomId)
       : userProfiles;
+
+    if (userType === 'official') {
+      targetUsers = targetUsers.filter(u => !u.isVisitor);
+    } else if (userType === 'visitor') {
+      targetUsers = targetUsers.filter(u => !!u.isVisitor);
+    }
 
     // ==========================================
     // 1. SHEET 1: TỔNG HỢP CHUYÊN CẦN THÁNG
@@ -73,13 +76,23 @@ export const exportMonthlyAttendanceExcel = async ({
       [`BÁO CÁO ĐIỂM DANH & NHÂN SỰ THÁNG ${monthYearSlash}`],
       [`Thời gian xuất báo cáo: ${dayjs().format('HH:mm:ss DD/MM/YYYY')}`],
       [
-        `Tổng số nhân sự: ${targetUsers.length} | Tổng số phiên trong tháng: ${monthlySessions.length}`,
+        `Tổng số nhân sự: ${targetUsers.length} | Tổng số phiên trong tháng: ${
+          monthlySessions.length
+        } | Phân loại: ${
+          userType === 'official'
+            ? 'Chính thức'
+            : userType === 'visitor'
+            ? 'Thân nhân'
+            : 'Tất cả'
+        }`,
       ],
       [], // Empty row
       [
         'STT',
+        'Loại đối tượng',
         'Mã Nhân sự/HV',
         'Họ và tên',
+        'Người được thân nhân',
         'Phòng ban/Lớp',
         'Khu vực',
         'Tình trạng CMS',
@@ -116,10 +129,22 @@ export const exportMonthlyAttendanceExcel = async ({
           ? 0
           : 100;
 
+      const visitedName = user.isVisitor
+        ? user.visitedProfile
+          ? `${user.visitedProfile.fullName} (${user.visitedProfile.code})`
+          : userProfiles.find(v => v.id === user.visitedProfileId)
+          ? `${
+              userProfiles.find(v => v.id === user.visitedProfileId)?.fullName
+            } (${userProfiles.find(v => v.id === user.visitedProfileId)?.code})`
+          : '-'
+        : '-';
+
       summaryRows.push([
         index + 1,
+        user.isVisitor ? 'Thân nhân' : 'Chính thức',
         user.code,
         user.fullName,
+        visitedName,
         room?.name || 'Chưa gán phòng',
         zone?.name || 'Chưa gán khu',
         getConditionStatusLabel(user.conditionStatus),
@@ -133,8 +158,10 @@ export const exportMonthlyAttendanceExcel = async ({
     const summaryWs = XLSX.utils.aoa_to_sheet(summaryRows);
     summaryWs['!cols'] = [
       { wch: 6 }, // STT
+      { wch: 18 }, // Loại đối tượng
       { wch: 16 }, // Mã
       { wch: 26 }, // Họ tên
+      { wch: 28 }, // Người được thăm
       { wch: 22 }, // Phòng
       { wch: 20 }, // Khu
       { wch: 22 }, // Tình trạng
@@ -152,6 +179,8 @@ export const exportMonthlyAttendanceExcel = async ({
       [],
       [
         'STT',
+        'Loại đối tượng',
+        'Người được thân nhân',
         'Tên phiên điểm danh',
         'Phòng',
         'Khu vực',
@@ -182,11 +211,29 @@ export const exportMonthlyAttendanceExcel = async ({
         const recordTime = record?.timestamp || '-';
         const confidenceText =
           record?.confidence !== undefined
-            ? `${record.confidence > 1 ? Math.round(record.confidence) : Math.round(record.confidence * 100)}%`
+            ? `${
+                record.confidence > 1
+                  ? Math.round(record.confidence)
+                  : Math.round(record.confidence * 100)
+              }%`
             : '-';
+
+        const visitedName = user.isVisitor
+          ? user.visitedProfile
+            ? `${user.visitedProfile.fullName} (${user.visitedProfile.code})`
+            : userProfiles.find(v => v.id === user.visitedProfileId)
+            ? `${
+                userProfiles.find(v => v.id === user.visitedProfileId)?.fullName
+              } (${
+                userProfiles.find(v => v.id === user.visitedProfileId)?.code
+              })`
+            : '-'
+          : '-';
 
         detailRows.push([
           detailIndex++,
+          user.isVisitor ? 'Thân nhân' : 'Chính thức',
+          visitedName,
           session.name,
           session.roomName || room?.name || 'Phòng',
           session.zoneName || zone?.name || 'Khu',
@@ -203,6 +250,8 @@ export const exportMonthlyAttendanceExcel = async ({
     const detailWs = XLSX.utils.aoa_to_sheet(detailRows);
     detailWs['!cols'] = [
       { wch: 6 },
+      { wch: 18 },
+      { wch: 28 },
       { wch: 26 },
       { wch: 20 },
       { wch: 18 },

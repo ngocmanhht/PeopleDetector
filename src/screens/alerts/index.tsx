@@ -15,7 +15,6 @@ import {
   AlertCircle,
   Info,
   Trash2,
-  Plus,
 } from 'lucide-react-native';
 import { addAlert, clearAlerts } from '../../store/slices/detectorSlice';
 import { appColors } from '../../const/app-colors';
@@ -36,11 +35,15 @@ export const AlertsScreen: React.FC = () => {
     isRefetching,
   } = useInfiniteAlertsQuery();
 
-  const [activeFilter, setActiveFilter] = useState<'all' | 'warning' | 'error' | 'info'>('all');
+  const [activeFilter, setActiveFilter] = useState<
+    'all' | 'warning' | 'error' | 'info'
+  >('all');
 
   const alerts = useMemo(() => {
     if (alertsInfiniteData?.pages) {
-      const apiAlerts = alertsInfiniteData.pages.flatMap(page => page.data || []);
+      const apiAlerts = alertsInfiniteData.pages.flatMap(
+        page => page.data || [],
+      );
       if (apiAlerts.length > 0) return apiAlerts;
     }
     return reduxAlerts;
@@ -52,7 +55,11 @@ export const AlertsScreen: React.FC = () => {
   });
 
   const handleSimulateAlert = () => {
-    const types: Array<'warning' | 'error' | 'info'> = ['warning', 'info', 'error'];
+    const types: Array<'warning' | 'error' | 'info'> = [
+      'warning',
+      'info',
+      'error',
+    ];
     const selectedType = types[Math.floor(Math.random() * types.length)];
 
     const titles = {
@@ -73,7 +80,7 @@ export const AlertsScreen: React.FC = () => {
         message: messages[selectedType],
         timestamp: dayjs().format('HH:mm:ss'),
         type: selectedType,
-      })
+      }),
     );
   };
 
@@ -85,24 +92,20 @@ export const AlertsScreen: React.FC = () => {
           <View style={styles.titleRow}>
             <Bell size={isPhone ? 20 : 26} color={appColors.red600} />
             <AppText style={[styles.title, isPhone && styles.titlePhone]}>
-              {isPhone ? 'Nhật ký Cảnh báo AI' : 'Nhật ký Cảnh báo & Sự kiện AI'}
+              {isPhone
+                ? 'Nhật ký Cảnh báo AI'
+                : 'Nhật ký Cảnh báo & Sự kiện AI'}
             </AppText>
           </View>
           <AppText style={styles.subtitle} numberOfLines={isPhone ? 1 : 2}>
-            Theo dõi tất cả các phát hiện bất thường, lỗi hệ thống và nhật ký điểm danh
+            Theo dõi tất cả các phát hiện bất thường, lỗi hệ thống và nhật ký
+            điểm danh
           </AppText>
         </View>
 
-        <View style={[styles.headerActions, isPhone && styles.headerActionsPhone]}>
-          <TouchableOpacity
-            style={[styles.testBtn, isPhone && styles.testBtnPhone]}
-            onPress={handleSimulateAlert}
-            activeOpacity={0.8}
-          >
-            <Plus size={15} color={appColors.blue600} />
-            <AppText style={styles.testBtnText}>Tạo cảnh báo test</AppText>
-          </TouchableOpacity>
-
+        <View
+          style={[styles.headerActions, isPhone && styles.headerActionsPhone]}
+        >
           {alerts.length > 0 && (
             <TouchableOpacity
               style={[styles.clearBtn, isPhone && styles.clearBtnPhone]}
@@ -128,15 +131,22 @@ export const AlertsScreen: React.FC = () => {
             const isSelected = activeFilter === tab;
             const labels = {
               all: `Tất cả (${alerts.length})`,
-              warning: `Cảnh báo (${alerts.filter(a => a.type === 'warning').length})`,
+              warning: `Cảnh báo (${
+                alerts.filter(a => a.type === 'warning').length
+              })`,
               error: `Lỗi (${alerts.filter(a => a.type === 'error').length})`,
-              info: `Thông tin (${alerts.filter(a => a.type === 'info').length})`,
+              info: `Thông tin (${
+                alerts.filter(a => a.type === 'info').length
+              })`,
             };
 
             return (
               <TouchableOpacity
                 key={tab}
-                style={[styles.filterChip, isSelected && styles.filterChipActive]}
+                style={[
+                  styles.filterChip,
+                  isSelected && styles.filterChipActive,
+                ]}
                 onPress={() => setActiveFilter(tab)}
               >
                 <AppText
@@ -203,7 +213,8 @@ export const AlertsScreen: React.FC = () => {
               Không có sự kiện hoặc cảnh báo nào
             </AppText>
             <AppText style={styles.emptyDesc}>
-              Hệ thống vận hành bình thường. Mọi sự cố bất thường sẽ được ghi nhận tại đây.
+              Hệ thống vận hành bình thường. Mọi sự cố bất thường sẽ được ghi
+              nhận tại đây.
             </AppText>
           </View>
         }

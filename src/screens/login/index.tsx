@@ -8,19 +8,19 @@ import {
   ScrollView,
   KeyboardAvoidingView,
   Platform,
+  Image,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { AppText } from '../../components/app-text';
 import { useAppDispatch } from '../../store/hooks';
 import { login } from '../../store/slices/appSlice';
-import { useMutation } from '@tanstack/react-query';
+import { useMutation, useQuery } from '@tanstack/react-query';
 import { useCustomNavigation } from '../../hooks/use-custom-navigation';
 import { appScreens } from '../../const/app-screens';
 import { RootNavigatorParamList } from '../../navigation/types/root';
 import { useResponsive } from '../../hooks/use-responsive';
 import { useAppToast } from '../../hooks/use-app-toast';
 import {
-  ScanFace,
   Lock,
   Mail,
   Eye,
@@ -31,6 +31,8 @@ import {
 } from 'lucide-react-native';
 import { appColors } from '../../const/app-colors';
 import { authService } from '../../services/api';
+import { appImages } from '../../const/app-images';
+import { deviceIdService } from '../../services/device-id-service';
 
 export const LoginScreen = () => {
   const dispatch = useAppDispatch();
@@ -96,6 +98,13 @@ export const LoginScreen = () => {
   };
 
   const { isPhone } = useResponsive();
+
+  const { data: deviceId } = useQuery({
+    queryKey: ['check-device-id'],
+    queryFn: async () => {
+      return deviceIdService.getDeviceId();
+    },
+  });
 
   const renderFormContent = (isPhoneLayout: boolean = false) => (
     <View style={isPhoneLayout ? styles.phoneFormCard : styles.formCard}>
@@ -173,9 +182,7 @@ export const LoginScreen = () => {
         </AppText>
       </TouchableOpacity>
       <AppText style={styles.hintText}>
-        Tài khoản thử nghiệm:{' '}
-        <AppText style={styles.hintBold}>admin@h2tech.ai</AppText> /{' '}
-        <AppText style={styles.hintBold}>Aa@123456</AppText>
+        Device Id: <AppText style={styles.hintBold}>{deviceId}</AppText>
       </AppText>
     </View>
   );
@@ -197,12 +204,10 @@ export const LoginScreen = () => {
             {/* Top Compact Brand Presentation for Phone */}
             <View style={styles.phoneBrandWrap}>
               <View style={styles.phoneIconCircle}>
-                <ScanFace size={38} color={appColors.sky400} />
-              </View>
-
-              <View style={styles.logoRow}>
-                <AppText style={styles.phoneBrandTitlePrimary}>VietCore</AppText>
-                <AppText style={styles.phoneBrandTitleSecondary}> AI</AppText>
+                <Image
+                  source={appImages.logo}
+                  style={{ width: 38, height: 38, resizeMode: 'contain' }}
+                />
               </View>
               <AppText style={styles.phoneBrandSub}>
                 HỆ THỐNG ĐIỂM DANH KHUÔN MẶT
@@ -217,16 +222,19 @@ export const LoginScreen = () => {
             {/* Left Side: Brand presentation */}
             <View style={styles.leftBrandCol}>
               <View style={styles.iconCircle}>
-                <ScanFace size={52} color={appColors.sky400} />
+                <Image
+                  source={appImages.logo}
+                  style={{
+                    width: '100%',
+                    height: undefined,
+                    aspectRatio: 1,
+                    resizeMode: 'contain',
+                    borderRadius: 20,
+                  }}
+                />
               </View>
 
-              <View style={styles.logoRow}>
-                <AppText style={styles.brandTitlePrimary}>H2Tech</AppText>
-                <AppText style={styles.brandTitleSecondary}> AI</AppText>
-              </View>
-              <AppText style={styles.brandSub}>
-                FACE CHECK • TABLET SYSTEM
-              </AppText>
+              <AppText style={styles.brandSub}>HỆ THỐNG NHẬN DIỆN CS2</AppText>
 
               <View style={styles.featuresList}>
                 <View style={styles.featureItem}>
@@ -277,8 +285,8 @@ const styles = StyleSheet.create({
     paddingLeft: 20,
   },
   iconCircle: {
-    width: 80,
-    height: 80,
+    width: 120,
+    height: 120,
     borderRadius: 24,
     backgroundColor: appColors.slate800,
     justifyContent: 'center',
@@ -286,6 +294,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: appColors.slate700,
     marginBottom: 20,
+    alignSelf: 'flex-start',
   },
   logoRow: {
     flexDirection: 'row',

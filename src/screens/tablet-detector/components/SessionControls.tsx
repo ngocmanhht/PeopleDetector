@@ -1,38 +1,85 @@
-import React from 'react';
+import React, { useMemo } from 'react';
 import { StyleSheet, View, TouchableOpacity } from 'react-native';
 import { AppText } from '../../../components/app-text';
-import { StopCircle } from 'lucide-react-native';
+import { StopCircle, Play, Timer } from 'lucide-react-native';
 import { appColors } from '../../../const/app-colors';
 import { useResponsive } from '../../../hooks/use-responsive';
+import { ScanMode } from '../../../model/detector';
 
 interface SessionControlsProps {
+  onStartSession?: () => void;
   onEndSession: () => void;
   isSessionActive: boolean;
+  scanMode?: ScanMode;
+  sessionDurationSeconds?: number;
 }
 
 export const SessionControls: React.FC<SessionControlsProps> = ({
+  onStartSession,
   onEndSession,
   isSessionActive,
+  scanMode = 'room',
+  sessionDurationSeconds = 0,
 }) => {
   const { isPhone } = useResponsive();
 
+  const formattedDuration = useMemo(() => {
+    const hours = Math.floor(sessionDurationSeconds / 3600);
+    const minutes = Math.floor((sessionDurationSeconds % 3600) / 60);
+    const seconds = sessionDurationSeconds % 60;
+    const pad = (n: number) => n.toString().padStart(2, '0');
+    if (hours > 0) {
+      return `${pad(hours)}:${pad(minutes)}:${pad(seconds)}`;
+    }
+    return `${pad(minutes)}:${pad(seconds)}`;
+  }, [sessionDurationSeconds]);
+
   return (
     <View style={[styles.container, isPhone && styles.containerPhone]}>
-      <TouchableOpacity
-        style={[
-          styles.endButton,
-          isPhone && styles.endButtonPhone,
-          !isSessionActive && styles.endButtonDisabled,
-        ]}
-        onPress={onEndSession}
-        disabled={!isSessionActive}
-        activeOpacity={0.85}
-      >
-        <StopCircle size={isPhone ? 20 : 24} color={appColors.white} />
-        <AppText style={[styles.buttonText, isPhone && styles.buttonTextPhone]}>
-          Kết thúc phiên
-        </AppText>
-      </TouchableOpacity>
+      {!isSessionActive ? (
+        <TouchableOpacity
+          style={[styles.startButton, isPhone && styles.startButtonPhone]}
+          onPress={onStartSession}
+          activeOpacity={0.88}
+        >
+          <Play
+            size={isPhone ? 18 : 22}
+            color={appColors.white}
+            fill={appColors.white}
+          />
+          <AppText
+            style={[styles.buttonText, isPhone && styles.buttonTextPhone]}
+          >
+            {scanMode === 'all'
+              ? 'Bắt đầu phiên quét All'
+              : 'Bắt đầu phiên điểm danh'}
+          </AppText>
+        </TouchableOpacity>
+      ) : (
+        <View style={styles.activeWrap}>
+          <View style={[styles.timerRow, isPhone && styles.timerRowPhone]}>
+            <View style={styles.timerBadge}>
+              <Timer size={14} color={appColors.blue600} />
+              <AppText style={styles.timerLabel}>Thời gian quét:</AppText>
+              <AppText style={styles.timerValue}>{formattedDuration}</AppText>
+              <View style={styles.livePulseDot} />
+            </View>
+          </View>
+
+          <TouchableOpacity
+            style={[styles.endButton, isPhone && styles.endButtonPhone]}
+            onPress={onEndSession}
+            activeOpacity={0.85}
+          >
+            <StopCircle size={isPhone ? 18 : 22} color={appColors.white} />
+            <AppText
+              style={[styles.buttonText, isPhone && styles.buttonTextPhone]}
+            >
+              Kết thúc phiên quét
+            </AppText>
+          </TouchableOpacity>
+        </View>
+      )}
     </View>
   );
 };
@@ -40,21 +87,79 @@ export const SessionControls: React.FC<SessionControlsProps> = ({
 const styles = StyleSheet.create({
   container: {
     marginTop: 'auto',
-    paddingTop: 16,
+    paddingTop: 12,
   },
   containerPhone: {
     marginTop: 8,
     paddingTop: 0,
-    paddingBottom: 20,
+    paddingBottom: 16,
   },
-  endButton: {
-    backgroundColor: appColors.red500,
-    height: 56,
+  activeWrap: {
+    gap: 8,
+  },
+  timerRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 2,
+  },
+  timerRowPhone: {
+    marginBottom: 0,
+  },
+  timerBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: appColors.blue50,
+    borderWidth: 1,
+    borderColor: appColors.blue200,
+    paddingHorizontal: 12,
+    paddingVertical: 5,
+    borderRadius: 20,
+    gap: 6,
+  },
+  timerLabel: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: appColors.slate600,
+  },
+  timerValue: {
+    fontSize: 14,
+    fontWeight: '800',
+    color: appColors.blue700,
+    letterSpacing: 0.5,
+  },
+  livePulseDot: {
+    width: 7,
+    height: 7,
+    borderRadius: 3.5,
+    backgroundColor: appColors.emerald500,
+  },
+  startButton: {
+    backgroundColor: appColors.blue600,
+    height: 54,
     borderRadius: 14,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 12,
+    gap: 10,
+    shadowColor: appColors.blue600,
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.3,
+    shadowRadius: 6,
+    elevation: 4,
+  },
+  startButtonPhone: {
+    height: 48,
+    borderRadius: 12,
+  },
+  endButton: {
+    backgroundColor: appColors.red500,
+    height: 52,
+    borderRadius: 14,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 10,
     shadowColor: appColors.red500,
     shadowOffset: { width: 0, height: 3 },
     shadowOpacity: 0.25,
@@ -62,20 +167,15 @@ const styles = StyleSheet.create({
     elevation: 3,
   },
   endButtonPhone: {
-    height: 50,
+    height: 48,
     borderRadius: 12,
-  },
-  endButtonDisabled: {
-    backgroundColor: appColors.slate300,
-    shadowOpacity: 0,
-    elevation: 0,
   },
   buttonText: {
     color: appColors.white,
-    fontSize: 18,
+    fontSize: 16,
     fontWeight: '800',
   },
   buttonTextPhone: {
-    fontSize: 16,
+    fontSize: 15,
   },
 });

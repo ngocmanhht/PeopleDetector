@@ -36,6 +36,9 @@ export const CmsUserListTab: React.FC<CmsUserListTabProps> = ({
   const { userProfiles, rooms } = useAppSelector(state => state.detector);
 
   const [searchQuery, setSearchQuery] = useState('');
+  const [filterType, setFilterType] = useState<'all' | 'official' | 'visitor'>(
+    'all',
+  );
   const [filterStatus, setFilterStatus] = useState<string>('all');
   const [filterRoomId] = useState<string>('all');
 
@@ -49,14 +52,17 @@ export const CmsUserListTab: React.FC<CmsUserListTabProps> = ({
         u.fullName.toLowerCase().includes(searchQuery.toLowerCase()) ||
         u.code.toLowerCase().includes(searchQuery.toLowerCase()) ||
         (u.phoneNumber && u.phoneNumber.includes(searchQuery));
+      const matchType =
+        filterType === 'all' ||
+        (filterType === 'official' && !u.isVisitor) ||
+        (filterType === 'visitor' && !!u.isVisitor);
       const matchStatus =
         filterStatus === 'all' ||
         (u.conditionStatus || 'normal') === filterStatus;
-      const matchRoom =
-        filterRoomId === 'all' || u.roomId === filterRoomId;
-      return matchSearch && matchStatus && matchRoom;
+      const matchRoom = filterRoomId === 'all' || u.roomId === filterRoomId;
+      return matchSearch && matchType && matchStatus && matchRoom;
     });
-  }, [userProfiles, searchQuery, filterStatus, filterRoomId]);
+  }, [userProfiles, searchQuery, filterType, filterStatus, filterRoomId]);
 
   return (
     <View style={styles.userListContainer}>
@@ -87,9 +93,78 @@ export const CmsUserListTab: React.FC<CmsUserListTabProps> = ({
             onPress={() => setShowAddUserModal(true)}
           >
             <UserPlus size={16} color={appColors.white} />
-            <AppText style={styles.addUserSingleBtnText}>+ Thêm 1 người</AppText>
+            <AppText style={styles.addUserSingleBtnText}>
+              + Thêm 1 người
+            </AppText>
           </TouchableOpacity>
         </View>
+      </View>
+
+      {/* Filter Type (Chính thức / thân nhân) */}
+      <View
+        style={{
+          flexDirection: 'row',
+          gap: 8,
+          paddingHorizontal: 16,
+          marginBottom: 8,
+        }}
+      >
+        <TouchableOpacity
+          style={[
+            styles.filterChip,
+            filterType === 'all' && styles.filterChipActive,
+          ]}
+          onPress={() => setFilterType('all')}
+        >
+          <AppText
+            style={[
+              styles.filterChipText,
+              filterType === 'all' && styles.filterChipTextActive,
+            ]}
+          >
+            Tất cả đối tượng ({userProfiles.length})
+          </AppText>
+        </TouchableOpacity>
+
+        <TouchableOpacity
+          style={[
+            styles.filterChip,
+            filterType === 'official' && styles.filterChipActive,
+          ]}
+          onPress={() => setFilterType('official')}
+        >
+          <AppText
+            style={[
+              styles.filterChipText,
+              filterType === 'official' && styles.filterChipTextActive,
+            ]}
+          >
+            Chính thức ({userProfiles.filter(u => !u.isVisitor).length})
+          </AppText>
+        </TouchableOpacity>
+
+        <TouchableOpacity
+          style={[
+            styles.filterChip,
+            filterType === 'visitor' && {
+              backgroundColor: '#F3E8FF',
+              borderColor: '#C084FC',
+            },
+          ]}
+          onPress={() => setFilterType('visitor')}
+        >
+          <AppText
+            style={[
+              styles.filterChipText,
+              filterType === 'visitor' && {
+                color: '#7E22CE',
+                fontWeight: '700',
+              },
+            ]}
+          >
+            Khách thăm ({userProfiles.filter(u => !!u.isVisitor).length})
+          </AppText>
+        </TouchableOpacity>
       </View>
 
       {/* Filter Status Chips */}
@@ -109,7 +184,7 @@ export const CmsUserListTab: React.FC<CmsUserListTabProps> = ({
                   filterStatus === 'all' && styles.filterChipTextActive,
                 ]}
               >
-                Tất cả ({userProfiles.length})
+                Trạng thái: Tất cả
               </AppText>
             </TouchableOpacity>
 
@@ -218,6 +293,33 @@ export const CmsUserListTab: React.FC<CmsUserListTabProps> = ({
                 <AppText style={styles.userListItemCode}>
                   {item.code} {item.phoneNumber ? ` • ${item.phoneNumber}` : ''}
                 </AppText>
+
+                {Boolean(item.isVisitor) && (
+                  <View
+                    style={{
+                      flexDirection: 'row',
+                      alignItems: 'center',
+                      gap: 4,
+                      marginTop: 2,
+                      marginBottom: 2,
+                    }}
+                  >
+                    <AppText
+                      style={{
+                        fontSize: 11,
+                        color: '#7E22CE',
+                        fontWeight: '700',
+                        backgroundColor: '#F3E8FF',
+                        paddingHorizontal: 6,
+                        paddingVertical: 2,
+                        borderRadius: 4,
+                      }}
+                    >
+                      Khách thăm:{' '}
+                      {item.visitedProfile?.fullName || 'Người thân'}
+                    </AppText>
+                  </View>
+                )}
 
                 <AppText style={styles.userListItemRoom} numberOfLines={1}>
                   {room ? room.name : 'Chưa xếp phòng'}

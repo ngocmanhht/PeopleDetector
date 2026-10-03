@@ -7,6 +7,7 @@ import {
   Users,
   FileSpreadsheet,
   ShieldCheck,
+  BarChart3,
 } from 'lucide-react-native';
 import { useResponsive } from '../../hooks/use-responsive';
 import { appColors } from '../../const/app-colors';
@@ -15,6 +16,7 @@ import { styles } from './styles';
 import { CmsScanStatusTab } from './components/CmsScanStatusTab';
 import { CmsUserListTab } from './components/CmsUserListTab';
 import { CmsReportsTab } from './components/CmsReportsTab';
+import { CmsStatsTab } from './components/CmsStatsTab';
 
 interface TabItem {
   id: CmsSubTab;
@@ -49,6 +51,11 @@ export const CmsScreen: React.FC = () => {
         icon: Users,
       },
       {
+        id: CmsSubTab.STATS,
+        label: 'Thống kê IN/OUT',
+        icon: BarChart3,
+      },
+      {
         id: CmsSubTab.REPORTS,
         label: 'Báo cáo Excel',
         icon: FileSpreadsheet,
@@ -75,6 +82,8 @@ export const CmsScreen: React.FC = () => {
         );
       case CmsSubTab.USER_LIST:
         return <CmsUserListTab onSelectUser={handleSelectUserFromList} />;
+      case CmsSubTab.STATS:
+        return <CmsStatsTab />;
       case CmsSubTab.REPORTS:
         return <CmsReportsTab />;
       default:
