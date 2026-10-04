@@ -84,6 +84,7 @@ export const appColors = {
   blueBootstrap: '#007BFF',
   blue300: '#93C5FD',
   blue200: '#BFDBFE',
+  blue100: '#DBEAFE',
   blue50: '#EFF6FF',
   sky600: '#0284C7',
   sky400: '#38BDF8',

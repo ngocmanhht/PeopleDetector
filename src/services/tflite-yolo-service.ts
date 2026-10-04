@@ -21,6 +21,17 @@ export interface CachedProfileEmbedding {
   embeddings: Float32Array[]; // Multi-photo 512-dim L2-normalized MobileFaceNet vectors
 }
 
+export interface StrangerRecord {
+  id: string;
+  sequence: number;
+  code: string;
+  fullName: string;
+  embeddings: Float32Array[];
+  avatarUri: string;
+  firstSeen: number;
+  lastSeen: number;
+}
+
 export interface YoloFaceDetection {
   boundingBox: BoundingBox;
   confidence: number;
@@ -152,6 +163,10 @@ export class TfliteYoloService {
   // In-memory cache of enrolled user face embeddings (512-d Float32Array)
   private profileEmbeddingsCache: Map<string, CachedProfileEmbedding> =
     new Map();
+
+  // In-memory session cache of unidentified strangers to cluster repeat detections
+  private strangerEmbeddingsCache: Map<string, StrangerRecord> = new Map();
+  private strangerSequenceCounter = 0;
 
   constructor() {
     this.initModels();
@@ -1155,7 +1170,7 @@ export class TfliteYoloService {
     roomProfiles: UserProfile[],
     isFrontCamera?: boolean,
   ): Promise<DetectionResult | null> {
-    if (roomProfiles.length === 0 || !photoPath) return null;
+    if (!photoPath) return null;
 
     // 1. Reentrancy Lock: Drop frame if previous inference is still executing (prevents native C++ TFLite crashes)
     if (this.isProcessingFrame) {
@@ -1323,6 +1338,7 @@ export class TfliteYoloService {
         similarity: number;
         status: 'present' | 'verify';
         avatarUri: string;
+        embedding: Float32Array | null;
       }
       const evaluatedFaces: EvaluatedFace[] = [];
 
@@ -1338,6 +1354,7 @@ export class TfliteYoloService {
           similarity: sim,
           status: isMatch ? 'present' : 'verify',
           avatarUri: item.avatarUri,
+          embedding: item.embedding,
         });
       }
 
@@ -1423,14 +1440,69 @@ export class TfliteYoloService {
       }
 
       // No enrolled user matched: unverified face detected (1 or multiple unverified strangers)
+      // Check against session stranger embeddings cache to group repeat sightings of the same stranger
+      let matchedStranger: StrangerRecord | null = null;
+      let bestStrangerSim = 0;
+      const STRANGER_MATCH_THRESHOLD = 0.70;
+
+      if (primary.embedding) {
+        for (const stranger of this.strangerEmbeddingsCache.values()) {
+          for (const emb of stranger.embeddings) {
+            const sim = this.calculateCosineSimilarity(primary.embedding, emb);
+            if (sim > bestStrangerSim) {
+              bestStrangerSim = sim;
+              matchedStranger = stranger;
+            }
+          }
+        }
+      }
+
+      if (matchedStranger && bestStrangerSim >= STRANGER_MATCH_THRESHOLD) {
+        // Matched existing stranger from this session!
+        matchedStranger.lastSeen = Date.now();
+        if (primary.embedding && matchedStranger.embeddings.length < 3) {
+          matchedStranger.embeddings.push(primary.embedding);
+        }
+        if (!matchedStranger.avatarUri && primary.avatarUri) {
+          matchedStranger.avatarUri = primary.avatarUri;
+        }
+      } else {
+        // New unidentified person: register in stranger cache
+        this.strangerSequenceCounter++;
+        const seq = this.strangerSequenceCounter;
+        const strangerId = `stranger-${Date.now()}-${seq}`;
+        const code = `STRANGER-${String(seq).padStart(2, '0')}`;
+        const fullName = `Người chưa xác minh #${String(seq).padStart(2, '0')}`;
+        matchedStranger = {
+          id: strangerId,
+          sequence: seq,
+          code,
+          fullName,
+          embeddings: primary.embedding ? [primary.embedding] : [],
+          avatarUri: primary.avatarUri,
+          firstSeen: Date.now(),
+          lastSeen: Date.now(),
+        };
+        this.strangerEmbeddingsCache.set(strangerId, matchedStranger);
+      }
+
+      const strangerConfidence = Math.max(
+        10,
+        Math.round(
+          (bestStrangerSim >= STRANGER_MATCH_THRESHOLD
+            ? bestStrangerSim
+            : primary.similarity) * 100,
+        ),
+      );
+
       return {
-        userId: 'unverified-unknown',
-        fullName: 'Khuôn mặt chưa nhận diện',
-        code: 'UNKNOWN',
-        avatarUri: primary.avatarUri, // Clean portrait crop of THIS unverified person
+        userId: matchedStranger.id,
+        fullName: matchedStranger.fullName,
+        code: matchedStranger.code,
+        avatarUri: matchedStranger.avatarUri || primary.avatarUri,
         zoneName: 'Khu vực',
         roomName: 'Phòng',
-        confidence: Math.max(10, Math.round(primary.similarity * 100)),
+        confidence: strangerConfidence,
         timestamp: timeString,
         status: 'verify',
         boundingBox: primary.detection.boundingBox,
@@ -1654,8 +1726,34 @@ export class TfliteYoloService {
     this.getInstance().invalidateProfileCache(profileId);
   }
 
+  public clearStrangerCache(): void {
+    this.strangerEmbeddingsCache.clear();
+    this.strangerSequenceCounter = 0;
+  }
+
+  public removeStranger(strangerId: string): void {
+    this.strangerEmbeddingsCache.delete(strangerId);
+  }
+
+  public getStrangersCount(): number {
+    return this.strangerEmbeddingsCache.size;
+  }
+
+  // --- Static Compatibility Delegates ---
+  public static clearStrangerCache(): void {
+    this.getInstance().clearStrangerCache();
+  }
+
+  public static removeStranger(strangerId: string): void {
+    this.getInstance().removeStranger(strangerId);
+  }
+
   public static isModelReady(): boolean {
     return this.getInstance().isModelReady();
+  }
+
+  public static getStrangersCount(): number {
+    return this.getInstance().getStrangersCount();
   }
 }
 

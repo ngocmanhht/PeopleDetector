@@ -33,6 +33,7 @@ import { profileService } from '../../../services/api';
 import { UserConditionStatus } from '../../../model/detector';
 import { useResponsive } from '../../../hooks/use-responsive';
 import { appColors } from '../../../const/app-colors';
+import { deleteTempFile } from '../../../utils/file-cleaner';
 import { ImagePickerService } from '../../../services/image-picker-service';
 import { tfliteYoloService } from '../../../services/tflite-yolo-service';
 import { appUtils } from '../../../utils';
@@ -97,9 +98,10 @@ export const CmsScanStatusTab: React.FC<CmsScanStatusTabProps> = ({
 
   // Step 1: Face Scan handler via Camera
   const handleFaceScan = async () => {
+    let photoUri: string | null = null;
     try {
       setIsScanningFace(true);
-      const photoUri = await ImagePickerService.captureImageWithCamera(
+      photoUri = await ImagePickerService.captureImageWithCamera(
         0,
         'front',
       );
@@ -136,6 +138,9 @@ export const CmsScanStatusTab: React.FC<CmsScanStatusTabProps> = ({
     } catch (e: any) {
       Alert.alert('Lỗi quét khuôn mặt', e?.message || 'Không thể xử lý ảnh');
     } finally {
+      if (photoUri) {
+        deleteTempFile(photoUri).catch(() => {});
+      }
       setIsScanningFace(false);
     }
   };

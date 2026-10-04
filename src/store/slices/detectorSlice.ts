@@ -68,15 +68,28 @@ const detectorSlice = createSlice({
   initialState,
   reducers: {
     setZones: (state, action: PayloadAction<Zone[]>) => {
-      state.zones = action.payload;
-      if (!state.selectedZoneId && action.payload.length > 0) {
-        state.selectedZoneId = action.payload[0].id;
+      const remoteIds = new Set(action.payload.map(z => z.id));
+      const localOnly = (state.zones || []).filter(
+        z => !remoteIds.has(z.id) && z.id.startsWith('zone-'),
+      );
+      state.zones = [...action.payload, ...localOnly];
+      const isValid = state.zones.some(z => z.id === state.selectedZoneId);
+      if (!isValid && state.zones.length > 0) {
+        state.selectedZoneId = state.zones[0].id;
       }
     },
     setRooms: (state, action: PayloadAction<Room[]>) => {
-      state.rooms = action.payload;
-      if (!state.selectedRoomId && action.payload.length > 0) {
-        state.selectedRoomId = action.payload[0].id;
+      const remoteIds = new Set(action.payload.map(r => r.id));
+      const localOnly = (state.rooms || []).filter(
+        r => !remoteIds.has(r.id) && r.id.startsWith('room-'),
+      );
+      state.rooms = [...action.payload, ...localOnly];
+      const isValid = state.rooms.some(r => r.id === state.selectedRoomId);
+      if (!isValid && state.rooms.length > 0) {
+        const inZone = state.selectedZoneId
+          ? state.rooms.find(r => r.zoneId === state.selectedZoneId)
+          : null;
+        state.selectedRoomId = inZone?.id || state.rooms[0].id;
       }
     },
     setUserProfiles: (state, action: PayloadAction<UserProfile[]>) => {
@@ -122,18 +135,31 @@ const detectorSlice = createSlice({
     },
     setScanMode: (state, action: PayloadAction<ScanMode>) => {
       state.scanMode = action.payload;
+      if (action.payload === 'room') {
+        const isValid = state.rooms.some(r => r.id === state.selectedRoomId);
+        if (!isValid && state.rooms.length > 0) {
+          const inZone = state.selectedZoneId
+            ? state.rooms.find(r => r.zoneId === state.selectedZoneId)
+            : null;
+          state.selectedRoomId = inZone?.id || state.rooms[0].id;
+        }
+      }
     },
     setScanDirection: (state, action: PayloadAction<ScanDirection>) => {
       state.scanDirection = action.payload;
     },
-    tickSessionDuration: (state) => {
+    tickSessionDuration: state => {
       if (state.isSessionActive) {
         state.sessionDurationSeconds += 1;
       }
     },
     addZone: (
       state,
-      action: PayloadAction<{ id?: string; name: string; description?: string }>
+      action: PayloadAction<{
+        id?: string;
+        name: string;
+        description?: string;
+      }>,
     ) => {
       const newZone: Zone = {
         id: action.payload.id || `zone-${Date.now()}`,
@@ -150,7 +176,12 @@ const detectorSlice = createSlice({
     },
     addRoom: (
       state,
-      action: PayloadAction<{ id?: string; zoneId: string; name: string; capacity?: number }>
+      action: PayloadAction<{
+        id?: string;
+        zoneId: string;
+        name: string;
+        capacity?: number;
+      }>,
     ) => {
       const newRoom: Room = {
         id: action.payload.id || `room-${Date.now()}`,
@@ -162,13 +193,16 @@ const detectorSlice = createSlice({
         state.rooms = [];
       }
       state.rooms.push(newRoom);
-      if (!state.selectedRoomId || state.selectedZoneId === action.payload.zoneId) {
+      if (
+        !state.selectedRoomId ||
+        state.selectedZoneId === action.payload.zoneId
+      ) {
         state.selectedRoomId = newRoom.id;
       }
     },
     addUserProfile: (
       state,
-      action: PayloadAction<Omit<UserProfile, 'id' | 'enrolledAt'>>
+      action: PayloadAction<Omit<UserProfile, 'id' | 'enrolledAt'>>,
     ) => {
       const photos =
         action.payload.photos && action.payload.photos.length > 0
@@ -202,32 +236,49 @@ const detectorSlice = createSlice({
         photos?: string[];
         isVisitor?: boolean;
         visitedProfileId?: string | null;
-        visitedProfile?: { id: string; fullName: string; code: string; roomName?: string } | null;
-      }>
+        visitedProfile?: {
+          id: string;
+          fullName: string;
+          code: string;
+          roomName?: string;
+        } | null;
+      }>,
     ) => {
       const user = state.userProfiles.find(u => u.id === action.payload.id);
       if (user) {
-        if (action.payload.fullName !== undefined) user.fullName = action.payload.fullName;
+        if (action.payload.fullName !== undefined)
+          user.fullName = action.payload.fullName;
         if (action.payload.code !== undefined) user.code = action.payload.code;
-        if (action.payload.roomId !== undefined) user.roomId = action.payload.roomId;
-        if (action.payload.zoneId !== undefined) user.zoneId = action.payload.zoneId;
-        if (action.payload.avatarUri !== undefined) user.avatarUri = action.payload.avatarUri;
-        if (action.payload.photos !== undefined) user.photos = action.payload.photos;
-        if (action.payload.isVisitor !== undefined) user.isVisitor = action.payload.isVisitor;
-        if (action.payload.visitedProfileId !== undefined) user.visitedProfileId = action.payload.visitedProfileId;
-        if (action.payload.visitedProfile !== undefined) user.visitedProfile = action.payload.visitedProfile;
+        if (action.payload.roomId !== undefined)
+          user.roomId = action.payload.roomId;
+        if (action.payload.zoneId !== undefined)
+          user.zoneId = action.payload.zoneId;
+        if (action.payload.avatarUri !== undefined)
+          user.avatarUri = action.payload.avatarUri;
+        if (action.payload.photos !== undefined)
+          user.photos = action.payload.photos;
+        if (action.payload.isVisitor !== undefined)
+          user.isVisitor = action.payload.isVisitor;
+        if (action.payload.visitedProfileId !== undefined)
+          user.visitedProfileId = action.payload.visitedProfileId;
+        if (action.payload.visitedProfile !== undefined)
+          user.visitedProfile = action.payload.visitedProfile;
       }
     },
     addPhotosToProfile: (
       state,
-      action: PayloadAction<{ userId: string; photos: string[] }>
+      action: PayloadAction<{ userId: string; photos: string[] }>,
     ) => {
       const user = state.userProfiles.find(u => u.id === action.payload.userId);
       if (user) {
-        const existing = user.photos || (user.avatarUri ? [user.avatarUri] : []);
+        const existing =
+          user.photos || (user.avatarUri ? [user.avatarUri] : []);
         const nextList = [...existing];
         action.payload.photos.forEach(p => {
-          if (!nextList.includes(p) && nextList.length < PHOTO_CONFIG.MAX_PHOTOS_PER_USER) {
+          if (
+            !nextList.includes(p) &&
+            nextList.length < PHOTO_CONFIG.MAX_PHOTOS_PER_USER
+          ) {
             nextList.push(p);
           }
         });
@@ -239,7 +290,7 @@ const detectorSlice = createSlice({
     },
     deletePhotoFromProfile: (
       state,
-      action: PayloadAction<{ userId: string; photoUri: string }>
+      action: PayloadAction<{ userId: string; photoUri: string }>,
     ) => {
       const user = state.userProfiles.find(u => u.id === action.payload.userId);
       if (user && user.photos) {
@@ -251,7 +302,7 @@ const detectorSlice = createSlice({
     },
     setMainAvatar: (
       state,
-      action: PayloadAction<{ userId: string; avatarUri: string }>
+      action: PayloadAction<{ userId: string; avatarUri: string }>,
     ) => {
       const user = state.userProfiles.find(u => u.id === action.payload.userId);
       if (user) {
@@ -270,7 +321,9 @@ const detectorSlice = createSlice({
       }
     },
     deleteUserProfile: (state, action: PayloadAction<string>) => {
-      state.userProfiles = state.userProfiles.filter(u => u.id !== action.payload);
+      state.userProfiles = state.userProfiles.filter(
+        u => u.id !== action.payload,
+      );
       delete state.attendanceMap[action.payload];
       if (state.activeDetection?.userId === action.payload) {
         state.activeDetection = null;
@@ -283,7 +336,7 @@ const detectorSlice = createSlice({
         status: string;
         note?: string;
         updatedBy: string;
-      }>
+      }>,
     ) => {
       const user = state.userProfiles.find(u => u.id === action.payload.userId);
       if (user) {
@@ -309,7 +362,7 @@ const detectorSlice = createSlice({
         userIds: string[];
         roomId: string;
         zoneId: string;
-      }>
+      }>,
     ) => {
       const { userIds, roomId, zoneId } = action.payload;
       state.userProfiles.forEach(user => {
@@ -321,7 +374,7 @@ const detectorSlice = createSlice({
     },
     addBatchUserProfiles: (
       state,
-      action: PayloadAction<Omit<UserProfile, 'id' | 'enrolledAt'>[]>
+      action: PayloadAction<Omit<UserProfile, 'id' | 'enrolledAt'>[]>,
     ) => {
       if (!Array.isArray(state.userProfiles)) {
         state.userProfiles = [];
@@ -343,19 +396,34 @@ const detectorSlice = createSlice({
         });
       });
     },
-    clearMockData: (state) => {
+    clearMockData: state => {
       state.zones = Array.isArray(state.zones)
-        ? state.zones.filter(z => !['zone-a', 'zone-b', 'zone-c'].includes(z.id))
+        ? state.zones.filter(
+            z => !['zone-a', 'zone-b', 'zone-c'].includes(z.id),
+          )
         : [];
       state.rooms = Array.isArray(state.rooms)
-        ? state.rooms.filter(r => !['room-a01', 'room-a02', 'room-b01', 'room-b02', 'room-c01'].includes(r.id))
+        ? state.rooms.filter(
+            r =>
+              ![
+                'room-a01',
+                'room-a02',
+                'room-b01',
+                'room-b02',
+                'room-c01',
+              ].includes(r.id),
+          )
         : [];
       state.userProfiles = Array.isArray(state.userProfiles)
         ? state.userProfiles.filter(
-            u => !u.id.startsWith('user-001') && !u.id.startsWith('user-b0')
+            u => !u.id.startsWith('user-001') && !u.id.startsWith('user-b0'),
           )
         : [];
-      if (['room-a01', 'room-a02', 'room-b01', 'room-b02', 'room-c01'].includes(state.selectedRoomId)) {
+      if (
+        ['room-a01', 'room-a02', 'room-b01', 'room-b02', 'room-c01'].includes(
+          state.selectedRoomId,
+        )
+      ) {
         state.selectedRoomId = '';
       }
       if (['zone-a', 'zone-b', 'zone-c'].includes(state.selectedZoneId)) {
@@ -365,7 +433,9 @@ const detectorSlice = createSlice({
         state.selectedZoneId = state.zones[0].id;
       }
       if (!state.selectedRoomId && state.rooms.length > 0) {
-        const roomsInZone = state.rooms.filter(r => r.zoneId === state.selectedZoneId);
+        const roomsInZone = state.rooms.filter(
+          r => r.zoneId === state.selectedZoneId,
+        );
         state.selectedRoomId = roomsInZone[0]?.id || state.rooms[0].id;
       }
       if (!Array.isArray(state.sessions)) {
@@ -378,7 +448,7 @@ const detectorSlice = createSlice({
         state.attendanceMap = {};
       }
     },
-    resetAllData: (state) => {
+    resetAllData: state => {
       state.zones = [];
       state.rooms = [];
       state.userProfiles = [];
@@ -396,7 +466,7 @@ const detectorSlice = createSlice({
     startSession: (
       state,
       action: PayloadAction<
-        { id?: string; name?: string; scanMode?: ScanMode } | undefined
+        { id?: string; name?: string; scanMode?: ScanMode; roomId?: string } | undefined
       >,
     ) => {
       state.isSessionActive = true;
@@ -419,13 +489,27 @@ const detectorSlice = createSlice({
       state.activeDetection = null;
       state.scanHistory = [];
 
-      const room = state.rooms.find(r => r.id === state.selectedRoomId);
-      const zone =
-        state.zones.find(z => z.id === state.selectedZoneId) ||
-        state.zones.find(z => z.id === room?.zoneId);
+      // Resolve room for session
+      const targetRoomId = isAll
+        ? undefined
+        : action?.payload?.roomId || state.selectedRoomId || state.rooms[0]?.id || '';
+      if (targetRoomId && !isAll) {
+        state.selectedRoomId = targetRoomId;
+      }
+
+      const room = isAll
+        ? undefined
+        : state.rooms.find(r => r.id === targetRoomId) || state.rooms[0];
+      const zone = isAll
+        ? undefined
+        : state.zones.find(z => z.id === state.selectedZoneId) ||
+          state.zones.find(z => z.id === room?.zoneId) ||
+          state.zones[0];
       const targetUsers = isAll
         ? state.userProfiles.filter(u => !u.isVisitor)
-        : state.userProfiles.filter(u => u.roomId === state.selectedRoomId);
+        : state.userProfiles.filter(
+            u => u.roomId === (room?.id || targetRoomId),
+          );
 
       const sessionId = action?.payload?.id || `session-${Date.now()}`;
       state.activeSessionId = sessionId;
@@ -433,10 +517,10 @@ const detectorSlice = createSlice({
       const newSession: AttendanceSession = {
         id: sessionId,
         name: sessionName,
-        zoneId: isAll ? undefined : (zone?.id || ''),
-        zoneName: isAll ? 'Toàn cơ sở' : (zone?.name || ''),
-        roomId: isAll ? undefined : (room?.id || state.selectedRoomId),
-        roomName: isAll ? 'Toàn cơ sở' : (room?.name || 'Phòng'),
+        zoneId: isAll ? undefined : zone?.id || '',
+        zoneName: isAll ? 'Toàn cơ sở' : zone?.name || '',
+        roomId: isAll ? undefined : room?.id || targetRoomId || '',
+        roomName: isAll ? 'Toàn cơ sở' : room?.name || 'Phòng',
         startTime: now.format('HH:mm:ss DD/MM/YYYY'),
         createdAt: now.toISOString(),
         isActive: true,
@@ -464,11 +548,13 @@ const detectorSlice = createSlice({
         type: 'info',
       });
     },
-    endSession: (state) => {
+    endSession: state => {
       state.isSessionActive = false;
       const now = dayjs();
       if (state.activeSessionId && state.sessions) {
-        const activeSess = state.sessions.find(s => s.id === state.activeSessionId);
+        const activeSess = state.sessions.find(
+          s => s.id === state.activeSessionId,
+        );
         if (activeSess) {
           activeSess.isActive = false;
           activeSess.endTime = now.format('HH:mm:ss DD/MM/YYYY');
@@ -476,8 +562,12 @@ const detectorSlice = createSlice({
           activeSess.attendanceMap = { ...state.attendanceMap };
           activeSess.scanHistory = [...state.scanHistory];
 
-          const verifiedItems = state.scanHistory.filter(i => i.status === 'present');
-          const unverifiedItems = state.scanHistory.filter(i => i.status === 'verify');
+          const verifiedItems = state.scanHistory.filter(
+            i => i.status === 'present',
+          );
+          const unverifiedItems = state.scanHistory.filter(
+            i => i.status === 'verify',
+          );
           const totalScans = state.scanHistory.reduce(
             (sum, item) => sum + item.scanCount,
             0,
@@ -511,8 +601,10 @@ const detectorSlice = createSlice({
       const secStr = durSec % 60;
       state.alerts.unshift({
         id: `alert-${Date.now()}`,
-        title: 'Kết thúc phiên',
-        message: `Phiên "${state.activeSessionName || 'Điểm danh'}" đã kết thúc. Thời gian quét: ${minStr}p ${secStr}s.`,
+        title: 'Kết thúc quét',
+        message: `Phiên "${
+          state.activeSessionName || 'Điểm danh'
+        }" đã kết thúc. Thời gian quét: ${minStr}p ${secStr}s.`,
         timestamp: now.format('HH:mm:ss'),
         type: 'info',
       });
@@ -538,7 +630,7 @@ const detectorSlice = createSlice({
         direction?: ScanDirection;
         isVisitor?: boolean;
         visitedProfileName?: string;
-      }>
+      }>,
     ) => {
       const {
         userId,
@@ -579,7 +671,7 @@ const detectorSlice = createSlice({
 
       if (userId && status === 'present') {
         const existingIdx = state.scanHistory.findIndex(
-          item => item.userId === userId
+          item => item.userId === userId,
         );
 
         if (existingIdx >= 0) {
@@ -589,7 +681,8 @@ const detectorSlice = createSlice({
           existing.confidence = Math.max(existing.confidence, confidence);
           if (avatarUri) existing.avatarUri = avatarUri;
           if (isVisitor !== undefined) existing.isVisitor = isVisitor;
-          if (visitedProfileName !== undefined) existing.visitedProfileName = visitedProfileName;
+          if (visitedProfileName !== undefined)
+            existing.visitedProfileName = visitedProfileName;
           existing.lastDirection = direction;
 
           if (direction === 'in') {
@@ -638,33 +731,57 @@ const detectorSlice = createSlice({
           state.scanHistory.unshift(newItem);
         }
       } else {
-        // Unverified stranger
-        const recentStranger = state.scanHistory.find(
-          item => item.status === 'verify' && nowEpoch - (item.firstInEpoch || item.lastOutEpoch || 0) < 4000
-        );
+        // Unverified stranger: cluster by persistent stranger userId from biometric embedding
+        const existingStranger = userId
+          ? state.scanHistory.find(
+              item => item.id === userId || item.userId === userId,
+            )
+          : state.scanHistory.find(
+              item =>
+                item.status === 'verify' &&
+                nowEpoch - (item.firstInEpoch || item.lastOutEpoch || 0) < 4000,
+            );
 
-        if (recentStranger) {
-          recentStranger.scanCount += 1;
-          recentStranger.lastScanTime = timestamp;
-          recentStranger.lastDirection = direction;
+        if (existingStranger) {
+          existingStranger.scanCount += 1;
+          existingStranger.lastScanTime = timestamp;
+          existingStranger.lastDirection = direction;
+          existingStranger.confidence = Math.max(
+            existingStranger.confidence,
+            confidence,
+          );
           if (direction === 'in') {
-            recentStranger.inCount = (recentStranger.inCount || 0) + 1;
-            if (!recentStranger.firstInTime) {
-              recentStranger.firstInTime = timestamp;
-              recentStranger.firstInEpoch = nowEpoch;
+            existingStranger.inCount = (existingStranger.inCount || 0) + 1;
+            if (!existingStranger.firstInTime) {
+              existingStranger.firstInTime = timestamp;
+              existingStranger.firstInEpoch = nowEpoch;
             }
           } else {
-            recentStranger.outCount = (recentStranger.outCount || 0) + 1;
-            recentStranger.lastOutTime = timestamp;
-            recentStranger.lastOutEpoch = nowEpoch;
+            existingStranger.outCount = (existingStranger.outCount || 0) + 1;
+            existingStranger.lastOutTime = timestamp;
+            existingStranger.lastOutEpoch = nowEpoch;
           }
-          if (avatarUri) recentStranger.avatarUri = avatarUri;
-          recentStranger.history.unshift(event);
+          if (avatarUri) existingStranger.avatarUri = avatarUri;
+          existingStranger.history.unshift(event);
+          // Move to top of the list for fresh real-time feed
+          const strangerIdx = state.scanHistory.indexOf(existingStranger);
+          if (strangerIdx > 0) {
+            state.scanHistory.splice(strangerIdx, 1);
+            state.scanHistory.unshift(existingStranger);
+          }
         } else {
+          const strangerId =
+            userId ||
+            `stranger-${Date.now()}-${Math.random()
+              .toString(36)
+              .substring(2, 5)}`;
+          const strangerName = fullName || 'Chưa xác minh';
+          const strangerCode = code || 'STRANGER';
           const newStranger: ScanHistoryItem = {
-            id: `stranger-${Date.now()}-${Math.random().toString(36).substring(2, 5)}`,
-            fullName: 'Chưa xác minh',
-            code: 'STRANGER',
+            id: strangerId,
+            userId: strangerId,
+            fullName: strangerName,
+            code: strangerCode,
             avatarUri,
             status: 'verify',
             confidence,
@@ -686,7 +803,9 @@ const detectorSlice = createSlice({
 
       // Keep active session in sessions array synced with latest scanHistory
       if (state.activeSessionId && state.sessions) {
-        const activeSess = state.sessions.find(s => s.id === state.activeSessionId);
+        const activeSess = state.sessions.find(
+          s => s.id === state.activeSessionId,
+        );
         if (activeSess) {
           activeSess.scanHistory = [...state.scanHistory];
           activeSess.totalScansCount = state.scanHistory.reduce(
@@ -696,7 +815,62 @@ const detectorSlice = createSlice({
         }
       }
     },
-    clearScanHistory: (state) => {
+    convertStrangerToUser: (
+      state,
+      action: PayloadAction<{
+        strangerId: string;
+        userProfile: UserProfile;
+      }>,
+    ) => {
+      const { strangerId, userProfile } = action.payload;
+      const item = state.scanHistory.find(
+        i => i.id === strangerId || i.userId === strangerId,
+      );
+      if (item) {
+        item.id = userProfile.id;
+        item.userId = userProfile.id;
+        item.fullName = userProfile.fullName;
+        item.code = userProfile.code;
+        item.status = 'present';
+        item.roomId = userProfile.roomId;
+        item.zoneId = userProfile.zoneId;
+        item.avatarUri = userProfile.avatarUri || item.avatarUri;
+        item.isVisitor = userProfile.isVisitor;
+        item.visitedProfileName = userProfile.visitedProfile?.fullName;
+
+        item.history.forEach(evt => {
+          evt.isVisitor = userProfile.isVisitor;
+          evt.visitedProfileName = userProfile.visitedProfile?.fullName;
+        });
+      }
+
+      state.attendanceMap[userProfile.id] = {
+        userId: userProfile.id,
+        status: 'present',
+        confidence: item ? item.confidence : 95,
+        timestamp: item ? item.lastScanTime : dayjs().format('HH:mm:ss'),
+        detectedImageUrl: userProfile.avatarUri,
+      };
+
+      if (state.activeSessionId && state.sessions) {
+        const activeSess = state.sessions.find(
+          s => s.id === state.activeSessionId,
+        );
+        if (activeSess) {
+          activeSess.scanHistory = [...state.scanHistory];
+          activeSess.attendanceMap = { ...state.attendanceMap };
+          const verifiedItems = state.scanHistory.filter(
+            i => i.status === 'present',
+          );
+          const unverifiedItems = state.scanHistory.filter(
+            i => i.status === 'verify',
+          );
+          activeSess.presentCount = verifiedItems.length;
+          activeSess.verifyCount = unverifiedItems.length;
+        }
+      }
+    },
+    clearScanHistory: state => {
       state.scanHistory = [];
     },
     deleteSession: (state, action: PayloadAction<string>) => {
@@ -718,9 +892,10 @@ const detectorSlice = createSlice({
         timestamp: string;
         boundingBox?: { x: number; y: number; width: number; height: number };
         avatarUri?: string;
-      }>
+      }>,
     ) => {
-      const { userId, status, confidence, timestamp, boundingBox, avatarUri } = action.payload;
+      const { userId, status, confidence, timestamp, boundingBox, avatarUri } =
+        action.payload;
       state.attendanceMap[userId] = {
         userId,
         status,
@@ -731,7 +906,9 @@ const detectorSlice = createSlice({
 
       // Đồng bộ vào phiên đang hoạt động
       if (state.activeSessionId && state.sessions) {
-        const activeSess = state.sessions.find(s => s.id === state.activeSessionId);
+        const activeSess = state.sessions.find(
+          s => s.id === state.activeSessionId,
+        );
         if (activeSess) {
           activeSess.attendanceMap[userId] = state.attendanceMap[userId];
           let p = 0;
@@ -778,7 +955,10 @@ const detectorSlice = createSlice({
         };
       }
     },
-    setActiveDetection: (state, action: PayloadAction<DetectionResult | null>) => {
+    setActiveDetection: (
+      state,
+      action: PayloadAction<DetectionResult | null>,
+    ) => {
       state.activeDetection = action.payload;
     },
     addAlert: (state, action: PayloadAction<Omit<AlertLog, 'id'>>) => {
@@ -787,7 +967,7 @@ const detectorSlice = createSlice({
         ...action.payload,
       });
     },
-    clearAlerts: (state) => {
+    clearAlerts: state => {
       state.alerts = [];
     },
     setDeviceAuthorized: (
@@ -815,6 +995,7 @@ export const {
   setScanDirection,
   tickSessionDuration,
   recordScanEvent,
+  convertStrangerToUser,
   clearScanHistory,
   addZone,
   addRoom,

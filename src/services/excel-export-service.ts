@@ -311,11 +311,121 @@ export const exportMonthlyAttendanceExcel = async ({
       { wch: 35 },
     ];
 
+    // ==========================================
+    // 4. SHEET 4: DANH SÁCH HỒ SƠ ĐỐI TƯỢNG (THEO MẪU BẢNG BIỂU)
+    // ==========================================
+    const profileHeaders = [
+      'STT',
+      'Mã ĐD',
+      'Họ tên',
+      'Ngày tháng năm sinh',
+      'Giới tính',
+      'CCCD/ CMND',
+      'Tỉnh (Thường trú)',
+      'Huyện (Thường trú)',
+      'Xã (Thường trú)',
+      'Chi tiết (Thường trú)',
+      'Loại quyết định (Bắt buộc/ Tự nguyện)',
+      'Số quyết định',
+      'Ngày ban hành',
+      'Đơn vị ban hành',
+      'Ngày thi hành QĐ',
+      'Ngày đưa vào cơ sở cai nghiện',
+      'Thời gian cai nghiện (Số năm, số tháng, số ngày)',
+      'Thời gian giảm',
+      'Ngày tái hòa nhập',
+      'Loại ma túy',
+      'Ngày xét nghiệm',
+      'Đơn vị xét nghiệm',
+      'Hình thức sử dụng (1)',
+      'Nguyên nhân (2)',
+      'Số phiếu (Tình trạng nghiện)',
+      'Ngày xác định (Tình trạng nghiện)',
+      'Đơn vị (Tình trạng nghiện)',
+      'Số lần vào Cơ sở',
+      'Học vấn',
+      'Nghề nghiệp',
+      'Số hồ sơ',
+      'Tiền án/Tiền sự',
+      'Tuổi',
+      'Phòng ở',
+      'Khu',
+      'Cán bộ QL Khu',
+      'Đã có CCCD/Mất/Chưa làm/Không',
+      'Họ tên cha',
+      'Họ tên mẹ',
+      'Dân tộc',
+      'Tôn giáo',
+      'Khách thăm gặp',
+      'Người được thăm',
+    ];
+
+    const profileRows: any[][] = [
+      ['DANH SÁCH HỒ SƠ QUẢN LÝ HỌC VIÊN / ĐỐI TƯỢNG'],
+      [`Xuất lúc: ${dayjs().format('HH:mm:ss DD/MM/YYYY')}`],
+      [],
+      profileHeaders,
+    ];
+
+    let pIdx = 1;
+    targetUsers.forEach(u => {
+      const room = rooms.find(r => r.id === u.roomId);
+      const zone = zones.find(z => z.id === (u.zoneId || room?.zoneId));
+      profileRows.push([
+        pIdx++,
+        u.code,
+        u.fullName,
+        u.dateOfBirth || '',
+        u.gender || '',
+        u.idCardNumber || '',
+        u.permanentProvince || '',
+        u.permanentDistrict || '',
+        u.permanentWard || '',
+        u.permanentAddress || '',
+        u.decisionType || '',
+        u.decisionNumber || '',
+        u.decisionIssuedDate || '',
+        u.decisionIssuedUnit || '',
+        u.decisionExecDate || '',
+        u.admissionDate || '',
+        u.detoxDuration || '',
+        u.reducedDuration || '',
+        u.reintegrationDate || '',
+        u.drugType || '',
+        u.drugTestDate || '',
+        u.drugTestUnit || '',
+        u.drugUsageForm || '',
+        u.drugUsageReason || '',
+        u.addictionReportNumber || '',
+        u.addictionReportDate || '',
+        u.addictionReportUnit || '',
+        u.admissionCount ?? '',
+        u.educationLevel || '',
+        u.occupation || '',
+        u.recordNumber || '',
+        u.criminalRecord || '',
+        u.age ?? '',
+        room?.name || '',
+        zone?.name || '',
+        u.zoneManagerName || '',
+        u.idCardStatus || '',
+        u.fatherName || '',
+        u.motherName || '',
+        u.ethnicity || '',
+        u.religion || '',
+        u.isVisitor ? 'Thân nhân / Khách' : 'Chính thức',
+        u.visitedProfile?.fullName || '',
+      ]);
+    });
+
+    const profileWs = XLSX.utils.aoa_to_sheet(profileRows);
+
     // Build Workbook
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, summaryWs, 'Tổng hợp chuyên cần');
     XLSX.utils.book_append_sheet(wb, detailWs, 'Chi tiết điểm danh');
     XLSX.utils.book_append_sheet(wb, logWs, 'Nhật ký CMS');
+    XLSX.utils.book_append_sheet(wb, profileWs, 'Hồ sơ học viên');
 
     // Generate base64
     const base64Data = XLSX.write(wb, { type: 'base64', bookType: 'xlsx' });

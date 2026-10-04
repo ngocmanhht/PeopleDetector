@@ -99,4 +99,18 @@ export class YoloDetectorService {
   public static getBiometricModel(): 'mobilefacenet' | 'ghostfacenet' {
     return TfliteYoloService.getInstance().biometricModelType;
   }
+
+  /**
+   * Clears session stranger embeddings cache
+   */
+  public static clearStrangerCache(): void {
+    TfliteYoloService.clearStrangerCache();
+  }
+
+  /**
+   * Removes a specific stranger embedding from session cache
+   */
+  public static removeStranger(strangerId: string): void {
+    TfliteYoloService.removeStranger(strangerId);
+  }
 }

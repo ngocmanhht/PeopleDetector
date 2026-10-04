@@ -21,10 +21,19 @@ import {
   Sliders,
   Camera,
   Info,
+  Tablet,
+  Lock,
+  Unlock,
+  KeyRound,
 } from 'lucide-react-native';
 import { appColors } from '../../const/app-colors';
 import { useResponsive } from '../../hooks/use-responsive';
 import { authService } from '../../services/api';
+import { useKiosk } from '../../hooks/use-kiosk';
+import { useAppToast } from '../../hooks/use-app-toast';
+import { KioskExitModal } from '../tablet-detector/components/KioskExitModal';
+import { ChangePinModal } from './components/ChangePinModal';
+import { RefreshButton } from '../../components/refresh-button';
 
 export const SettingsScreen: React.FC = () => {
   const { isPhone } = useResponsive();
@@ -37,6 +46,19 @@ export const SettingsScreen: React.FC = () => {
   const [targetFps, setTargetFps] = useState(30);
   const [soundEnabled, setSoundEnabled] = useState(true);
   const [autoSessionReset, setAutoSessionReset] = useState(false);
+
+  // Kiosk Hook & Modals
+  const {
+    isKioskActive,
+    isDeviceOwner,
+    autoKiosk,
+    startKiosk,
+    setAutoKiosk,
+    refreshStatus,
+  } = useKiosk();
+  const [kioskExitModalVisible, setKioskExitModalVisible] = useState(false);
+  const [changePinModalVisible, setChangePinModalVisible] = useState(false);
+  const { showSuccessToast, showWarnToast } = useAppToast();
 
   const token = useAppSelector(state => state.app.token);
 
@@ -92,6 +114,7 @@ export const SettingsScreen: React.FC = () => {
             Cấu hình tham số AI nhận diện, camera và quản lý phiên đăng nhập
           </AppText>
         </View>
+        <RefreshButton size={isPhone ? 34 : 38} iconSize={isPhone ? 16 : 18} />
       </View>
 
       <View
@@ -117,7 +140,7 @@ export const SettingsScreen: React.FC = () => {
                   {currentUser?.name || 'Quản trị viên'}
                 </AppText>
                 <AppText style={styles.accountEmail}>
-                  {currentUser?.email || 'admin@h2tech.ai'}
+                  {currentUser?.email || 'admin@cscns2.ag'}
                 </AppText>
                 <View style={styles.roleBadge}>
                   <Shield size={12} color={appColors.emerald600} />
@@ -152,6 +175,140 @@ export const SettingsScreen: React.FC = () => {
               <AppText style={styles.infoValue}>
                 v1.0.0 (Tablet Landscape)
               </AppText>
+            </View>
+          </View>
+
+          {/* Kiosk Mode (Samsung Tablet) Card */}
+          <View style={styles.card}>
+            <View style={styles.cardHeader}>
+              <Tablet size={20} color={appColors.blue600} />
+              <AppText style={styles.cardTitle}>Chế độ Kiosk (Samsung Tablet)</AppText>
+            </View>
+
+            {/* Device Owner Status */}
+            <View style={styles.infoRow}>
+              <AppText style={styles.infoLabel}>Quyền Device Owner:</AppText>
+              <View
+                style={[
+                  styles.statusBadge,
+                  isDeviceOwner
+                    ? styles.statusBadgeActive
+                    : styles.statusBadgeWarn,
+                ]}
+              >
+                <AppText
+                  style={[
+                    styles.statusBadgeText,
+                    isDeviceOwner
+                      ? styles.statusBadgeTextActive
+                      : styles.statusBadgeTextWarn,
+                  ]}
+                >
+                  {isDeviceOwner ? 'Đã kích hoạt' : 'Chưa cấp (ADB)'}
+                </AppText>
+              </View>
+            </View>
+
+            {/* Kiosk Lock Status */}
+            <View style={styles.infoRow}>
+              <AppText style={styles.infoLabel}>Trạng thái LockTask:</AppText>
+              <View
+                style={[
+                  styles.statusBadge,
+                  isKioskActive
+                    ? styles.statusBadgeDanger
+                    : styles.statusBadgeNeutral,
+                ]}
+              >
+                <AppText
+                  style={[
+                    styles.statusBadgeText,
+                    isKioskActive
+                      ? styles.statusBadgeTextDanger
+                      : styles.statusBadgeTextNeutral,
+                  ]}
+                >
+                  {isKioskActive ? 'Đang khóa Kiosk' : 'Chưa khóa'}
+                </AppText>
+              </View>
+            </View>
+
+            {/* Auto Kiosk Switch */}
+            <View style={styles.kioskSwitchRow}>
+              <View style={{ flex: 1, paddingRight: 8 }}>
+                <AppText style={styles.kioskSwitchLabel}>
+                  Tự động ghim Kiosk
+                </AppText>
+                <AppText style={styles.kioskSwitchSub}>
+                  Tự động ghim app vào Kiosk khi vào màn hình điểm danh
+                </AppText>
+              </View>
+              <Switch
+                value={autoKiosk}
+                onValueChange={setAutoKiosk}
+                trackColor={{
+                  false: appColors.slate300,
+                  true: appColors.blue600,
+                }}
+                thumbColor={appColors.white}
+              />
+            </View>
+
+            {/* Quick Actions */}
+            <View style={{ gap: 10, marginTop: 14 }}>
+              <TouchableOpacity
+                style={[
+                  styles.kioskActionBtn,
+                  isKioskActive ? styles.kioskStopBtn : styles.kioskStartBtn,
+                ]}
+                onPress={() => {
+                  if (isKioskActive) {
+                    setKioskExitModalVisible(true);
+                  } else {
+                    startKiosk().then(ok => {
+                      if (ok) {
+                        showSuccessToast(
+                          'Kiosk Mode',
+                          'Đã kích hoạt chế độ Kiosk thành công.',
+                        );
+                      } else {
+                        showWarnToast(
+                          'Kiosk Mode',
+                          'Vui lòng cấp quyền Device Owner hoặc ghim màn hình.',
+                        );
+                      }
+                    });
+                  }
+                }}
+                activeOpacity={0.85}
+              >
+                {isKioskActive ? (
+                  <>
+                    <Unlock size={16} color={appColors.white} />
+                    <AppText style={styles.kioskActionBtnText}>
+                      Thoát chế độ Kiosk (Nhập PIN)
+                    </AppText>
+                  </>
+                ) : (
+                  <>
+                    <Lock size={16} color={appColors.white} />
+                    <AppText style={styles.kioskActionBtnText}>
+                      Kích hoạt chế độ Kiosk ngay
+                    </AppText>
+                  </>
+                )}
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={styles.changePinBtn}
+                onPress={() => setChangePinModalVisible(true)}
+                activeOpacity={0.8}
+              >
+                <KeyRound size={16} color={appColors.slate700} />
+                <AppText style={styles.changePinBtnText}>
+                  Đổi mã PIN Quản trị viên
+                </AppText>
+              </TouchableOpacity>
             </View>
           </View>
         </View>
@@ -286,6 +443,20 @@ export const SettingsScreen: React.FC = () => {
           </View>
         </View>
       </View>
+
+      {/* Kiosk Modals */}
+      <KioskExitModal
+        visible={kioskExitModalVisible}
+        onClose={() => setKioskExitModalVisible(false)}
+        onSuccess={() => {
+          refreshStatus();
+        }}
+      />
+
+      <ChangePinModal
+        visible={changePinModalVisible}
+        onClose={() => setChangePinModalVisible(false)}
+      />
     </ScrollView>
   );
 };
@@ -504,5 +675,96 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     paddingTop: 8,
+  },
+  statusBadge: {
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 6,
+  },
+  statusBadgeActive: {
+    backgroundColor: 'rgba(16, 185, 129, 0.1)',
+  },
+  statusBadgeWarn: {
+    backgroundColor: 'rgba(245, 158, 11, 0.1)',
+  },
+  statusBadgeDanger: {
+    backgroundColor: 'rgba(239, 68, 68, 0.1)',
+  },
+  statusBadgeNeutral: {
+    backgroundColor: appColors.slate100,
+  },
+  statusBadgeText: {
+    fontSize: 11,
+    fontWeight: '700',
+  },
+  statusBadgeTextActive: {
+    color: appColors.emerald600,
+  },
+  statusBadgeTextWarn: {
+    color: appColors.amber600,
+  },
+  statusBadgeTextDanger: {
+    color: appColors.red600,
+  },
+  statusBadgeTextNeutral: {
+    color: appColors.slate600,
+  },
+  kioskSwitchRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 10,
+    borderTopWidth: 1,
+    borderTopColor: appColors.slate100,
+    marginTop: 6,
+  },
+  kioskSwitchLabel: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: appColors.slate800,
+  },
+  kioskSwitchSub: {
+    fontSize: 11,
+    color: appColors.slate500,
+    marginTop: 2,
+  },
+  kioskActionBtn: {
+    height: 42,
+    borderRadius: 10,
+    flexDirection: 'row',
+    justifyContent: 'center',
+    alignItems: 'center',
+    gap: 8,
+    shadowColor: appColors.black,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 2,
+  },
+  kioskStartBtn: {
+    backgroundColor: appColors.blue600,
+  },
+  kioskStopBtn: {
+    backgroundColor: appColors.red600,
+  },
+  kioskActionBtnText: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: appColors.white,
+  },
+  changePinBtn: {
+    height: 40,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: appColors.slate300,
+    backgroundColor: appColors.slate50,
+    flexDirection: 'row',
+    justifyContent: 'center',
+    alignItems: 'center',
+    gap: 6,
+  },
+  changePinBtnText: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: appColors.slate700,
   },
 });

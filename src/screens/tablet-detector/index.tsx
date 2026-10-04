@@ -32,6 +32,8 @@ import { SessionsHistoryModal } from './components/SessionsHistoryModal';
 import { SessionDetailModal } from '../rooms-manager/components/SessionDetailModal';
 import { DeviceInfoModal } from './components/DeviceInfoModal';
 import { AttendanceSession } from '../../model/detector';
+import { KioskExitModal } from './components/KioskExitModal';
+import { kioskService } from '../../services/kiosk-service';
 import { PickerModal } from './components/PickerModal';
 import { ManageRoomsModal } from './components/ManageRoomsModal';
 import { useAppDispatch, useAppSelector } from '../../store/hooks';
@@ -41,6 +43,7 @@ import {
   endSession,
   recordAttendance,
   recordScanEvent,
+  convertStrangerToUser,
   setActiveDetection,
   setSelectedRoomId,
   setSelectedZoneId,
@@ -61,6 +64,7 @@ import {
   deviceService,
 } from '../../services/api';
 import { deviceIdService } from '../../services/device-id-service';
+import { deleteTempFile } from '../../utils/file-cleaner';
 
 interface TabletDetectorScreenProps {
   isTabFocused?: boolean;
@@ -69,8 +73,17 @@ interface TabletDetectorScreenProps {
 const TabletDetectorScreen: React.FC<TabletDetectorScreenProps> = ({
   isTabFocused = true,
 }) => {
-  const { isPhone } = useResponsive();
-  const { height: windowHeight } = useWindowDimensions();
+  const { isPhone, isLandscape } = useResponsive();
+  const { width: windowWidth, height: windowHeight } = useWindowDimensions();
+  const [containerWidth, setContainerWidth] = useState(0);
+
+  // Exact 50% width for Camera (2 parts) and 25% for other 2 columns (1 part each)
+  // padding 12*2 = 24, 2 gaps of 12 = 24 => total spacing = 48
+  const activeW = containerWidth > 0 ? containerWidth : windowWidth;
+  const availableContentW = Math.max(0, activeW - 48);
+  const cameraWidth = Math.floor(availableContentW * 0.5);
+  const sideColWidth = Math.floor(availableContentW * 0.25);
+
   // Camera điện thoại cao ~50% màn hình (giới hạn 340–520)
   const phoneCameraHeight = Math.round(
     Math.min(520, Math.max(340, windowHeight * 0.5)),
@@ -117,9 +130,59 @@ const TabletDetectorScreen: React.FC<TabletDetectorScreenProps> = ({
   >(null);
   const [enrollStrangerFullName, setEnrollStrangerFullName] =
     useState<string>('');
+  const [enrollStrangerId, setEnrollStrangerId] = useState<string | null>(null);
+
+  // Kiosk Mode States
+  const [kioskExitModalVisible, setKioskExitModalVisible] = useState(false);
+  const [isKioskActive, setIsKioskActive] = useState(false);
+
+  useEffect(() => {
+    let isMounted = true;
+    const initKiosk = async () => {
+      const active = await kioskService.isKioskModeActive();
+      if (!isMounted) return;
+      setIsKioskActive(active);
+
+      // Auto start kiosk mode on tablet if enabled
+      if (!active && !isPhone && kioskService.isAutoKioskEnabled()) {
+        const ok = await kioskService.startKioskMode();
+        if (isMounted && ok) {
+          setIsKioskActive(true);
+        }
+      }
+    };
+    initKiosk();
+    return () => {
+      isMounted = false;
+    };
+  }, [isPhone]);
+
+  const handleToggleKiosk = useCallback(async () => {
+    if (isKioskActive) {
+      setKioskExitModalVisible(true);
+    } else {
+      const started = await kioskService.startKioskMode();
+      if (started) {
+        setIsKioskActive(true);
+        showSuccessToast(
+          'Đã kích hoạt Kiosk Mode',
+          'Thiết bị đã vào chế độ ghim màn hình chuyên dụng.',
+        );
+      } else {
+        showWarnToast(
+          'Chưa kích hoạt Kiosk Mode',
+          'Vui lòng cấp quyền Device Owner qua ADB hoặc xác nhận trên máy tính bảng.',
+        );
+      }
+    }
+  }, [isKioskActive, showSuccessToast, showWarnToast]);
+
+  const handleKioskExitSuccess = useCallback(() => {
+    setIsKioskActive(false);
+  }, []);
 
   const handleEnrollStranger = useCallback(
-    (photoUri?: string, defaultName?: string) => {
+    (photoUri?: string, defaultName?: string, strangerId?: string) => {
       setEnrollStrangerPhotoUri(photoUri || null);
       setEnrollStrangerFullName(
         defaultName &&
@@ -128,6 +191,7 @@ const TabletDetectorScreen: React.FC<TabletDetectorScreenProps> = ({
           ? defaultName
           : '',
       );
+      setEnrollStrangerId(strangerId || null);
       setAddUserVisible(true);
     },
     [],
@@ -136,20 +200,25 @@ const TabletDetectorScreen: React.FC<TabletDetectorScreenProps> = ({
   // Camera Facing
   const [cameraFacing, setCameraFacing] = useState<'front' | 'back'>('front');
 
+  const selectedZone = zones.find(z => z.id === selectedZoneId) || zones[0];
+  const selectedRoom = rooms.find(r => r.id === selectedRoomId) || rooms[0];
+  const effectiveRoomId = selectedRoomId || selectedRoom?.id || rooms[0]?.id || '';
+
   // Filter users by selected room (including visitors visiting members in this room)
   const currentRoomUsers = useMemo(
     () =>
       (userProfiles || []).filter(u => {
-        if (u.roomId === selectedRoomId) return true;
+        if (!effectiveRoomId) return false;
+        if (u.roomId === effectiveRoomId) return true;
         if (u.isVisitor && u.visitedProfileId) {
           const visitedUser = (userProfiles || []).find(
             v => v.id === u.visitedProfileId,
           );
-          return visitedUser?.roomId === selectedRoomId;
+          return visitedUser?.roomId === effectiveRoomId;
         }
         return false;
       }),
-    [userProfiles, selectedRoomId],
+    [userProfiles, effectiveRoomId],
   );
 
   // Target profiles: in 'all' mode match against all facility profiles, in 'room' mode match room profiles
@@ -157,9 +226,6 @@ const TabletDetectorScreen: React.FC<TabletDetectorScreenProps> = ({
     () => (scanMode === 'all' ? userProfiles || [] : currentRoomUsers),
     [scanMode, userProfiles, currentRoomUsers],
   );
-
-  const selectedZone = zones.find(z => z.id === selectedZoneId) || zones[0];
-  const selectedRoom = rooms.find(r => r.id === selectedRoomId) || rooms[0];
 
   // Clear legacy mock data once on mount if present
   useEffect(() => {
@@ -259,10 +325,9 @@ const TabletDetectorScreen: React.FC<TabletDetectorScreenProps> = ({
       if (!isSessionRunningRef.current) return;
       if (isScanningRef.current) return;
       isScanningRef.current = true;
-
+      let photoPath = providedPhotoPath;
       try {
         // 1. Capture real frame from Camera hardware if available
-        let photoPath = providedPhotoPath;
         if (!photoPath && cameraViewFinderRef.current) {
           photoPath =
             (await cameraViewFinderRef.current.captureFrame()) || undefined;
@@ -532,7 +597,6 @@ const TabletDetectorScreen: React.FC<TabletDetectorScreenProps> = ({
               if (realResult.hasUnverifiedStranger) {
                 dispatch(
                   recordScanEvent({
-                    userId: `stranger_${Date.now()}`,
                     fullName: 'Người chưa xác minh',
                     code: 'STRANGER',
                     avatarUri: undefined,
@@ -540,6 +604,7 @@ const TabletDetectorScreen: React.FC<TabletDetectorScreenProps> = ({
                     status: 'verify',
                     timestamp: realResult.timestamp,
                     scanMode,
+                    direction: scanDirection,
                   }),
                 );
                 const lastAlert = alertsRef.current?.[0];
@@ -565,14 +630,15 @@ const TabletDetectorScreen: React.FC<TabletDetectorScreenProps> = ({
             } else if (realResult.status === 'verify') {
               dispatch(
                 recordScanEvent({
-                  userId: `stranger_${Date.now()}`,
-                  fullName: 'Người chưa xác minh',
-                  code: 'STRANGER',
+                  userId: realResult.userId,
+                  fullName: realResult.fullName,
+                  code: realResult.code,
                   avatarUri: realResult.avatarUri,
                   confidence: realResult.confidence,
                   status: 'verify',
                   timestamp: realResult.timestamp,
                   scanMode,
+                  direction: scanDirection,
                 }),
               );
               const lastAlert = alertsRef.current?.[0];
@@ -618,6 +684,9 @@ const TabletDetectorScreen: React.FC<TabletDetectorScreenProps> = ({
         console.warn('[TabletDetectorScreen] auto-scan error:', err);
         scheduleNextScan(350);
       } finally {
+        if (photoPath) {
+          deleteTempFile(photoPath).catch(() => {});
+        }
         isScanningRef.current = false;
       }
     },
@@ -674,11 +743,15 @@ const TabletDetectorScreen: React.FC<TabletDetectorScreenProps> = ({
 
   const handleStartSessionConfirm = async (sessionName: string) => {
     setStartSessionModalVisible(false);
+    YoloDetectorService.clearStrangerCache();
     try {
       const isRoomMode = scanMode === 'room';
+      const actualRoomId = isRoomMode
+        ? selectedRoom?.id || effectiveRoomId
+        : undefined;
       const payload = {
         name: sessionName,
-        roomId: isRoomMode ? selectedRoom?.id : selectedRoom?.id || undefined,
+        roomId: actualRoomId,
         roomName: isRoomMode ? selectedRoom?.name : 'Toàn cơ sở',
         zoneId: isRoomMode ? selectedZone?.id : undefined,
         zoneName: isRoomMode ? selectedZone?.name : 'Toàn cơ sở',
@@ -686,7 +759,14 @@ const TabletDetectorScreen: React.FC<TabletDetectorScreenProps> = ({
       };
       const res = await sessionService.startSession(payload);
       const beId = res?.data?.id;
-      dispatch(startSession({ id: beId, name: sessionName, scanMode }));
+      dispatch(
+        startSession({
+          id: beId,
+          name: sessionName,
+          scanMode,
+          roomId: actualRoomId,
+        }),
+      );
       showSuccessToast(
         'Bắt đầu phiên',
         `Đã khởi tạo phiên trên hệ thống: ${sessionName}`,
@@ -696,7 +776,17 @@ const TabletDetectorScreen: React.FC<TabletDetectorScreenProps> = ({
         '[TabletDetectorScreen] BE start session error, running offline session:',
         err?.message || err,
       );
-      dispatch(startSession({ name: sessionName, scanMode }));
+      const isRoomMode = scanMode === 'room';
+      const actualRoomId = isRoomMode
+        ? selectedRoom?.id || effectiveRoomId
+        : undefined;
+      dispatch(
+        startSession({
+          name: sessionName,
+          scanMode,
+          roomId: actualRoomId,
+        }),
+      );
       showSuccessToast(
         'Bắt đầu phiên (Offline)',
         `Đang chạy phiên cục bộ: ${sessionName}`,
@@ -738,24 +828,29 @@ const TabletDetectorScreen: React.FC<TabletDetectorScreenProps> = ({
     subtitle: z.description,
   }));
 
+  const filteredRooms = (rooms || []).filter(
+    r => !selectedZoneId || r.zoneId === selectedZoneId,
+  );
+  // If no rooms match selected zone, show all available rooms so picker isn't empty
+  const availableRooms =
+    filteredRooms.length > 0 ? filteredRooms : rooms || [];
+
   const roomPickerItems = [
     {
       id: 'all_mode_option',
       label: 'Tất cả phòng ban (Quét All - Vào cơ sở)',
       subtitle: `Xác nhận vào cơ sở (${(userProfiles || []).length} nhân sự)`,
     },
-    ...(rooms || [])
-      .filter(r => r.zoneId === selectedZoneId)
-      .map(r => ({
-        id: r.id,
-        label: r.name,
-        subtitle: `Sức chứa ${r.capacity || 30} người`,
-      })),
+    ...availableRooms.map(r => ({
+      id: r.id,
+      label: r.name,
+      subtitle: `Sức chứa ${r.capacity || 30} người`,
+    })),
   ];
 
   return (
     <SafeAreaView style={styles.safeArea}>
-      <StatusBar barStyle="dark-content" />
+      <StatusBar hidden={isKioskActive} barStyle="dark-content" />
 
       {/* 1. Header Bar */}
       <HeaderBar
@@ -766,10 +861,12 @@ const TabletDetectorScreen: React.FC<TabletDetectorScreenProps> = ({
         onSelectZone={() => setZonePickerVisible(true)}
         onSelectRoom={() => setRoomPickerVisible(true)}
         onOpenDeviceInfo={() => setDeviceInfoModalVisible(true)}
+        onOpenKiosk={handleToggleKiosk}
+        isKioskActive={isKioskActive}
       />
 
       {/* 2. Main Body: Responsive Tablet Landscape vs Mobile Portrait */}
-      {isPhone ? (
+      {isPhone && !isLandscape ? (
         <ScrollView
           style={styles.phoneMainContainer}
           contentContainerStyle={styles.phoneScrollContent}
@@ -811,6 +908,8 @@ const TabletDetectorScreen: React.FC<TabletDetectorScreenProps> = ({
             unreadAlertsCount={
               (alerts || []).filter(a => a.type === 'warning').length
             }
+            onOpenKioskModal={handleToggleKiosk}
+            isKioskActive={isKioskActive}
           />
 
           {/* Scanned Results List */}
@@ -833,13 +932,28 @@ const TabletDetectorScreen: React.FC<TabletDetectorScreenProps> = ({
           />
         </ScrollView>
       ) : (
-        <View style={styles.mainContainer}>
-          {/* Left Column: Camera + Session Summary (Duration timer, KPIs, Department breakdown) + Actions */}
-          <View style={styles.leftColumn}>
-            <ScanDirectionToggle
-              value={scanDirection}
-              onChange={d => dispatch(setScanDirection(d))}
-            />
+        <View
+          style={styles.mainContainer}
+          onLayout={e => {
+            const w = e.nativeEvent.layout.width;
+            if (w > 0 && Math.abs(w - containerWidth) > 1) {
+              setContainerWidth(w);
+            }
+          }}
+        >
+          {/* 1. Camera Column: Chỉ riêng camera, chiếm đúng 50% (2 phần / 4) */}
+          <View
+            style={[
+              styles.cameraColumn,
+              cameraWidth > 0
+                ? {
+                    width: cameraWidth,
+                    minWidth: cameraWidth,
+                    maxWidth: cameraWidth,
+                  }
+                : { flex: 2 },
+            ]}
+          >
             <CameraViewFinder
               ref={cameraViewFinderRef}
               boundingBox={activeDetection?.boundingBox}
@@ -850,28 +964,74 @@ const TabletDetectorScreen: React.FC<TabletDetectorScreenProps> = ({
               isTabFocused={isTabFocused}
               onEnrollStranger={handleEnrollStranger}
             />
-
-            <SessionSummaryBar
-              isSessionActive={isSessionActive}
-              sessionDurationSeconds={sessionDurationSeconds}
-              scanHistory={scanHistory}
-              scanMode={scanMode}
-              totalMembersCount={targetProfiles.length}
-              scanDirection={scanDirection}
-            />
-
-            <BottomActions
-              onOpenList={() => setListModalVisible(true)}
-              onOpenSessionsHistory={() => setSessionsHistoryVisible(true)}
-              onOpenAlerts={() => setAlertsModalVisible(true)}
-              unreadAlertsCount={
-                (alerts || []).filter(a => a.type === 'warning').length
-              }
-            />
           </View>
 
-          {/* Right Column: Scanned Results List (IN/OUT, verified/unverified, dept tag) + Session Controls */}
-          <View style={styles.rightColumn}>
+          {/* 2. Session Column: Quản lý phiên, Chốt quét, Thống kê, chiếm đúng 25% (1 phần / 4) */}
+          <View
+            style={[
+              styles.sessionColumn,
+              sideColWidth > 0
+                ? {
+                    width: sideColWidth,
+                    minWidth: sideColWidth,
+                    maxWidth: sideColWidth,
+                  }
+                : { flex: 1 },
+            ]}
+          >
+            <ScrollView
+              style={{ flex: 1 }}
+              showsVerticalScrollIndicator={false}
+              contentContainerStyle={styles.sessionColumnContent}
+            >
+              <ScanDirectionToggle
+                value={scanDirection}
+                onChange={d => dispatch(setScanDirection(d))}
+              />
+
+              <SessionSummaryBar
+                isSessionActive={isSessionActive}
+                sessionDurationSeconds={sessionDurationSeconds}
+                scanHistory={scanHistory}
+                scanMode={scanMode}
+                totalMembersCount={targetProfiles.length}
+                scanDirection={scanDirection}
+              />
+
+              <SessionControls
+                onStartSession={handleOpenStartSession}
+                onEndSession={handleEndSession}
+                isSessionActive={isSessionActive}
+                scanMode={scanMode}
+                sessionDurationSeconds={sessionDurationSeconds}
+              />
+
+              <BottomActions
+                onOpenList={() => setListModalVisible(true)}
+                onOpenSessionsHistory={() => setSessionsHistoryVisible(true)}
+                onOpenAlerts={() => setAlertsModalVisible(true)}
+                unreadAlertsCount={
+                  (alerts || []).filter(a => a.type === 'warning').length
+                }
+                onOpenKioskModal={handleToggleKiosk}
+                isKioskActive={isKioskActive}
+              />
+            </ScrollView>
+          </View>
+
+          {/* 3. Results Column: Danh sách kết quả quét, chiếm đúng 25% (1 phần / 4) */}
+          <View
+            style={[
+              styles.resultsColumn,
+              sideColWidth > 0
+                ? {
+                    width: sideColWidth,
+                    minWidth: sideColWidth,
+                    maxWidth: sideColWidth,
+                  }
+                : { flex: 1 },
+            ]}
+          >
             <ScannedResultsList
               scanHistory={scanHistory}
               activeDetection={activeDetection}
@@ -879,14 +1039,6 @@ const TabletDetectorScreen: React.FC<TabletDetectorScreenProps> = ({
               scanMode={scanMode}
               scanDirection={scanDirection}
               onEnrollStranger={handleEnrollStranger}
-            />
-
-            <SessionControls
-              onStartSession={handleOpenStartSession}
-              onEndSession={handleEndSession}
-              isSessionActive={isSessionActive}
-              scanMode={scanMode}
-              sessionDurationSeconds={sessionDurationSeconds}
             />
           </View>
         </View>
@@ -926,10 +1078,29 @@ const TabletDetectorScreen: React.FC<TabletDetectorScreenProps> = ({
         visible={addUserVisible}
         initialPhotoUri={enrollStrangerPhotoUri}
         initialFullName={enrollStrangerFullName}
+        onUserCreated={newProfile => {
+          if (enrollStrangerId) {
+            dispatch(
+              convertStrangerToUser({
+                strangerId: enrollStrangerId,
+                userProfile: newProfile,
+              }),
+            );
+            YoloDetectorService.removeStranger(enrollStrangerId);
+          }
+          // Warm up biometric embedding immediately for newly enrolled user
+          YoloDetectorService.enrollProfile(newProfile).catch(err => {
+            console.warn(
+              '[TabletDetector] Failed to pre-enroll new user embeddings:',
+              err,
+            );
+          });
+        }}
         onClose={() => {
           setAddUserVisible(false);
           setEnrollStrangerPhotoUri(null);
           setEnrollStrangerFullName('');
+          setEnrollStrangerId(null);
         }}
       />
 
@@ -1006,6 +1177,13 @@ const TabletDetectorScreen: React.FC<TabletDetectorScreenProps> = ({
         }}
       />
 
+      {/* Kiosk Mode Exit PIN Modal */}
+      <KioskExitModal
+        visible={kioskExitModalVisible}
+        onClose={() => setKioskExitModalVisible(false)}
+        onSuccess={handleKioskExitSuccess}
+      />
+
       {/* Screen-wide Touch Blocking Overlay when Device is Unauthorized */}
       {isDeviceAuthorized === false && (
         <View
@@ -1030,18 +1208,24 @@ const styles = StyleSheet.create({
   mainContainer: {
     flex: 1,
     flexDirection: 'row',
-    padding: 16,
-    gap: 16,
+    padding: 12,
+    gap: 12,
   },
-  leftColumn: {
-    flex: 1.2,
-    flexDirection: 'column',
-    gap: 10,
+  cameraColumn: {
+    flex: 2,
+    height: '100%',
   },
-  rightColumn: {
+  sessionColumn: {
     flex: 1,
-    flexDirection: 'column',
+    height: '100%',
+  },
+  sessionColumnContent: {
     gap: 10,
+    paddingBottom: 16,
+  },
+  resultsColumn: {
+    flex: 1,
+    height: '100%',
   },
   phoneMainContainer: {
     flex: 1,

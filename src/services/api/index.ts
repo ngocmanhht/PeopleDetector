@@ -8,3 +8,4 @@ export * from './alert-service';
 export * from './upload-service';
 export * from './stats-service';
 export * from './device-service';
+export * from './setting-service';

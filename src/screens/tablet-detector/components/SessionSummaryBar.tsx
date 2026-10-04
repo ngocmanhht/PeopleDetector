@@ -96,18 +96,17 @@ export const SessionSummaryBar: React.FC<SessionSummaryBarProps> = ({
             {isSessionActive && <View style={styles.livePulseDot} />}
           </View>
         </View>
-
-        <View style={styles.modeTag}>
-          <AppText style={styles.modeTagText}>
-            {isAllMode
-              ? isOut
-                ? 'QUÉT ALL • RA CƠ SỞ'
-                : 'QUÉT ALL • VÀO CƠ SỞ'
-              : isOut
-              ? 'THEO PHÒNG • RA'
-              : 'THEO PHÒNG • VÀO'}
-          </AppText>
-        </View>
+      </View>
+      <View style={styles.modeTag}>
+        <AppText style={styles.modeTagText}>
+          {isAllMode
+            ? isOut
+              ? 'QUÉT ALL • RA CƠ SỞ'
+              : 'QUÉT ALL • VÀO CƠ SỞ'
+            : isOut
+            ? 'THEO PHÒNG • RA'
+            : 'THEO PHÒNG • VÀO'}
+        </AppText>
       </View>
 
       {/* 2. Primary KPI Stats Row */}
@@ -198,16 +197,16 @@ const styles = StyleSheet.create({
   container: {
     backgroundColor: appColors.white,
     borderRadius: 16,
-    padding: 14,
+    padding: 12,
     borderWidth: 1,
     borderColor: appColors.slate200,
-    marginTop: 12,
+    marginTop: 0,
     shadowColor: appColors.black,
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.04,
     shadowRadius: 6,
     elevation: 2,
-    gap: 12,
+    gap: 10,
   },
   containerPhone: {
     padding: 12,
@@ -274,13 +273,15 @@ const styles = StyleSheet.create({
   // Primary KPI Row
   kpiRow: {
     flexDirection: 'row',
-    gap: 10,
+    gap: 8,
+    flexWrap: 'wrap',
   },
   kpiCard: {
     flex: 1,
+    minWidth: 70,
     borderRadius: 12,
-    paddingVertical: 10,
-    paddingHorizontal: 12,
+    paddingVertical: 8,
+    paddingHorizontal: 8,
     borderWidth: 1,
   },
   kpiCardVerified: {

@@ -21,14 +21,16 @@ export const ScanDirectionToggle: React.FC<ScanDirectionToggleProps> = ({
   const isIn = value === 'in';
   return (
     <View style={styles.wrap}>
-      <AppText style={styles.label}>Chốt quét:</AppText>
       <View style={styles.segment}>
         <TouchableOpacity
           style={[styles.btn, isIn && styles.btnIn]}
           onPress={() => onChange('in')}
           activeOpacity={0.85}
         >
-          <LogIn size={15} color={isIn ? appColors.white : appColors.slate500} />
+          <LogIn
+            size={15}
+            color={isIn ? appColors.white : appColors.slate500}
+          />
           <AppText style={[styles.btnText, isIn && styles.btnTextActive]}>
             VÀO (IN)
           </AppText>

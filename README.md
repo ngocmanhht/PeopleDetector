@@ -82,6 +82,19 @@ You've successfully run and modified your React Native App. :partying_face:
 - If you want to add this new React Native code to an existing application, check out the [Integration guide](https://reactnative.dev/docs/integration-with-existing-apps).
 - If you're curious to learn more about React Native, check out the [docs](https://reactnative.dev/docs/getting-started).
 
+## Kiosk Mode (Samsung Tablet)
+
+Ứng dụng hỗ trợ chế độ Kiosk Mode chuyên dụng cho máy tính bảng Samsung Tablet:
+- **Tự động chạy ứng dụng khi khởi động lại / bật nguồn máy** (`ACTION_BOOT_COMPLETED`).
+- **Khóa màn hình chuyên dụng (LockTask Mode)**: Vô hiệu hóa phím điều hướng Home, Back, Recent apps, Status Bar.
+- **Thoát Kiosk bằng mã PIN Quản trị viên**: Mặc định mã PIN là `123456` (có thể đổi trong màn hình Cài đặt).
+- **Cấp quyền Device Owner qua ADB**:
+  ```bash
+  adb shell dpm set-device-owner com.peopledetector/.AdminReceiver
+  ```
+
+👉 Xem hướng dẫn chi tiết tại [KIOSK_GUIDE.md](./KIOSK_GUIDE.md).
+
 # Troubleshooting
 
 If you're having issues getting the above steps to work, see the [Troubleshooting](https://reactnative.dev/docs/troubleshooting) page.

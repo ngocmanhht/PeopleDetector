@@ -1,6 +1,5 @@
 /**
- * Sample React Native App
- * https://github.com/facebook/react-native
+ * PeopleDetector React Native App
  *
  * @format
  */
@@ -22,25 +21,28 @@ import { toastConfig } from './src/config/toast-config';
 import { Provider } from 'react-redux';
 import { persistor, store } from './src/store';
 import { PersistGate } from 'redux-persist/integration/react';
+import { ErrorBoundary } from './src/components/error-boundary';
 
 const App = () => {
   return (
-    <Provider store={store}>
-      <PersistGate persistor={persistor} loading={null}>
-        <QueryClientProvider client={queryClient}>
-          <SafeAreaProvider initialMetrics={initialWindowMetrics}>
-            <GestureHandlerRootView>
-              <StatusBar barStyle="default" />
-              <NavigationContainer ref={navigationService.navigationRef}>
-                <RootNavigator />
-                <Toast config={toastConfig} />
-              </NavigationContainer>
-              <AppLoadingIndicator />
-            </GestureHandlerRootView>
-          </SafeAreaProvider>
-        </QueryClientProvider>
-      </PersistGate>
-    </Provider>
+    <ErrorBoundary>
+      <Provider store={store}>
+        <PersistGate persistor={persistor} loading={null}>
+          <QueryClientProvider client={queryClient}>
+            <SafeAreaProvider initialMetrics={initialWindowMetrics}>
+              <GestureHandlerRootView style={{ flex: 1 }}>
+                <StatusBar barStyle="default" />
+                <NavigationContainer ref={navigationService.navigationRef}>
+                  <RootNavigator />
+                  <Toast config={toastConfig} />
+                </NavigationContainer>
+                <AppLoadingIndicator />
+              </GestureHandlerRootView>
+            </SafeAreaProvider>
+          </QueryClientProvider>
+        </PersistGate>
+      </Provider>
+    </ErrorBoundary>
   );
 };
 

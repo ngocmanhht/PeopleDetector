@@ -15,6 +15,39 @@ import { appScreens } from '../const/app-screens';
 import { deviceIdService } from './device-id-service';
 import { setDeviceAuthorized } from '../store/slices/detectorSlice';
 
+const sanitizeForLog = (data: any): any => {
+  if (!data || typeof data !== 'object') {
+    return data;
+  }
+  if (Array.isArray(data)) {
+    return data.map(sanitizeForLog);
+  }
+  const sensitiveKeys = [
+    'password',
+    'pass',
+    'token',
+    'accesstoken',
+    'refreshtoken',
+    'access_token',
+    'refresh_token',
+    'authorization',
+    'secret',
+    'credential',
+  ];
+  const copy: Record<string, any> = {};
+  for (const [key, value] of Object.entries(data)) {
+    const lowerKey = key.toLowerCase();
+    if (sensitiveKeys.some(k => lowerKey.includes(k))) {
+      copy[key] = '***REDACTED***';
+    } else if (typeof value === 'object' && value !== null) {
+      copy[key] = sanitizeForLog(value);
+    } else {
+      copy[key] = value;
+    }
+  }
+  return copy;
+};
+
 class ApiClient {
   private instance: AxiosInstance;
   private isRefreshing = false;
@@ -65,13 +98,20 @@ class ApiClient {
   private setupInterceptors() {
     this.instance.interceptors.request.use(
       async (config: InternalAxiosRequestConfig) => {
-        try {
-          const token = store.getState().app.token?.accessToken;
-          if (token) {
-            config.headers.set('Authorization', `Bearer ${token}`);
+        // Do not attach old token on public auth endpoints
+        const isAuthPublic =
+          config.url?.includes('/auth/login') ||
+          config.url?.includes('/auth/register');
+
+        if (!isAuthPublic) {
+          try {
+            const token = store.getState().app.token?.accessToken;
+            if (token) {
+              config.headers.set('Authorization', `Bearer ${token}`);
+            }
+          } catch (e) {
+            // If store is not initialized yet, proceed
           }
-        } catch (e) {
-          // If store is not initialized yet, proceed
         }
 
         try {
@@ -83,10 +123,12 @@ class ApiClient {
           // Ignore
         }
 
-        console.log(
-          `[Request] ${config.method?.toUpperCase()} ${config.url}`,
-          config.params || config.data || '',
-        );
+        if (__DEV__) {
+          console.log(
+            `[Request] ${config.method?.toUpperCase()} ${config.url}`,
+            sanitizeForLog(config.params || config.data || ''),
+          );
+        }
         return config;
       },
       error => Promise.reject(error),
@@ -94,10 +136,12 @@ class ApiClient {
 
     this.instance.interceptors.response.use(
       response => {
-        console.log(
-          `[Response] ${response.status} ${response.config.url}`,
-          response.data,
-        );
+        if (__DEV__) {
+          console.log(
+            `[Response] ${response.status} ${response.config.url}`,
+            sanitizeForLog(response.data),
+          );
+        }
         return response.data;
       },
       async error => {
@@ -105,11 +149,17 @@ class ApiClient {
         const status = error?.response?.status;
         const data = error?.response?.data;
 
-        // Auto Refresh Token on 401 UNAUTHORIZED
+        const isAuthEndpoint =
+          originalRequest?.url?.includes('/auth/login') ||
+          originalRequest?.url?.includes('/auth/refresh') ||
+          originalRequest?.url?.includes('/auth/register');
+
+        // Auto Refresh Token on 401 UNAUTHORIZED (Only for protected APIs, NOT for login/refresh)
         if (
           (status === StatusCode.UNAUTHORIZED || status === 401) &&
           originalRequest &&
-          !originalRequest._retry
+          !originalRequest._retry &&
+          !isAuthEndpoint
         ) {
           // If this was already a refresh request that failed, logout immediately
           if (originalRequest.url?.includes('/auth/refresh')) {
@@ -190,6 +240,13 @@ class ApiClient {
 
         let networkError: Error;
         switch (status) {
+          case StatusCode.UNAUTHORIZED:
+          case 401: {
+            networkError = new Error(
+              data?.message ?? 'Tài khoản hoặc mật khẩu không chính xác',
+            );
+            break;
+          }
           case 403: {
             const errorMsg =
               data?.message ??

@@ -4,6 +4,11 @@
   "private": true,
   "scripts": {
     "android": "react-native run-android",
+    "android:prod": "ENVFILE=.env.prod react-native run-android --mode=release",
+    "build:android:prod": "ENVFILE=.env.prod NODE_ENV=production cd android && ./gradlew assembleRelease",
+    "build:android:dev": "ENVFILE=.env.dev cd android && ./gradlew assembleDebug",
+    "set-env:prod": "cp -f .env.prod .env",
+    "set-env:dev": "cp -f .env.dev .env",
     "ios": "react-native run-ios",
     "lint": "eslint .",
     "start": "react-native start",

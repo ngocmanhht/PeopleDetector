@@ -39,7 +39,11 @@ interface ScannedResultsListProps {
   isSessionActive: boolean;
   scanMode: ScanMode;
   scanDirection?: ScanDirection;
-  onEnrollStranger?: (photoUri?: string, defaultName?: string) => void;
+  onEnrollStranger?: (
+    photoUri?: string,
+    defaultName?: string,
+    strangerId?: string,
+  ) => void;
 }
 
 type FilterType = 'all' | 'verified' | 'unverified';
@@ -256,6 +260,7 @@ export const ScannedResultsList: React.FC<ScannedResultsListProps> = ({
                       activeDetection.fullName !== 'Người chưa xác minh'
                         ? activeDetection.fullName
                         : '',
+                      activeDetection.userId,
                     )
                   }
                   activeOpacity={0.8}
@@ -507,6 +512,7 @@ export const ScannedResultsList: React.FC<ScannedResultsListProps> = ({
                           item.fullName !== 'Người chưa xác minh'
                             ? item.fullName
                             : '',
+                          item.id || item.userId,
                         );
                       }}
                       activeOpacity={0.8}
@@ -701,6 +707,7 @@ export const ScannedResultsList: React.FC<ScannedResultsListProps> = ({
                         item.fullName !== 'Người chưa xác minh'
                           ? item.fullName
                           : '',
+                        item.id || item.userId,
                       );
                     }}
                     activeOpacity={0.85}
@@ -958,17 +965,18 @@ const styles = StyleSheet.create({
   // Filter Row
   filterRow: {
     flexDirection: 'row',
-    gap: 8,
-    marginTop: 12,
+    gap: 6,
+    flexWrap: 'wrap',
+    marginTop: 8,
     marginBottom: 8,
   },
   filterTab: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 4,
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    borderRadius: 8,
+    gap: 3,
+    paddingHorizontal: 7,
+    paddingVertical: 4,
+    borderRadius: 6,
     backgroundColor: appColors.slate100,
   },
   filterTabActive: {

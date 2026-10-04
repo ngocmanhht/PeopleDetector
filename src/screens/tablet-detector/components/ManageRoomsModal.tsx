@@ -25,6 +25,7 @@ import {
 } from '../../../store/slices/detectorSlice';
 import { appColors } from '../../../const/app-colors';
 import { useResponsive } from '../../../hooks/use-responsive';
+import { zoneService, roomService } from '../../../services/api';
 
 interface ManageRoomsModalProps {
   visible: boolean;
@@ -61,29 +62,49 @@ export const ManageRoomsModal: React.FC<ManageRoomsModalProps> = ({
     }
   }, [selectedZoneId, zones, newRoomZoneId]);
 
-  const handleAddZone = () => {
+  const handleAddZone = async () => {
     if (!newZoneName.trim()) {
       setError('Vui lòng nhập tên khu vực.');
       return;
     }
-    const zoneId = `zone-${Date.now()}`;
+    const zoneName = newZoneName.trim();
+    const zoneDesc = newZoneDesc.trim();
+    const tempZoneId = `zone-${Date.now()}`;
     dispatch(
       addZone({
-        id: zoneId,
-        name: newZoneName.trim(),
-        description: newZoneDesc.trim(),
-      })
+        id: tempZoneId,
+        name: zoneName,
+        description: zoneDesc,
+      }),
     );
-    setNewRoomZoneId(zoneId);
-    dispatch(setSelectedZoneId(zoneId));
+    setNewRoomZoneId(tempZoneId);
+    dispatch(setSelectedZoneId(tempZoneId));
     setNewZoneName('');
     setNewZoneDesc('');
     setError('');
     setSuccess('Đã thêm khu vực mới thành công!');
     setTimeout(() => setSuccess(''), 2500);
+
+    try {
+      const res = await zoneService.createZone({
+        id: tempZoneId,
+        name: zoneName,
+        description: zoneDesc,
+      });
+      if (res?.data?.id && res.data.id !== tempZoneId) {
+        dispatch(addZone(res.data));
+        dispatch(setSelectedZoneId(res.data.id));
+        setNewRoomZoneId(res.data.id);
+      }
+    } catch (err) {
+      console.log(
+        '[ManageRoomsModal] BE create zone error (running offline):',
+        err,
+      );
+    }
   };
 
-  const handleAddRoom = () => {
+  const handleAddRoom = async () => {
     if (!newRoomName.trim()) {
       setError('Vui lòng nhập tên phòng.');
       return;
@@ -94,22 +115,41 @@ export const ManageRoomsModal: React.FC<ManageRoomsModalProps> = ({
       return;
     }
     const cap = parseInt(newRoomCapacity, 10) || 30;
-    const roomId = `room-${Date.now()}`;
+    const roomName = newRoomName.trim();
+    const tempRoomId = `room-${Date.now()}`;
     dispatch(
       addRoom({
-        id: roomId,
-        name: newRoomName.trim(),
+        id: tempRoomId,
+        name: roomName,
         zoneId: targetZoneId,
         capacity: cap,
-      })
+      }),
     );
     dispatch(setSelectedZoneId(targetZoneId));
-    dispatch(setSelectedRoomId(roomId));
+    dispatch(setSelectedRoomId(tempRoomId));
     setNewRoomName('');
     setNewRoomCapacity('30');
     setError('');
     setSuccess('Đã thêm phòng học/làm việc mới thành công!');
     setTimeout(() => setSuccess(''), 2500);
+
+    try {
+      const res = await roomService.createRoom({
+        id: tempRoomId,
+        name: roomName,
+        zoneId: targetZoneId,
+        capacity: cap,
+      });
+      if (res?.data?.id && res.data.id !== tempRoomId) {
+        dispatch(addRoom(res.data));
+        dispatch(setSelectedRoomId(res.data.id));
+      }
+    } catch (err) {
+      console.log(
+        '[ManageRoomsModal] BE create room error (running offline):',
+        err,
+      );
+    }
   };
 
   return (

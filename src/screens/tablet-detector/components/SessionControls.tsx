@@ -75,7 +75,7 @@ export const SessionControls: React.FC<SessionControlsProps> = ({
             <AppText
               style={[styles.buttonText, isPhone && styles.buttonTextPhone]}
             >
-              Kết thúc phiên quét
+              Kết thúc quét
             </AppText>
           </TouchableOpacity>
         </View>

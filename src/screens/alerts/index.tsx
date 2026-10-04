@@ -20,6 +20,7 @@ import { addAlert, clearAlerts } from '../../store/slices/detectorSlice';
 import { appColors } from '../../const/app-colors';
 import { useResponsive } from '../../hooks/use-responsive';
 import { useInfiniteAlertsQuery } from '../../hooks/use-api-queries';
+import { RefreshButton } from '../../components/refresh-button';
 
 export const AlertsScreen: React.FC = () => {
   const { isPhone } = useResponsive();
@@ -116,6 +117,12 @@ export const AlertsScreen: React.FC = () => {
               <AppText style={styles.clearBtnText}>Xóa tất cả</AppText>
             </TouchableOpacity>
           )}
+
+          <RefreshButton
+            size={isPhone ? 34 : 38}
+            iconSize={isPhone ? 16 : 18}
+            onRefresh={() => refetch()}
+          />
         </View>
       </View>
 

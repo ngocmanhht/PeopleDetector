@@ -30,6 +30,7 @@ import {
   useCameraPermission,
 } from 'react-native-vision-camera';
 import { appColors } from '../../../const/app-colors';
+import { deleteTempFile } from '../../../utils/file-cleaner';
 
 export interface CameraViewFinderRef {
   captureFrame: () => Promise<string | null>;
@@ -42,7 +43,11 @@ export interface CameraViewFinderProps {
   onManualScan?: (photoPath?: string) => void;
   cameraFacing?: 'front' | 'back';
   isTabFocused?: boolean;
-  onEnrollStranger?: (photoUri?: string, defaultName?: string) => void;
+  onEnrollStranger?: (
+    photoUri?: string,
+    defaultName?: string,
+    strangerId?: string,
+  ) => void;
 }
 
 export const CameraViewFinder = forwardRef<
@@ -96,11 +101,27 @@ export const CameraViewFinder = forwardRef<
       (cameraFacing === 'front' ? frontDevice : backDevice) ??
       (cameraFacing === 'front' ? backDevice : frontDevice);
 
+    const lastPendingSnapshot = useRef<string | null>(null);
+
+    useEffect(() => {
+      return () => {
+        if (lastPendingSnapshot.current) {
+          deleteTempFile(lastPendingSnapshot.current).catch(() => {});
+          lastPendingSnapshot.current = null;
+        }
+      };
+    }, []);
+
     // Expose captureFrame to parent via ref
     useImperativeHandle(ref, () => ({
       captureFrame: async (): Promise<string | null> => {
         if (!cameraRef.current || !hasPermission || !device) {
           return null;
+        }
+
+        if (lastPendingSnapshot.current) {
+          deleteTempFile(lastPendingSnapshot.current).catch(() => {});
+          lastPendingSnapshot.current = null;
         }
 
         // On Android, takeSnapshot gets the GPU preview bitmap directly without locking Camera2 hardware
@@ -111,6 +132,7 @@ export const CameraViewFinder = forwardRef<
               quality: 85,
             });
             if (snapshot?.path) {
+              lastPendingSnapshot.current = snapshot.path;
               return snapshot.path;
             }
           } catch (snapErr) {
@@ -125,10 +147,12 @@ export const CameraViewFinder = forwardRef<
           const photo = await cameraRef.current.takePhoto({
             enableShutterSound: false,
           });
+          lastPendingSnapshot.current = photo.path;
           return photo.path;
         } catch {
           try {
             const fallbackPhoto = await cameraRef.current.takePhoto();
+            lastPendingSnapshot.current = fallbackPhoto.path;
             return fallbackPhoto.path;
           } catch (photoErr) {
             console.warn('[VisionCamera] captureFrame error:', photoErr);
@@ -541,7 +565,11 @@ export const CameraViewFinder = forwardRef<
                 <TouchableOpacity
                   style={styles.boxEnrollBtn}
                   onPress={() =>
-                    onEnrollStranger(detection?.avatarUri, detection?.fullName)
+                    onEnrollStranger(
+                      detection?.avatarUri,
+                      detection?.fullName,
+                      detection?.userId,
+                    )
                   }
                   activeOpacity={0.8}
                 >
@@ -568,7 +596,11 @@ export const CameraViewFinder = forwardRef<
               <TouchableOpacity
                 style={styles.cameraStrangerAlertBtn}
                 onPress={() =>
-                  onEnrollStranger(detection.avatarUri, detection.fullName)
+                  onEnrollStranger(
+                    detection.avatarUri,
+                    detection.fullName,
+                    detection.userId,
+                  )
                 }
                 activeOpacity={0.85}
               >

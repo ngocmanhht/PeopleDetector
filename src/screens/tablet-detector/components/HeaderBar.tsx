@@ -11,6 +11,8 @@ import {
   Sliders,
   Cpu,
   Tablet,
+  Lock,
+  Unlock,
 } from 'lucide-react-native';
 import { useAppDispatch, useAppSelector } from '../../../store/hooks';
 import { startSession, setScanMode } from '../../../store/slices/detectorSlice';
@@ -20,6 +22,7 @@ import { useAppToast } from '../../../hooks/use-app-toast';
 import { useResponsive } from '../../../hooks/use-responsive';
 import { StartSessionModal } from './StartSessionModal';
 import { YoloDetectorService } from '../../../services/yolo-detector';
+import { RefreshButton } from '../../../components/refresh-button';
 
 interface HeaderBarProps {
   onOpenManageRooms: () => void;
@@ -27,6 +30,8 @@ interface HeaderBarProps {
   onSelectZone: () => void;
   onSelectRoom: () => void;
   onOpenDeviceInfo?: () => void;
+  onOpenKiosk?: () => void;
+  isKioskActive?: boolean;
 }
 
 export const HeaderBar: React.FC<HeaderBarProps> = ({
@@ -35,6 +40,8 @@ export const HeaderBar: React.FC<HeaderBarProps> = ({
   onSelectZone,
   onSelectRoom,
   onOpenDeviceInfo,
+  onOpenKiosk,
+  isKioskActive = false,
 }) => {
   const { isPhone } = useResponsive();
   const dispatch = useAppDispatch();
@@ -107,9 +114,10 @@ export const HeaderBar: React.FC<HeaderBarProps> = ({
     setShowStartSessionModal(false);
     try {
       const isRoomMode = scanMode === 'room';
+      const actualRoomId = isRoomMode ? selectedRoom?.id : undefined;
       const payload = {
         name: sessionName,
-        roomId: isRoomMode ? selectedRoom?.id : selectedRoom?.id || undefined,
+        roomId: actualRoomId,
         roomName: isRoomMode ? selectedRoom?.name : 'Toàn cơ sở',
         zoneId: isRoomMode ? selectedZone?.id : undefined,
         zoneName: isRoomMode ? selectedZone?.name : 'Toàn cơ sở',
@@ -117,7 +125,14 @@ export const HeaderBar: React.FC<HeaderBarProps> = ({
       };
       const res = await sessionService.startSession(payload);
       const beId = res?.data?.id;
-      dispatch(startSession({ id: beId, name: sessionName, scanMode }));
+      dispatch(
+        startSession({
+          id: beId,
+          name: sessionName,
+          scanMode,
+          roomId: actualRoomId,
+        }),
+      );
       showSuccessToast(
         'Bắt đầu phiên',
         `Đã khởi tạo phiên trên hệ thống: ${sessionName}`,
@@ -127,7 +142,15 @@ export const HeaderBar: React.FC<HeaderBarProps> = ({
         '[HeaderBar] BE start session error, running offline session:',
         err?.message || err,
       );
-      dispatch(startSession({ name: sessionName, scanMode }));
+      const isRoomMode = scanMode === 'room';
+      const actualRoomId = isRoomMode ? selectedRoom?.id : undefined;
+      dispatch(
+        startSession({
+          name: sessionName,
+          scanMode,
+          roomId: actualRoomId,
+        }),
+      );
       showSuccessToast(
         'Bắt đầu phiên (Offline)',
         `Đang chạy phiên cục bộ: ${sessionName}`,
@@ -169,6 +192,25 @@ export const HeaderBar: React.FC<HeaderBarProps> = ({
                 <Tablet size={18} color={appColors.blue600} />
               </TouchableOpacity>
             )}
+
+            {Boolean(onOpenKiosk) && (
+              <TouchableOpacity
+                style={[
+                  styles.iconAction,
+                  isKioskActive && styles.iconActionKioskActive,
+                ]}
+                onPress={onOpenKiosk}
+                activeOpacity={0.7}
+              >
+                {isKioskActive ? (
+                  <Lock size={18} color={appColors.red600} />
+                ) : (
+                  <Unlock size={18} color={appColors.slate600} />
+                )}
+              </TouchableOpacity>
+            )}
+
+            <RefreshButton size={34} iconSize={16} />
 
             {!isSessionActive ? (
               <TouchableOpacity
@@ -558,6 +600,25 @@ export const HeaderBar: React.FC<HeaderBarProps> = ({
           </TouchableOpacity>
         )}
 
+        {Boolean(onOpenKiosk) && (
+          <TouchableOpacity
+            style={[
+              styles.iconAction,
+              isKioskActive && styles.iconActionKioskActive,
+            ]}
+            onPress={onOpenKiosk}
+            activeOpacity={0.7}
+          >
+            {isKioskActive ? (
+              <Lock size={20} color={appColors.red600} />
+            ) : (
+              <Unlock size={20} color={appColors.slate600} />
+            )}
+          </TouchableOpacity>
+        )}
+
+        <RefreshButton size={38} iconSize={18} />
+
         {/* Real-time Clock */}
         <View style={styles.clockContainer}>
           <AppText style={styles.clockTime}>{currentTime}</AppText>
@@ -752,6 +813,11 @@ const styles = StyleSheet.create({
     padding: 8,
     borderRadius: 8,
     backgroundColor: appColors.slate50,
+  },
+  iconActionKioskActive: {
+    backgroundColor: '#FEE2E2',
+    borderColor: '#FCA5A5',
+    borderWidth: 1,
   },
   clockContainer: {
     alignItems: 'flex-end',

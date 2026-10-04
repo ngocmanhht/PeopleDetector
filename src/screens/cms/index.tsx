@@ -17,6 +17,7 @@ import { CmsScanStatusTab } from './components/CmsScanStatusTab';
 import { CmsUserListTab } from './components/CmsUserListTab';
 import { CmsReportsTab } from './components/CmsReportsTab';
 import { CmsStatsTab } from './components/CmsStatsTab';
+import { RefreshButton } from '../../components/refresh-button';
 
 interface TabItem {
   id: CmsSubTab;
@@ -114,31 +115,35 @@ export const CmsScreen: React.FC = () => {
           </View>
         </View>
 
-        {/* Sub-tab Navigation (Array Map) */}
-        <View style={styles.subTabNav}>
-          {tabItems.map(tab => {
-            const isActive = subTab === tab.id;
-            const Icon = tab.icon;
-            const iconColor = isActive ? appColors.blue600 : appColors.slate500;
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+          {/* Sub-tab Navigation (Array Map) */}
+          <View style={styles.subTabNav}>
+            {tabItems.map(tab => {
+              const isActive = subTab === tab.id;
+              const Icon = tab.icon;
+              const iconColor = isActive ? appColors.blue600 : appColors.slate500;
 
-            return (
-              <TouchableOpacity
-                key={tab.id}
-                style={[styles.subTabBtn, isActive && styles.subTabBtnActive]}
-                onPress={() => setSubTab(tab.id)}
-              >
-                <Icon size={16} color={iconColor} />
-                <AppText
-                  style={[
-                    styles.subTabBtnText,
-                    isActive && styles.subTabBtnTextActive,
-                  ]}
+              return (
+                <TouchableOpacity
+                  key={tab.id}
+                  style={[styles.subTabBtn, isActive && styles.subTabBtnActive]}
+                  onPress={() => setSubTab(tab.id)}
                 >
-                  {tab.label}
-                </AppText>
-              </TouchableOpacity>
-            );
-          })}
+                  <Icon size={16} color={iconColor} />
+                  <AppText
+                    style={[
+                      styles.subTabBtnText,
+                      isActive && styles.subTabBtnTextActive,
+                    ]}
+                  >
+                    {tab.label}
+                  </AppText>
+                </TouchableOpacity>
+              );
+            })}
+          </View>
+
+          <RefreshButton size={isPhone ? 34 : 38} iconSize={isPhone ? 16 : 18} />
         </View>
       </View>
 

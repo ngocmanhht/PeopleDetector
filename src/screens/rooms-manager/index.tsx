@@ -48,6 +48,7 @@ import { PickerModal } from '../tablet-detector/components/PickerModal';
 import { ManageRoomsModal } from '../tablet-detector/components/ManageRoomsModal';
 import { AttendanceSession, UserProfile } from '../../model/detector';
 import { useResponsive } from '../../hooks/use-responsive';
+import { RefreshButton } from '../../components/refresh-button';
 import { appColors } from '../../const/app-colors';
 import { appUtils } from '../../utils';
 import { tfliteYoloService } from '../../services/tflite-yolo-service';
@@ -161,9 +162,17 @@ export const RoomsManagerScreen: React.FC = () => {
     const zoneId = `zone-${Date.now()}`;
     const zoneData = { id: zoneId, name: newZoneName.trim() };
     dispatch(addZone(zoneData));
-    zoneService.createZone(zoneData).catch(err => {
-      console.log('[RoomsManager] Failed to create zone on BE:', err);
-    });
+    zoneService
+      .createZone(zoneData)
+      .then(res => {
+        if (res?.data?.id && res.data.id !== zoneId) {
+          dispatch(addZone(res.data));
+          dispatch(setSelectedZoneId(res.data.id));
+        }
+      })
+      .catch(err => {
+        console.log('[RoomsManager] Failed to create zone on BE:', err);
+      });
     dispatch(setSelectedZoneId(zoneId));
     setNewZoneName('');
     setShowAddZoneInput(false);
@@ -179,9 +188,17 @@ export const RoomsManagerScreen: React.FC = () => {
       capacity: 30,
     };
     dispatch(addRoom(roomData));
-    roomService.createRoom(roomData).catch(err => {
-      console.log('[RoomsManager] Failed to create room on BE:', err);
-    });
+    roomService
+      .createRoom(roomData)
+      .then(res => {
+        if (res?.data?.id && res.data.id !== roomId) {
+          dispatch(addRoom(res.data));
+          dispatch(setSelectedRoomId(res.data.id));
+        }
+      })
+      .catch(err => {
+        console.log('[RoomsManager] Failed to create room on BE:', err);
+      });
     dispatch(setSelectedRoomId(roomId));
     setNewRoomName('');
     setShowAddRoomInput(false);
@@ -423,18 +440,22 @@ export const RoomsManagerScreen: React.FC = () => {
             </AppText>
           </View>
 
-          {activeTab === 'members' && (
-            <TouchableOpacity
-              style={[styles.addUserHeaderBtn, isPhone && styles.addUserHeaderBtnPhone]}
-              onPress={() => setShowAddRoomMemberModal(true)}
-              activeOpacity={0.85}
-            >
-              <UserPlus size={18} color={appColors.white} style={{ flexShrink: 0 }} />
-              <AppText style={styles.addUserHeaderBtnText}>
-                + Thêm người
-              </AppText>
-            </TouchableOpacity>
-          )}
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+            {activeTab === 'members' && (
+              <TouchableOpacity
+                style={[styles.addUserHeaderBtn, isPhone && styles.addUserHeaderBtnPhone]}
+                onPress={() => setShowAddRoomMemberModal(true)}
+                activeOpacity={0.85}
+              >
+                <UserPlus size={18} color={appColors.white} style={{ flexShrink: 0 }} />
+                <AppText style={styles.addUserHeaderBtnText}>
+                  + Thêm người
+                </AppText>
+              </TouchableOpacity>
+            )}
+
+            <RefreshButton size={isPhone ? 34 : 38} iconSize={isPhone ? 16 : 18} />
+          </View>
         </View>
 
         {/* Tab Switcher: Members vs Sessions */}

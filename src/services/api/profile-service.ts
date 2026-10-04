@@ -8,18 +8,9 @@ export interface GetProfilesParams extends PaginationParams {
   q?: string;
 }
 
-export interface CreateProfilePayload {
-  id?: string;
+export interface CreateProfilePayload extends Partial<UserProfile> {
   code: string;
   fullName: string;
-  avatarUri?: string;
-  photos?: string[];
-  zoneId?: string;
-  roomId?: string;
-  enrolledAt?: string;
-  phoneNumber?: string;
-  conditionStatus?: string;
-  conditionNote?: string;
 }
 
 export interface UpdateConditionPayload {

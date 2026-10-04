@@ -39,7 +39,7 @@ export const LoginScreen = () => {
   const navigation = useCustomNavigation<RootNavigatorParamList>();
   const { showErrorToast } = useAppToast();
 
-  const [email, setEmail] = useState('admin@h2tech.ai');
+  const [email, setEmail] = useState('admin@cscns2.ag');
   const [password, setPassword] = useState('Aa@123456');
   const [showPassword, setShowPassword] = useState(false);
 
@@ -121,7 +121,7 @@ export const LoginScreen = () => {
           <Mail size={18} color={appColors.slate400} />
           <TextInput
             style={styles.textInput}
-            placeholder="admin@h2tech.ai"
+            placeholder="admin@cscns2.ag"
             value={email}
             onChangeText={setEmail}
             autoCapitalize="none"
@@ -169,9 +169,9 @@ export const LoginScreen = () => {
       <TouchableOpacity
         style={styles.mockLoginBtn}
         onPress={() => {
-          setEmail('admin@h2tech.ai');
+          setEmail('admin@cscns2.ag');
           setPassword('Aa@123456');
-          handleLogin('admin@h2tech.ai', 'Aa@123456');
+          handleLogin('admin@cscns2.ag', 'Aa@123456');
         }}
         disabled={loginMutation.isPending}
         activeOpacity={0.85}
