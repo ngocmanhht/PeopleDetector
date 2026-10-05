@@ -199,7 +199,39 @@ const TabletDetectorScreen: React.FC<TabletDetectorScreenProps> = ({
 
   const selectedZone = zones.find(z => z.id === selectedZoneId) || zones[0];
   const selectedRoom = rooms.find(r => r.id === selectedRoomId) || rooms[0];
+  const effectiveZoneId = selectedZoneId || selectedZone?.id || zones[0]?.id || '';
   const effectiveRoomId = selectedRoomId || selectedRoom?.id || rooms[0]?.id || '';
+
+  // 1. Lấy tất cả ID phòng thuộc khu vực đang chọn
+  const roomIdsInZone = useMemo(
+    () =>
+      new Set(
+        (rooms || [])
+          .filter(r => r.zoneId === effectiveZoneId)
+          .map(r => r.id),
+      ),
+    [rooms, effectiveZoneId],
+  );
+
+  // 2. Gộp nhân sự cả khu (tất cả học viên thuộc các phòng trong khu + trực thuộc khu + khách thăm)
+  const currentZoneUsers = useMemo(() => {
+    if (!effectiveZoneId) return [];
+    return (userProfiles || []).filter(u => {
+      if (u.zoneId === effectiveZoneId) return true;
+      if (u.roomId && roomIdsInZone.has(u.roomId)) return true;
+      if (u.isVisitor && u.visitedProfileId) {
+        const visitedUser = (userProfiles || []).find(
+          v => v.id === u.visitedProfileId,
+        );
+        return (
+          visitedUser &&
+          (visitedUser.zoneId === effectiveZoneId ||
+            roomIdsInZone.has(visitedUser.roomId))
+        );
+      }
+      return false;
+    });
+  }, [userProfiles, effectiveZoneId, roomIdsInZone]);
 
   // Filter users by selected room (including visitors visiting members in this room)
   const currentRoomUsers = useMemo(
@@ -218,11 +250,12 @@ const TabletDetectorScreen: React.FC<TabletDetectorScreenProps> = ({
     [userProfiles, effectiveRoomId],
   );
 
-  // Target profiles: in 'all' mode match against all facility profiles, in 'room' mode match room profiles
-  const targetProfiles = useMemo(
-    () => (scanMode === 'all' ? userProfiles || [] : currentRoomUsers),
-    [scanMode, userProfiles, currentRoomUsers],
-  );
+  // Target profiles: in 'all' mode match against all facility profiles, in 'zone' match zone profiles, in 'room' match room profiles
+  const targetProfiles = useMemo(() => {
+    if (scanMode === 'all') return userProfiles || [];
+    if (scanMode === 'zone') return currentZoneUsers;
+    return currentRoomUsers;
+  }, [scanMode, userProfiles, currentZoneUsers, currentRoomUsers]);
 
   // Clear legacy mock data once on mount if present
   useEffect(() => {
@@ -727,6 +760,14 @@ const TabletDetectorScreen: React.FC<TabletDetectorScreenProps> = ({
   }, [isSessionActive, isTabFocused, handleScanDetection]);
 
   const handleOpenStartSession = () => {
+    if (scanMode === 'zone' && (!selectedZone || !selectedZone.id)) {
+      showWarnToast(
+        'Chưa chọn khu vực',
+        'Vui lòng chọn khu vực trước khi bắt đầu phiên quét theo khu!',
+      );
+      setZonePickerVisible(true);
+      return;
+    }
     if (scanMode === 'room' && (!selectedRoom || !selectedRoom.id)) {
       showWarnToast(
         'Chưa chọn phòng',
@@ -742,16 +783,21 @@ const TabletDetectorScreen: React.FC<TabletDetectorScreenProps> = ({
     setStartSessionModalVisible(false);
     YoloDetectorService.clearStrangerCache();
     try {
+      const isZoneMode = scanMode === 'zone';
       const isRoomMode = scanMode === 'room';
       const actualRoomId = isRoomMode
         ? selectedRoom?.id || effectiveRoomId
         : undefined;
+      const actualZoneId = isRoomMode || isZoneMode
+        ? selectedZone?.id || effectiveZoneId
+        : undefined;
       const payload = {
         name: sessionName,
+        scanMode,
         roomId: actualRoomId,
-        roomName: isRoomMode ? selectedRoom?.name : 'Toàn cơ sở',
-        zoneId: isRoomMode ? selectedZone?.id : undefined,
-        zoneName: isRoomMode ? selectedZone?.name : 'Toàn cơ sở',
+        roomName: isRoomMode ? selectedRoom?.name : isZoneMode ? 'Theo khu vực' : 'Toàn cơ sở',
+        zoneId: actualZoneId,
+        zoneName: actualZoneId ? selectedZone?.name : 'Toàn cơ sở',
         startTime: new Date().toISOString(),
       };
       const res = await sessionService.startSession(payload);
@@ -1044,6 +1090,8 @@ const TabletDetectorScreen: React.FC<TabletDetectorScreenProps> = ({
         roomName={
           scanMode === 'all'
             ? 'Tất cả phòng ban'
+            : scanMode === 'zone'
+            ? 'Tất cả các phòng trong khu'
             : selectedRoom
             ? selectedRoom.name
             : ''
@@ -1055,14 +1103,7 @@ const TabletDetectorScreen: React.FC<TabletDetectorScreenProps> = ({
             ? selectedZone.name
             : ''
         }
-        memberCount={
-          scanMode === 'all'
-            ? (userProfiles || []).length
-            : selectedRoom
-            ? (userProfiles || []).filter(u => u.roomId === selectedRoom.id)
-                .length
-            : 0
-        }
+        memberCount={targetProfiles.length}
         onClose={() => setStartSessionModalVisible(false)}
         onStart={handleStartSessionConfirm}
       />

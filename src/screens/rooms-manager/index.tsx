@@ -104,9 +104,14 @@ export const RoomsManagerScreen: React.FC = () => {
   // Users in currently selected room
   const usersInRoom = userProfiles.filter(u => u.roomId === currentRoom?.id);
 
-  // Sessions in currently selected room (plus all-mode campus sessions)
+  // Sessions in currently selected room (plus all-mode campus sessions and zone-mode sessions)
   const currentRoomSessions = (sessions || []).filter(
-    s => s.roomId === currentRoom?.id || s.scanMode === 'all' || s.roomId === 'all',
+    s =>
+      s.roomId === currentRoom?.id ||
+      s.scanMode === 'all' ||
+      s.roomId === 'all' ||
+      (s.scanMode === 'zone' &&
+        (s.zoneId === currentZone?.id || s.zoneId === currentRoom?.zoneId)),
   );
 
   const filteredUsers = usersInRoom.filter(

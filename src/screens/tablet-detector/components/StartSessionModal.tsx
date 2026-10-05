@@ -20,10 +20,11 @@ import {
   Sparkles,
 } from 'lucide-react-native';
 import { appColors } from '../../../const/app-colors';
+import { ScanMode } from '../../../model/detector';
 
 interface StartSessionModalProps {
   visible: boolean;
-  scanMode?: 'all' | 'room';
+  scanMode?: ScanMode;
   roomName: string;
   zoneName: string;
   memberCount: number;
@@ -41,12 +42,18 @@ export const StartSessionModal: React.FC<StartSessionModalProps> = ({
   onStart,
 }) => {
   const isAllMode = scanMode === 'all';
+  const isZoneMode = scanMode === 'zone';
   const getDefaultName = useCallback(
-    () =>
-      isAllMode
-        ? `Phiên vào cơ sở ${dayjs().format('HH:mm DD-MM-YYYY')}`
-        : `Phiên ${dayjs().format('HH:mm DD-MM-YYYY')}`,
-    [isAllMode],
+    () => {
+      if (isAllMode) {
+        return `Phiên vào cơ sở ${dayjs().format('HH:mm DD-MM-YYYY')}`;
+      }
+      if (isZoneMode) {
+        return `Phiên Khu ${zoneName || ''} ${dayjs().format('HH:mm DD-MM-YYYY')}`;
+      }
+      return `Phiên ${dayjs().format('HH:mm DD-MM-YYYY')}`;
+    },
+    [isAllMode, isZoneMode, zoneName],
   );
   const [sessionName, setSessionName] = useState(getDefaultName());
 
@@ -83,6 +90,7 @@ export const StartSessionModal: React.FC<StartSessionModalProps> = ({
                   style={[
                     styles.headerIcon,
                     isAllMode && { backgroundColor: appColors.blue600 },
+                    isZoneMode && { backgroundColor: appColors.amber600 },
                   ]}
                 >
                   <Play size={20} color={appColors.white} fill={appColors.white} />
@@ -91,11 +99,15 @@ export const StartSessionModal: React.FC<StartSessionModalProps> = ({
                   <AppText style={styles.title}>
                     {isAllMode
                       ? 'Bắt đầu phiên quét vào cơ sở'
+                      : isZoneMode
+                      ? 'Bắt đầu phiên quét theo khu vực'
                       : 'Bắt đầu phiên điểm danh'}
                   </AppText>
                   <AppText style={styles.subtitle}>
                     {isAllMode
                       ? 'Xác nhận vào cơ sở cho toàn bộ phòng ban / nhân sự'
+                      : isZoneMode
+                      ? `Quét kiểm soát nhân sự toàn bộ các phòng trong ${zoneName || 'khu vực'}`
                       : 'Khởi tạo phiên nhận diện khuôn mặt tự động'}
                   </AppText>
                 </View>

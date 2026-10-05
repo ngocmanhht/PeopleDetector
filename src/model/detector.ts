@@ -146,7 +146,7 @@ export interface AlertLog {
   type: 'warning' | 'info' | 'error';
 }
 
-export type ScanMode = 'all' | 'room';
+export type ScanMode = 'all' | 'zone' | 'room';
 export type ScanDirection = 'in' | 'out'; // Chốt quét: vào / ra
 
 export interface ScanEvent {

@@ -182,6 +182,7 @@ export const SessionDetailModal: React.FC<SessionDetailModalProps> = ({
 
   const isAllMode =
     activeSession?.scanMode === 'all' || activeSession?.roomId === 'all';
+  const isZoneMode = activeSession?.scanMode === 'zone';
 
   // Format Duration HH:mm:ss
   const formattedDuration = useMemo(() => {
@@ -203,8 +204,19 @@ export const SessionDetailModal: React.FC<SessionDetailModalProps> = ({
     if (isAllMode) {
       return userProfiles;
     }
+    if (isZoneMode) {
+      const roomIdsInZone = new Set(
+        rooms.filter(r => r.zoneId === activeSession.zoneId).map(r => r.id),
+      );
+      return userProfiles.filter(
+        u =>
+          !u.isVisitor &&
+          (u.zoneId === activeSession.zoneId ||
+            (u.roomId && roomIdsInZone.has(u.roomId))),
+      );
+    }
     return userProfiles.filter(u => u.roomId === activeSession.roomId);
-  }, [activeSession, isAllMode, userProfiles]);
+  }, [activeSession, isAllMode, isZoneMode, rooms, userProfiles]);
 
   // Assemble list of items combining scanHistory and missing members
   const itemsList = useMemo(() => {
@@ -402,7 +414,11 @@ export const SessionDetailModal: React.FC<SessionDetailModalProps> = ({
                 <View
                   style={[
                     styles.modeBadge,
-                    isAllMode ? styles.modeBadgeAll : styles.modeBadgeRoom,
+                    isAllMode
+                      ? styles.modeBadgeAll
+                      : isZoneMode
+                      ? styles.modeBadgeZone
+                      : styles.modeBadgeRoom,
                   ]}
                 >
                   <AppText
@@ -410,10 +426,16 @@ export const SessionDetailModal: React.FC<SessionDetailModalProps> = ({
                       styles.modeBadgeText,
                       isAllMode
                         ? styles.modeBadgeTextAll
+                        : isZoneMode
+                        ? styles.modeBadgeTextZone
                         : styles.modeBadgeTextRoom,
                     ]}
                   >
-                    {isAllMode ? 'QUÉT ALL' : 'THEO PHÒNG'}
+                    {isAllMode
+                      ? 'QUÉT ALL'
+                      : isZoneMode
+                      ? 'THEO KHU'
+                      : 'THEO PHÒNG'}
                   </AppText>
                 </View>
                 {isLoadingDetail && (
@@ -469,7 +491,11 @@ export const SessionDetailModal: React.FC<SessionDetailModalProps> = ({
                     numberOfLines={1}
                     ellipsizeMode="tail"
                   >
-                    {isAllMode ? 'Tất cả phòng ban' : activeSession.roomName}
+                    {isAllMode
+                      ? 'Tất cả phòng ban'
+                      : isZoneMode
+                      ? 'Tất cả các phòng trong khu'
+                      : activeSession.roomName}
                   </AppText>
                 </View>
                 <AppText style={styles.metaDivider}>•</AppText>
@@ -1097,6 +1123,11 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: appColors.blue200,
   },
+  modeBadgeZone: {
+    backgroundColor: '#FEF3C7',
+    borderWidth: 1,
+    borderColor: '#FCD34D',
+  },
   modeBadgeRoom: {
     backgroundColor: appColors.slate100,
     borderWidth: 1,
@@ -1108,6 +1139,9 @@ const styles = StyleSheet.create({
   },
   modeBadgeTextAll: {
     color: appColors.blue700,
+  },
+  modeBadgeTextZone: {
+    color: '#92400E',
   },
   modeBadgeTextRoom: {
     color: appColors.slate700,

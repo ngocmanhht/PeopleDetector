@@ -474,10 +474,31 @@ const detectorSlice = createSlice({
       const currentMode = action?.payload?.scanMode || state.scanMode || 'all';
       state.scanMode = currentMode;
       const isAll = currentMode === 'all';
+      const isZone = currentMode === 'zone';
+      const isRoom = currentMode === 'room';
 
-      // Rule: Nếu không đặt tên phiên thì mặc định là "Phiên HH:mm dd-mm-yyyy"
+      // Resolve room and zone for session
+      const targetRoomId = isRoom
+        ? action?.payload?.roomId || state.selectedRoomId || state.rooms[0]?.id || ''
+        : undefined;
+      if (targetRoomId && isRoom) {
+        state.selectedRoomId = targetRoomId;
+      }
+
+      const room = isRoom
+        ? state.rooms.find(r => r.id === targetRoomId) || state.rooms[0]
+        : undefined;
+      const zone = isAll
+        ? undefined
+        : state.zones.find(z => z.id === state.selectedZoneId) ||
+          state.zones.find(z => z.id === room?.zoneId) ||
+          state.zones[0];
+
+      // Rule: Nếu không đặt tên phiên thì mặc định là "Phiên [Tên phạm vi] HH:mm dd-mm-yyyy"
       const defaultName = isAll
         ? `Phiên vào cơ sở ${now.format('HH:mm DD-MM-YYYY')}`
+        : isZone
+        ? `Phiên Khu ${zone?.name || ''} ${now.format('HH:mm DD-MM-YYYY')}`
         : `Phiên ${now.format('HH:mm DD-MM-YYYY')}`;
       const sessionName = action?.payload?.name?.trim() || defaultName;
 
@@ -489,27 +510,21 @@ const detectorSlice = createSlice({
       state.activeDetection = null;
       state.scanHistory = [];
 
-      // Resolve room for session
-      const targetRoomId = isAll
-        ? undefined
-        : action?.payload?.roomId || state.selectedRoomId || state.rooms[0]?.id || '';
-      if (targetRoomId && !isAll) {
-        state.selectedRoomId = targetRoomId;
+      let targetUsers: UserProfile[] = [];
+      if (isAll) {
+        targetUsers = state.userProfiles.filter(u => !u.isVisitor);
+      } else if (isZone) {
+        const roomIdsInZone = new Set(
+          state.rooms.filter(r => r.zoneId === zone?.id).map(r => r.id),
+        );
+        targetUsers = state.userProfiles.filter(
+          u => !u.isVisitor && (u.zoneId === zone?.id || (u.roomId && roomIdsInZone.has(u.roomId))),
+        );
+      } else {
+        targetUsers = state.userProfiles.filter(
+          u => u.roomId === (room?.id || targetRoomId),
+        );
       }
-
-      const room = isAll
-        ? undefined
-        : state.rooms.find(r => r.id === targetRoomId) || state.rooms[0];
-      const zone = isAll
-        ? undefined
-        : state.zones.find(z => z.id === state.selectedZoneId) ||
-          state.zones.find(z => z.id === room?.zoneId) ||
-          state.zones[0];
-      const targetUsers = isAll
-        ? state.userProfiles.filter(u => !u.isVisitor)
-        : state.userProfiles.filter(
-            u => u.roomId === (room?.id || targetRoomId),
-          );
 
       const sessionId = action?.payload?.id || `session-${Date.now()}`;
       state.activeSessionId = sessionId;
@@ -519,8 +534,8 @@ const detectorSlice = createSlice({
         name: sessionName,
         zoneId: isAll ? undefined : zone?.id || '',
         zoneName: isAll ? 'Toàn cơ sở' : zone?.name || '',
-        roomId: isAll ? undefined : room?.id || targetRoomId || '',
-        roomName: isAll ? 'Toàn cơ sở' : room?.name || 'Phòng',
+        roomId: isRoom ? room?.id || targetRoomId || '' : undefined,
+        roomName: isRoom ? room?.name || 'Phòng' : isZone ? 'Theo khu vực' : 'Toàn cơ sở',
         startTime: now.format('HH:mm:ss DD/MM/YYYY'),
         createdAt: now.toISOString(),
         isActive: true,
@@ -543,6 +558,8 @@ const detectorSlice = createSlice({
         title: 'Bắt đầu phiên',
         message: isAll
           ? `Bắt đầu "${sessionName}" - Chế độ Quét All (Vào cơ sở)`
+          : isZone
+          ? `Bắt đầu "${sessionName}" - Chế độ Quét Khu vực (${zone?.name || 'Khu'})`
           : `Khởi tạo "${sessionName}" cho ${room?.name || 'phòng'}`,
         timestamp: now.format('HH:mm:ss'),
         type: 'info',
@@ -583,6 +600,18 @@ const detectorSlice = createSlice({
             activeSess.missingCount = Math.max(
               0,
               officialUsers.length - verifiedItems.length,
+            );
+          } else if (activeSess.scanMode === 'zone') {
+            const roomIds = new Set(
+              state.rooms.filter(r => r.zoneId === activeSess.zoneId).map(r => r.id),
+            );
+            const zoneMembers = state.userProfiles.filter(
+              u => !u.isVisitor && (u.zoneId === activeSess.zoneId || (u.roomId && roomIds.has(u.roomId))),
+            );
+            activeSess.totalCount = zoneMembers.length;
+            activeSess.missingCount = Math.max(
+              0,
+              zoneMembers.length - verifiedItems.length,
             );
           } else {
             const roomMembers = state.userProfiles.filter(

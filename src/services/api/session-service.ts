@@ -1,15 +1,17 @@
 import { apiClient } from '../axios-services';
-import { AttendanceSession } from '../../model/detector';
+import { AttendanceSession, ScanMode } from '../../model/detector';
 import { PaginatedResponse, PaginationParams } from '../../const/pagination';
 
 export interface GetSessionsParams extends PaginationParams {
   roomId?: string;
   zoneId?: string;
+  scanMode?: ScanMode;
 }
 
 export interface StartSessionPayload {
   id?: string;
   name?: string;
+  scanMode?: ScanMode;
   zoneId?: string;
   zoneName?: string;
   roomId?: string;

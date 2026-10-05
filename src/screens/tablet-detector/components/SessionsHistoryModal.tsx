@@ -37,7 +37,7 @@ interface SessionsHistoryModalProps {
   onSelectSession: (session: AttendanceSession) => void;
 }
 
-type ModeFilter = 'all' | 'all_mode' | 'room_mode';
+type ModeFilter = 'all' | 'all_mode' | 'zone_mode' | 'room_mode';
 
 export const SessionsHistoryModal: React.FC<SessionsHistoryModalProps> = ({
   visible,
@@ -77,10 +77,13 @@ export const SessionsHistoryModal: React.FC<SessionsHistoryModalProps> = ({
   const filteredSessions = useMemo(() => {
     return (sessions || []).filter(session => {
       const isAllMode = session.scanMode === 'all' || session.roomId === 'all';
+      const isZoneMode = session.scanMode === 'zone';
+      const isRoomMode = !isAllMode && !isZoneMode;
 
       // Mode filter
       if (modeFilter === 'all_mode' && !isAllMode) return false;
-      if (modeFilter === 'room_mode' && isAllMode) return false;
+      if (modeFilter === 'zone_mode' && !isZoneMode) return false;
+      if (modeFilter === 'room_mode' && !isRoomMode) return false;
 
       // Search query
       if (!searchQuery.trim()) return true;
@@ -194,6 +197,29 @@ export const SessionsHistoryModal: React.FC<SessionsHistoryModalProps> = ({
               <TouchableOpacity
                 style={[
                   styles.tabBtn,
+                  modeFilter === 'zone_mode' && styles.tabBtnActive,
+                ]}
+                onPress={() => setModeFilter('zone_mode')}
+              >
+                <AppText
+                  style={[
+                    styles.tabBtnText,
+                    modeFilter === 'zone_mode' && styles.tabBtnTextActive,
+                  ]}
+                >
+                  Theo khu (
+                  {
+                    sessions.filter(
+                      s => s.scanMode === 'zone',
+                    ).length
+                  }
+                  )
+                </AppText>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={[
+                  styles.tabBtn,
                   modeFilter === 'room_mode' && styles.tabBtnActive,
                 ]}
                 onPress={() => setModeFilter('room_mode')}
@@ -207,7 +233,9 @@ export const SessionsHistoryModal: React.FC<SessionsHistoryModalProps> = ({
                   Theo phòng (
                   {
                     sessions.filter(
-                      s => s.scanMode !== 'all' && s.roomId !== 'all',
+                      s =>
+                        s.scanMode === 'room' ||
+                        (!s.scanMode && s.roomId && s.roomId !== 'all'),
                     ).length
                   }
                   )
@@ -248,6 +276,7 @@ export const SessionsHistoryModal: React.FC<SessionsHistoryModalProps> = ({
             renderItem={({ item }) => {
               const isAllMode =
                 item.scanMode === 'all' || item.roomId === 'all';
+              const isZoneMode = item.scanMode === 'zone';
               const total = item.totalCount || 0;
               const present = item.presentCount || 0;
               const missing = item.missingCount || 0;
@@ -279,7 +308,11 @@ export const SessionsHistoryModal: React.FC<SessionsHistoryModalProps> = ({
                         <View
                           style={[
                             styles.modeTag,
-                            isAllMode ? styles.modeTagAll : styles.modeTagRoom,
+                            isAllMode
+                              ? styles.modeTagAll
+                              : isZoneMode
+                              ? styles.modeTagZone
+                              : styles.modeTagRoom,
                           ]}
                         >
                           <AppText
@@ -287,10 +320,16 @@ export const SessionsHistoryModal: React.FC<SessionsHistoryModalProps> = ({
                               styles.modeTagText,
                               isAllMode
                                 ? styles.modeTagTextAll
+                                : isZoneMode
+                                ? styles.modeTagTextZone
                                 : styles.modeTagTextRoom,
                             ]}
                           >
-                            {isAllMode ? 'QUÉT ALL' : 'THEO PHÒNG'}
+                            {isAllMode
+                              ? 'QUÉT ALL'
+                              : isZoneMode
+                              ? 'THEO KHU'
+                              : 'THEO PHÒNG'}
                           </AppText>
                         </View>
                         {item.isActive ? (
@@ -624,6 +663,11 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: appColors.blue200,
   },
+  modeTagZone: {
+    backgroundColor: '#FEF3C7',
+    borderWidth: 1,
+    borderColor: '#FCD34D',
+  },
   modeTagRoom: {
     backgroundColor: appColors.slate100,
     borderWidth: 1,
@@ -635,6 +679,9 @@ const styles = StyleSheet.create({
   },
   modeTagTextAll: {
     color: appColors.blue700,
+  },
+  modeTagTextZone: {
+    color: '#92400E',
   },
   modeTagTextRoom: {
     color: appColors.slate700,

@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { StyleSheet, View, TouchableOpacity } from 'react-native';
 import dayjs from 'dayjs';
 import { AppText } from '../../../components/app-text';
@@ -97,8 +97,36 @@ export const HeaderBar: React.FC<HeaderBarProps> = ({
 
   const selectedZone = zones.find(z => z.id === selectedZoneId) || zones[0];
   const selectedRoom = rooms.find(r => r.id === selectedRoomId) || rooms[0];
+  const effectiveZoneId = selectedZoneId || selectedZone?.id || zones[0]?.id || '';
+
+  const zoneRoomIds = useMemo(
+    () => new Set(rooms.filter(r => r.zoneId === effectiveZoneId).map(r => r.id)),
+    [rooms, effectiveZoneId],
+  );
+  const zoneMembersCount = useMemo(
+    () =>
+      (userProfiles || []).filter(
+        u =>
+          !u.isVisitor &&
+          (u.zoneId === effectiveZoneId || (u.roomId && zoneRoomIds.has(u.roomId))),
+      ).length,
+    [userProfiles, effectiveZoneId, zoneRoomIds],
+  );
+  const targetMemberCount = useMemo(() => {
+    if (scanMode === 'all') return (userProfiles || []).length;
+    if (scanMode === 'zone') return zoneMembersCount;
+    return (userProfiles || []).filter(u => u.roomId === selectedRoom?.id).length;
+  }, [scanMode, userProfiles, zoneMembersCount, selectedRoom]);
 
   const handleStartPress = () => {
+    if (scanMode === 'zone' && (!selectedZone || !selectedZone.id)) {
+      showWarnToast(
+        'Chưa chọn khu vực',
+        'Vui lòng chọn khu vực trước khi bắt đầu phiên theo khu!',
+      );
+      onSelectZone();
+      return;
+    }
     if (scanMode === 'room' && (!selectedRoom || !selectedRoom.id)) {
       showWarnToast(
         'Chưa chọn phòng',
@@ -113,14 +141,17 @@ export const HeaderBar: React.FC<HeaderBarProps> = ({
   const handleStartSessionConfirm = async (sessionName: string) => {
     setShowStartSessionModal(false);
     try {
+      const isZoneMode = scanMode === 'zone';
       const isRoomMode = scanMode === 'room';
       const actualRoomId = isRoomMode ? selectedRoom?.id : undefined;
+      const actualZoneId = isRoomMode || isZoneMode ? selectedZone?.id || effectiveZoneId : undefined;
       const payload = {
         name: sessionName,
+        scanMode,
         roomId: actualRoomId,
-        roomName: isRoomMode ? selectedRoom?.name : 'Toàn cơ sở',
-        zoneId: isRoomMode ? selectedZone?.id : undefined,
-        zoneName: isRoomMode ? selectedZone?.name : 'Toàn cơ sở',
+        roomName: isRoomMode ? selectedRoom?.name : isZoneMode ? 'Theo khu vực' : 'Toàn cơ sở',
+        zoneId: actualZoneId,
+        zoneName: actualZoneId ? selectedZone?.name : 'Toàn cơ sở',
         startTime: new Date().toISOString(),
       };
       const res = await sessionService.startSession(payload);
@@ -241,7 +272,7 @@ export const HeaderBar: React.FC<HeaderBarProps> = ({
           </View>
         </View>
 
-        {/* Phone Mode Toggle Row: Quét All (Cơ sở) vs Theo phòng */}
+        {/* Phone Mode Toggle Row: Quét All vs Theo khu vs Theo phòng */}
         <View style={styles.modeToggleWrapPhone}>
           <TouchableOpacity
             style={[
@@ -267,7 +298,35 @@ export const HeaderBar: React.FC<HeaderBarProps> = ({
                 scanMode === 'all' && styles.modeToggleTextActive,
               ]}
             >
-              Quét All (Vào cơ sở)
+              Quét All
+            </AppText>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={[
+              styles.modeToggleTabPhone,
+              scanMode === 'zone' && styles.modeToggleTabActiveZone,
+            ]}
+            onPress={() => {
+              dispatch(setScanMode('zone'));
+              showSuccessToast(
+                'Chế độ Theo khu',
+                'Quét nhân sự các phòng thuộc khu đã chọn!',
+              );
+            }}
+            activeOpacity={0.8}
+          >
+            <Building2
+              size={13}
+              color={scanMode === 'zone' ? appColors.white : appColors.slate600}
+            />
+            <AppText
+              style={[
+                styles.modeToggleTextPhone,
+                scanMode === 'zone' && styles.modeToggleTextActive,
+              ]}
+            >
+              Theo khu
             </AppText>
           </TouchableOpacity>
 
@@ -300,7 +359,7 @@ export const HeaderBar: React.FC<HeaderBarProps> = ({
           </TouchableOpacity>
         </View>
 
-        {/* Phone Row 2: Selectors for Zone & Room & Manage (only when in room mode) */}
+        {/* Phone Row 2: Selectors for Zone & Room & Manage */}
         {scanMode === 'room' ? (
           <View style={styles.phoneRow2}>
             <TouchableOpacity
@@ -363,6 +422,37 @@ export const HeaderBar: React.FC<HeaderBarProps> = ({
               />
             </TouchableOpacity>
           </View>
+        ) : scanMode === 'zone' ? (
+          <View style={styles.phoneRow2}>
+            <TouchableOpacity
+              style={[styles.dropdownBtnPhone, { flex: 1 }]}
+              onPress={onSelectZone}
+              activeOpacity={0.8}
+            >
+              <Building2
+                size={15}
+                color={appColors.amber600}
+                style={{ flexShrink: 0 }}
+              />
+              <AppText
+                style={styles.dropdownTextPhone}
+                numberOfLines={1}
+                ellipsizeMode="tail"
+              >
+                {selectedZone ? `Khu: ${selectedZone.name}` : 'Chọn Khu vực'}
+              </AppText>
+              <ChevronDown
+                size={14}
+                color={appColors.gray500}
+                style={{ flexShrink: 0 }}
+              />
+            </TouchableOpacity>
+            <View style={[styles.phoneFacilityBanner, { flex: 1.2, backgroundColor: appColors.warningBg, borderColor: appColors.warning }]}>
+              <AppText style={[styles.phoneFacilityBannerText, { color: appColors.warningText, fontSize: 11 }]}>
+                {rooms.filter(r => r.zoneId === effectiveZoneId).length} phòng • {zoneMembersCount} người
+              </AppText>
+            </View>
+          </View>
         ) : (
           <View style={styles.phoneFacilityBanner}>
             <Building2 size={13} color={appColors.blue600} />
@@ -379,6 +469,8 @@ export const HeaderBar: React.FC<HeaderBarProps> = ({
           roomName={
             scanMode === 'all'
               ? 'Tất cả phòng ban'
+              : scanMode === 'zone'
+              ? 'Tất cả các phòng trong khu'
               : selectedRoom
               ? selectedRoom.name
               : ''
@@ -390,14 +482,7 @@ export const HeaderBar: React.FC<HeaderBarProps> = ({
               ? selectedZone.name
               : ''
           }
-          memberCount={
-            scanMode === 'all'
-              ? (userProfiles || []).length
-              : selectedRoom
-              ? (userProfiles || []).filter(u => u.roomId === selectedRoom.id)
-                  .length
-              : 0
-          }
+          memberCount={targetMemberCount}
           onClose={() => setShowStartSessionModal(false)}
           onStart={handleStartSessionConfirm}
         />
@@ -411,7 +496,7 @@ export const HeaderBar: React.FC<HeaderBarProps> = ({
 
       {/* Selectors for Zone & Room & Mode */}
       <View style={styles.selectorsRow}>
-        {/* Mode Toggle: Quét All (Cơ sở) vs Theo phòng */}
+        {/* Mode Toggle: Quét All (Cơ sở) vs Theo khu vs Theo phòng */}
         <View style={styles.modeToggleWrapTablet}>
           <TouchableOpacity
             style={[
@@ -438,6 +523,34 @@ export const HeaderBar: React.FC<HeaderBarProps> = ({
               ]}
             >
               Quét All (Cơ sở)
+            </AppText>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={[
+              styles.modeToggleTabTablet,
+              scanMode === 'zone' && styles.modeToggleTabActiveZone,
+            ]}
+            onPress={() => {
+              dispatch(setScanMode('zone'));
+              showSuccessToast(
+                'Chế độ Theo khu vực',
+                'Quét nhân sự các phòng thuộc khu đã chọn!',
+              );
+            }}
+            activeOpacity={0.8}
+          >
+            <Building2
+              size={14}
+              color={scanMode === 'zone' ? appColors.white : appColors.slate600}
+            />
+            <AppText
+              style={[
+                styles.modeToggleTextTablet,
+                scanMode === 'zone' && styles.modeToggleTextActive,
+              ]}
+            >
+              Theo khu
             </AppText>
           </TouchableOpacity>
 
@@ -534,6 +647,39 @@ export const HeaderBar: React.FC<HeaderBarProps> = ({
                 style={{ flexShrink: 0 }}
               />
             </TouchableOpacity>
+          </>
+        ) : scanMode === 'zone' ? (
+          <>
+            {/* Zone Selector */}
+            <TouchableOpacity
+              style={[styles.dropdownBtn, { minWidth: 150 }]}
+              onPress={onSelectZone}
+              activeOpacity={0.8}
+            >
+              <Building2
+                size={16}
+                color={appColors.amber600}
+                style={{ flexShrink: 0 }}
+              />
+              <AppText
+                style={styles.dropdownText}
+                numberOfLines={1}
+                ellipsizeMode="tail"
+              >
+                {selectedZone ? `Khu: ${selectedZone.name}` : 'Chọn Khu'}
+              </AppText>
+              <ChevronDown
+                size={16}
+                color={appColors.gray500}
+                style={{ flexShrink: 0 }}
+              />
+            </TouchableOpacity>
+
+            <View style={[styles.tabletFacilityBanner, { backgroundColor: appColors.warningBg, borderColor: appColors.warning }]}>
+              <AppText style={[styles.tabletFacilityBannerText, { color: appColors.warningText }]}>
+                Toàn bộ {rooms.filter(r => r.zoneId === effectiveZoneId).length} phòng trong khu • {zoneMembersCount} nhân sự
+              </AppText>
+            </View>
           </>
         ) : (
           <View style={styles.tabletFacilityBanner}>
@@ -633,6 +779,8 @@ export const HeaderBar: React.FC<HeaderBarProps> = ({
         roomName={
           scanMode === 'all'
             ? 'Tất cả phòng ban'
+            : scanMode === 'zone'
+            ? 'Tất cả các phòng trong khu'
             : selectedRoom
             ? selectedRoom.name
             : ''
@@ -644,14 +792,7 @@ export const HeaderBar: React.FC<HeaderBarProps> = ({
             ? selectedZone.name
             : ''
         }
-        memberCount={
-          scanMode === 'all'
-            ? (userProfiles || []).length
-            : selectedRoom
-            ? (userProfiles || []).filter(u => u.roomId === selectedRoom.id)
-                .length
-            : 0
-        }
+        memberCount={targetMemberCount}
         onClose={() => setShowStartSessionModal(false)}
         onStart={handleStartSessionConfirm}
       />
@@ -972,6 +1113,9 @@ const styles = StyleSheet.create({
   },
   modeToggleTabActiveAll: {
     backgroundColor: appColors.blue600,
+  },
+  modeToggleTabActiveZone: {
+    backgroundColor: appColors.amber600,
   },
   modeToggleTabActiveRoom: {
     backgroundColor: appColors.emerald600,
