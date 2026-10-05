@@ -79,7 +79,10 @@ export const DrawerContainer: React.FC = () => {
     setIsExpanded(!isExpanded);
   };
 
-  const navItems = [
+  const currentUser = useAppSelector(state => state.app.currentUser);
+  const isAdmin = currentUser?.role === 'ADMIN' || currentUser?.role === 'SUPER_ADMIN';
+
+  const allNavItems = [
     {
       key: 'home' as DrawerTabKey,
       label: 'Trang chủ',
@@ -114,6 +117,11 @@ export const DrawerContainer: React.FC = () => {
       icon: Settings,
     },
   ];
+
+  const navItems = allNavItems.filter(item => {
+    if (item.key === 'cms' && !isAdmin) return false;
+    return true;
+  });
 
   return (
     <SafeAreaView style={styles.safeArea}>

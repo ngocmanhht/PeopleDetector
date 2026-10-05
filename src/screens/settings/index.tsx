@@ -40,6 +40,23 @@ export const SettingsScreen: React.FC = () => {
   const dispatch = useAppDispatch();
   const navigation = useCustomNavigation<RootNavigatorParamList>();
   const currentUser = useAppSelector(state => state.app.currentUser);
+  const isAdmin = currentUser?.role === 'ADMIN' || currentUser?.role === 'SUPER_ADMIN';
+
+  const getRoleDisplay = () => {
+    switch (currentUser?.role) {
+      case 'SUPER_ADMIN':
+        return { label: 'TỐI CAO (SUPER ADMIN)', color: appColors.red600, bg: 'rgba(239, 68, 68, 0.1)' };
+      case 'ADMIN':
+        return { label: 'QUẢN TRỊ VIÊN (ADMIN)', color: appColors.blue600, bg: appColors.blue50 };
+      case 'OFFICER':
+        return { label: `QUẢN GIÁO ${currentUser.zoneName ? `(${currentUser.zoneName})` : ''}`, color: appColors.amber600, bg: 'rgba(245, 158, 11, 0.1)' };
+      case 'GUARD':
+      default:
+        return { label: 'ĐIỂM DANH (GUARD)', color: appColors.emerald600, bg: appColors.emerald50 };
+    }
+  };
+
+  const roleInfo = getRoleDisplay();
 
   // Settings states
   const [confidenceThreshold, setConfidenceThreshold] = useState(85);
@@ -142,10 +159,10 @@ export const SettingsScreen: React.FC = () => {
                 <AppText style={styles.accountEmail}>
                   {currentUser?.email || 'admin@cscns2.ag'}
                 </AppText>
-                <View style={styles.roleBadge}>
-                  <Shield size={12} color={appColors.emerald600} />
-                  <AppText style={styles.roleBadgeText}>
-                    {currentUser?.role || 'ADMIN'}
+                <View style={[styles.roleBadge, { backgroundColor: roleInfo.bg, borderColor: roleInfo.color }]}>
+                  <Shield size={12} color={roleInfo.color} />
+                  <AppText style={[styles.roleBadgeText, { color: roleInfo.color }]}>
+                    {roleInfo.label}
                   </AppText>
                 </View>
               </View>
@@ -301,7 +318,16 @@ export const SettingsScreen: React.FC = () => {
 
               <TouchableOpacity
                 style={styles.changePinBtn}
-                onPress={() => setChangePinModalVisible(true)}
+                onPress={() => {
+                  if (!isAdmin) {
+                    Alert.alert(
+                      'Giới hạn quyền',
+                      'Chỉ Quản trị viên (ADMIN) mới có quyền đổi mã PIN Quản trị.',
+                    );
+                    return;
+                  }
+                  setChangePinModalVisible(true);
+                }}
                 activeOpacity={0.8}
               >
                 <KeyRound size={16} color={appColors.slate700} />
@@ -320,6 +346,31 @@ export const SettingsScreen: React.FC = () => {
             <View style={styles.cardHeader}>
               <Sliders size={20} color={appColors.blue600} />
               <AppText style={styles.cardTitle}>Cấu hình nhận diện</AppText>
+              {!isAdmin && (
+                <View
+                  style={{
+                    flexDirection: 'row',
+                    alignItems: 'center',
+                    gap: 4,
+                    marginLeft: 'auto',
+                    backgroundColor: 'rgba(245, 158, 11, 0.1)',
+                    paddingHorizontal: 8,
+                    paddingVertical: 3,
+                    borderRadius: 6,
+                  }}
+                >
+                  <Lock size={12} color={appColors.amber600} />
+                  <AppText
+                    style={{
+                      fontSize: 10,
+                      color: appColors.amber600,
+                      fontWeight: '700',
+                    }}
+                  >
+                    Chỉ xem
+                  </AppText>
+                </View>
+              )}
             </View>
 
             {/* Confidence Threshold */}
@@ -339,8 +390,18 @@ export const SettingsScreen: React.FC = () => {
                     style={[
                       styles.thresholdChip,
                       confidenceThreshold === val && styles.thresholdChipActive,
+                      !isAdmin && { opacity: 0.8 },
                     ]}
-                    onPress={() => setConfidenceThreshold(val)}
+                    onPress={() => {
+                      if (!isAdmin) {
+                        Alert.alert(
+                          'Giới hạn quyền',
+                          'Chỉ Quản trị viên (ADMIN) mới có quyền điều chỉnh ngưỡng nhận diện AI.',
+                        );
+                        return;
+                      }
+                      setConfidenceThreshold(val);
+                    }}
                   >
                     <AppText
                       style={[
@@ -373,8 +434,18 @@ export const SettingsScreen: React.FC = () => {
                     style={[
                       styles.thresholdChip,
                       targetFps === val && styles.thresholdChipActive,
+                      !isAdmin && { opacity: 0.8 },
                     ]}
-                    onPress={() => setTargetFps(val)}
+                    onPress={() => {
+                      if (!isAdmin) {
+                        Alert.alert(
+                          'Giới hạn quyền',
+                          'Chỉ Quản trị viên (ADMIN) mới có quyền điều chỉnh tốc độ quét FPS.',
+                        );
+                        return;
+                      }
+                      setTargetFps(val);
+                    }}
                   >
                     <AppText
                       style={[

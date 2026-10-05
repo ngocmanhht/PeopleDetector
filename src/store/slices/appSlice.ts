@@ -6,6 +6,8 @@ export interface UserSession {
   name: string;
   email: string;
   role: string;
+  zoneId?: string | null;
+  zoneName?: string | null;
 }
 
 export interface AppState {
