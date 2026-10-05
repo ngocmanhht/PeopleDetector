@@ -19,6 +19,7 @@ export interface CachedProfileEmbedding {
   zoneId: string;
   roomId: string;
   embeddings: Float32Array[]; // Multi-photo 512-dim L2-normalized MobileFaceNet vectors
+  signature?: string; // Fingerprint of profile photo URLs to auto-detect changes from CMS
 }
 
 export interface StrangerRecord {
@@ -311,9 +312,26 @@ export class TfliteYoloService {
   }
 
   /**
+   * Generates a deterministic signature of profile photo sources to detect when photos change or new photos are added
+   */
+  public getProfilePhotoSignature(profile: UserProfile): string {
+    const list: string[] = [];
+    if (profile.avatarUri) list.push(profile.avatarUri);
+    if (Array.isArray(profile.photos)) {
+      for (const p of profile.photos) {
+        if (p && !list.includes(p)) list.push(p);
+      }
+    }
+    return list.join('|');
+  }
+
+  /**
    * Loads serialized embeddings for a profile from persistent MMKV storage
    */
-  private loadEmbeddingsFromStorage(profileId: string): Float32Array[] | null {
+  private loadEmbeddingsFromStorage(
+    profileId: string,
+    expectedSignature?: string,
+  ): Float32Array[] | null {
     try {
       const key = `emb_${this.biometricModelType}_${profileId}`;
       const raw =
@@ -322,8 +340,25 @@ export class TfliteYoloService {
           ? faceEmbeddingStorage.getString('emb_' + profileId)
           : null);
       if (raw) {
-        const parsed: number[][] = JSON.parse(raw);
+        const parsed = JSON.parse(raw);
+        // Object format with photo signature
+        if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+          if (expectedSignature && parsed.signature !== expectedSignature) {
+            console.log(
+              `[TFLite YOLO] Profile ${profileId} photo signature changed. Storage cache invalidated.`,
+            );
+            return null;
+          }
+          if (Array.isArray(parsed.embeddings) && parsed.embeddings.length > 0) {
+            return parsed.embeddings.map((arr: number[]) => new Float32Array(arr));
+          }
+        }
+        // Legacy format: number[][]
         if (Array.isArray(parsed) && parsed.length > 0) {
+          if (expectedSignature) {
+            // Upgrade legacy entry to signed entry by re-enrolling
+            return null;
+          }
           return parsed.map(arr => new Float32Array(arr));
         }
       }
@@ -334,15 +369,20 @@ export class TfliteYoloService {
   }
 
   /**
-   * Persists computed Float32Array embeddings into MMKV storage
+   * Persists computed Float32Array embeddings into MMKV storage along with photo signature
    */
   private saveEmbeddingsToStorage(
     profileId: string,
     embeddings: Float32Array[],
+    signature?: string,
   ): void {
     try {
       const key = `emb_${this.biometricModelType}_${profileId}`;
-      const serialized = embeddings.map(emb => Array.from(emb));
+      const serialized = {
+        signature: signature || '',
+        embeddings: embeddings.map(emb => Array.from(emb)),
+        savedAt: Date.now(),
+      };
       faceEmbeddingStorage.set(key, JSON.stringify(serialized));
     } catch (e) {
       console.warn('[TFLite YOLO] Write MMKV embedding note:', e);
@@ -1004,12 +1044,24 @@ export class TfliteYoloService {
       await this.initModels();
     }
 
+    const currentSignature = this.getProfilePhotoSignature(profile);
+
     // 1. Check in-memory cache
     const existing = this.profileEmbeddingsCache.get(profile.id);
-    if (existing && existing.embeddings.length > 0) return;
+    if (existing && existing.embeddings.length > 0) {
+      if (!currentSignature || existing.signature === currentSignature) {
+        return;
+      }
+      console.log(
+        `[TFLite YOLO] Re-enrolling ${profile.fullName} due to photo changes (in-memory cache mismatch).`,
+      );
+    }
 
     // 2. Check persistent MMKV storage (instantly recovers on app launch)
-    const storedEmbeddings = this.loadEmbeddingsFromStorage(profile.id);
+    const storedEmbeddings = this.loadEmbeddingsFromStorage(
+      profile.id,
+      currentSignature,
+    );
     if (storedEmbeddings && storedEmbeddings.length > 0) {
       this.profileEmbeddingsCache.set(profile.id, {
         userId: profile.id,
@@ -1019,6 +1071,7 @@ export class TfliteYoloService {
         zoneId: profile.zoneId,
         roomId: profile.roomId,
         embeddings: storedEmbeddings,
+        signature: currentSignature,
       });
       return;
     }
@@ -1134,12 +1187,13 @@ export class TfliteYoloService {
         zoneId: profile.zoneId,
         roomId: profile.roomId,
         embeddings: [],
+        signature: currentSignature,
       });
       return;
     }
 
     // Persist real biometric embeddings to MMKV storage so future sessions load instantly
-    this.saveEmbeddingsToStorage(profile.id, embeddings);
+    this.saveEmbeddingsToStorage(profile.id, embeddings, currentSignature);
 
     this.profileEmbeddingsCache.set(profile.id, {
       userId: profile.id,
@@ -1149,6 +1203,7 @@ export class TfliteYoloService {
       zoneId: profile.zoneId,
       roomId: profile.roomId,
       embeddings,
+      signature: currentSignature,
     });
 
     console.log(
@@ -1185,8 +1240,11 @@ export class TfliteYoloService {
 
       // 2. Ensure room profile embeddings are ready in cache before matching
       for (const p of roomProfiles) {
-        if (!this.profileEmbeddingsCache.has(p.id)) {
-          const stored = this.loadEmbeddingsFromStorage(p.id);
+        const sig = this.getProfilePhotoSignature(p);
+        const cached = this.profileEmbeddingsCache.get(p.id);
+
+        if (!cached || (sig && cached.signature !== sig)) {
+          const stored = this.loadEmbeddingsFromStorage(p.id, sig);
           if (stored && stored.length > 0) {
             this.profileEmbeddingsCache.set(p.id, {
               userId: p.id,
@@ -1196,6 +1254,7 @@ export class TfliteYoloService {
               zoneId: p.zoneId,
               roomId: p.roomId,
               embeddings: stored,
+              signature: sig,
             });
           } else {
             // Await enrollment so biometric vectors exist before cosine matching
@@ -1523,9 +1582,19 @@ export class TfliteYoloService {
     if (!this.isInitialized) {
       await this.initModels();
     }
+    let processedCount = 0;
     for (const p of roomProfiles) {
-      if (!this.profileEmbeddingsCache.has(p.id)) {
+      const sig = this.getProfilePhotoSignature(p);
+      const cached = this.profileEmbeddingsCache.get(p.id);
+      if (!cached || (sig && cached.signature !== sig)) {
         await this.enrollProfile(p);
+        processedCount++;
+        // Micro-yield every 10 enrollments so main thread / camera frame rendering remains silky smooth
+        if (processedCount % 10 === 0) {
+          await new Promise<void>(resolve => {
+            setTimeout(() => resolve(), 10);
+          });
+        }
       }
     }
   }

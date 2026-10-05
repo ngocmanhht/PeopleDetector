@@ -33,7 +33,8 @@ export const CmsUserListTab: React.FC<CmsUserListTabProps> = ({
   onSelectUser,
 }) => {
   const { isTablet } = useResponsive();
-  const { userProfiles, rooms } = useAppSelector(state => state.detector);
+  const userProfiles = useAppSelector(state => state.detector.userProfiles);
+  const rooms = useAppSelector(state => state.detector.rooms);
 
   const [searchQuery, setSearchQuery] = useState('');
   const [filterType, setFilterType] = useState<'all' | 'official' | 'visitor'>(

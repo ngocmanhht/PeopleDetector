@@ -52,7 +52,8 @@ export const EditUserModal: React.FC<EditUserModalProps> = ({
 }) => {
   const { isPhone } = useResponsive();
   const dispatch = useAppDispatch();
-  const { rooms, userProfiles } = useAppSelector(state => state.detector);
+  const rooms = useAppSelector(state => state.detector.rooms);
+  const userProfiles = useAppSelector(state => state.detector.userProfiles);
 
   const [fullName, setFullName] = useState('');
   const [code, setCode] = useState('');

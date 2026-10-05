@@ -28,8 +28,11 @@ export const BatchAddUserModal: React.FC<BatchAddUserModalProps> = ({
 }) => {
   const { isPhone } = useResponsive();
   const dispatch = useAppDispatch();
-  const { zones, rooms, selectedZoneId, selectedRoomId, userProfiles } =
-    useAppSelector(state => state.detector);
+  const zones = useAppSelector(state => state.detector.zones);
+  const rooms = useAppSelector(state => state.detector.rooms);
+  const selectedZoneId = useAppSelector(state => state.detector.selectedZoneId);
+  const selectedRoomId = useAppSelector(state => state.detector.selectedRoomId);
+  const userProfiles = useAppSelector(state => state.detector.userProfiles);
 
   const [zoneId, setZoneId] = useState(selectedZoneId || (zones[0]?.id ?? ''));
   const [roomId, setRoomId] = useState(selectedRoomId || (rooms[0]?.id ?? ''));

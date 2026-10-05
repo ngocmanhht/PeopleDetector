@@ -27,7 +27,7 @@ interface TabItem {
 
 export const CmsScreen: React.FC = () => {
   const { isPhone } = useResponsive();
-  const { userProfiles } = useAppSelector(state => state.detector);
+  const userProfiles = useAppSelector(state => state.detector.userProfiles);
   const currentUser = useAppSelector(state => state.app.currentUser);
 
   // Sub-tabs navigation using Enum

@@ -1,5 +1,5 @@
 import { configureStore, combineReducers } from '@reduxjs/toolkit';
-import { persistReducer, persistStore, Storage } from 'redux-persist';
+import { persistReducer, persistStore, Storage, createTransform } from 'redux-persist';
 import { createMMKV } from 'react-native-mmkv';
 import { appReducer } from './slices/appSlice';
 import { uiReducer } from './slices/uiSlice';
@@ -35,15 +35,37 @@ const rootReducer = combineReducers({
   detector: detectorReducer,
 });
 
+export type RootState = ReturnType<typeof rootReducer>;
+
+// Transform to filter out high-frequency ephemeral fields (camera detection frames & 1-second ticks)
+// from heavy AES-256 MMKV disk encryption while keeping all essential business data.
+const detectorTransform = createTransform<any, any>(
+  (inboundState: any) => {
+    if (!inboundState || typeof inboundState !== 'object') return inboundState;
+    const { sessionDurationSeconds, activeDetection, ...persistedState } =
+      inboundState;
+    return persistedState;
+  },
+  (outboundState: any) => {
+    if (!outboundState || typeof outboundState !== 'object') return outboundState;
+    return {
+      ...outboundState,
+      sessionDurationSeconds: 0,
+      activeDetection: null,
+    };
+  },
+  { whitelist: ['detector'] },
+);
+
 // Persist configs
-const persistConfig = {
+const persistConfig: any = {
   key: 'root',
   storage: storage,
   whitelist: ['app', 'detector'],
-  // blacklist: [],
+  transforms: [detectorTransform],
 };
 
-const persistedReducer = persistReducer(persistConfig, rootReducer);
+const persistedReducer = persistReducer(persistConfig, rootReducer) as unknown as typeof rootReducer;
 
 // Configure Redux store
 export const store = configureStore({
@@ -67,5 +89,4 @@ export const store = configureStore({
 export const persistor = persistStore(store);
 
 // Export types for TypeScript
-export type RootState = ReturnType<typeof store.getState>;
 export type AppDispatch = typeof store.dispatch;

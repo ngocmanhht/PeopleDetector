@@ -30,7 +30,7 @@ const SplashScreen = () => {
           ],
         });
       }
-    }, 900);
+    }, 400);
 
     return () => clearTimeout(timer);
   }, [navigation, isAuthenticated]);

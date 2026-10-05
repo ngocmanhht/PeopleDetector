@@ -62,15 +62,13 @@ import {
 export const RoomsManagerScreen: React.FC = () => {
   const { isTablet, isPhone } = useResponsive();
   const dispatch = useAppDispatch();
-  const {
-    zones,
-    rooms,
-    userProfiles,
-    selectedZoneId,
-    selectedRoomId,
-    attendanceMap,
-    sessions,
-  } = useAppSelector(state => state.detector);
+  const zones = useAppSelector(state => state.detector.zones);
+  const rooms = useAppSelector(state => state.detector.rooms);
+  const userProfiles = useAppSelector(state => state.detector.userProfiles);
+  const selectedZoneId = useAppSelector(state => state.detector.selectedZoneId);
+  const selectedRoomId = useAppSelector(state => state.detector.selectedRoomId);
+  const attendanceMap = useAppSelector(state => state.detector.attendanceMap);
+  const sessions = useAppSelector(state => state.detector.sessions);
 
   const [activeTab, setActiveTab] = useState<'members' | 'sessions'>('members');
   const [selectedDetailSession, setSelectedDetailSession] = useState<AttendanceSession | null>(null);

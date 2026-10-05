@@ -52,9 +52,10 @@ export const CmsScanStatusTab: React.FC<CmsScanStatusTabProps> = ({
 }) => {
   const { isTablet } = useResponsive();
   const dispatch = useAppDispatch();
-  const { userProfiles, rooms, zones, sessions } = useAppSelector(
-    state => state.detector,
-  );
+  const userProfiles = useAppSelector(state => state.detector.userProfiles);
+  const rooms = useAppSelector(state => state.detector.rooms);
+  const zones = useAppSelector(state => state.detector.zones);
+  const sessions = useAppSelector(state => state.detector.sessions);
   const currentUser = useAppSelector(state => state.app.currentUser);
 
   // Admin form state for updating condition
@@ -64,8 +65,9 @@ export const CmsScanStatusTab: React.FC<CmsScanStatusTabProps> = ({
   const [isScanningFace, setIsScanningFace] = useState(false);
   const [isSavingCondition, setIsSavingCondition] = useState(false);
 
-  const selectedUser = useAppSelector(state =>
-    state.detector.userProfiles.find(u => u.id === selectedUserId),
+  const selectedUser = useMemo(
+    () => (userProfiles || []).find(u => u.id === selectedUserId),
+    [userProfiles, selectedUserId],
   );
 
   // Synchronize form when selectedUser changes

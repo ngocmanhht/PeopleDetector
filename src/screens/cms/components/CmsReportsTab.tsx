@@ -16,9 +16,10 @@ import { styles } from '../styles';
 
 export const CmsReportsTab: React.FC = () => {
   const { isTablet } = useResponsive();
-  const { sessions, userProfiles, rooms, zones } = useAppSelector(
-    state => state.detector,
-  );
+  const sessions = useAppSelector(state => state.detector.sessions);
+  const userProfiles = useAppSelector(state => state.detector.userProfiles);
+  const rooms = useAppSelector(state => state.detector.rooms);
+  const zones = useAppSelector(state => state.detector.zones);
 
   // Reports / Excel Export State
   const now = new Date();

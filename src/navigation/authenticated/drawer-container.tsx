@@ -40,13 +40,33 @@ export const DrawerContainer: React.FC = () => {
   const [activeTab, setActiveTab] = useState<DrawerTabKey>('home');
   const [isExpanded, setIsExpanded] = useState(false);
 
+  // Lazy tab mount tracking: only mount screens when their tab is first opened
+  const [visitedTabs, setVisitedTabs] = useState<Record<DrawerTabKey, boolean>>(
+    {
+      home: true,
+      rooms: false,
+      cms: false,
+      alerts: false,
+      settings: false,
+    },
+  );
+
+  const handleSelectTab = (key: DrawerTabKey) => {
+    setActiveTab(key);
+    setVisitedTabs(prev => (prev[key] ? prev : { ...prev, [key]: true }));
+  };
+
   // Animations
   const sidebarWidth = useRef(new Animated.Value(74)).current;
 
-  // Alerts & Rooms count for badges
-  const alerts = useAppSelector(state => state.detector.alerts);
-  const rooms = useAppSelector(state => state.detector.rooms);
-  const unreadAlerts = alerts.filter(a => a.type === 'warning').length;
+  // Alerts & Rooms count for badges (granular selectors prevent re-render on frame/session updates)
+  const unreadAlerts = useAppSelector(
+    state =>
+      (state.detector.alerts || []).filter(a => a.type === 'warning').length,
+  );
+  const roomsCount = useAppSelector(
+    state => (state.detector.rooms || []).length,
+  );
 
   const toggleExpand = () => {
     const toValue = isExpanded ? 74 : 240;
@@ -69,9 +89,9 @@ export const DrawerContainer: React.FC = () => {
     {
       key: 'rooms' as DrawerTabKey,
       label: 'Danh sách phòng',
-      subtitle: `${rooms.length} phòng học/xưởng`,
+      subtitle: `${roomsCount} phòng học/xưởng`,
       icon: DoorOpen,
-      badge: `${rooms.length}`,
+      badge: `${roomsCount}`,
     },
     {
       key: 'cms' as DrawerTabKey,
@@ -155,7 +175,7 @@ export const DrawerContainer: React.FC = () => {
                       isActive && styles.navItemActive,
                       !isExpanded && styles.navItemCollapsed,
                     ]}
-                    onPress={() => setActiveTab(item.key)}
+                    onPress={() => handleSelectTab(item.key)}
                     activeOpacity={0.8}
                   >
                     {/* Icon wrap */}
@@ -240,7 +260,7 @@ export const DrawerContainer: React.FC = () => {
           </Animated.View>
         )}
 
-        {/* Content Area: Persistent Mounted Screens */}
+        {/* Content Area: Persistent Mounted Screens with Lazy Initialization */}
         <View style={styles.contentArea}>
           <View
             style={[
@@ -252,45 +272,53 @@ export const DrawerContainer: React.FC = () => {
             <HomeScreen isTabFocused={activeTab === 'home'} />
           </View>
 
-          <View
-            style={[
-              styles.screenWrapper,
-              activeTab !== 'rooms' && styles.hiddenScreen,
-            ]}
-            pointerEvents={activeTab === 'rooms' ? 'auto' : 'none'}
-          >
-            <RoomsManagerScreen />
-          </View>
+          {visitedTabs.rooms && (
+            <View
+              style={[
+                styles.screenWrapper,
+                activeTab !== 'rooms' && styles.hiddenScreen,
+              ]}
+              pointerEvents={activeTab === 'rooms' ? 'auto' : 'none'}
+            >
+              <RoomsManagerScreen />
+            </View>
+          )}
 
-          <View
-            style={[
-              styles.screenWrapper,
-              activeTab !== 'cms' && styles.hiddenScreen,
-            ]}
-            pointerEvents={activeTab === 'cms' ? 'auto' : 'none'}
-          >
-            <CmsScreen />
-          </View>
+          {visitedTabs.cms && (
+            <View
+              style={[
+                styles.screenWrapper,
+                activeTab !== 'cms' && styles.hiddenScreen,
+              ]}
+              pointerEvents={activeTab === 'cms' ? 'auto' : 'none'}
+            >
+              <CmsScreen />
+            </View>
+          )}
 
-          <View
-            style={[
-              styles.screenWrapper,
-              activeTab !== 'alerts' && styles.hiddenScreen,
-            ]}
-            pointerEvents={activeTab === 'alerts' ? 'auto' : 'none'}
-          >
-            <AlertsScreen />
-          </View>
+          {visitedTabs.alerts && (
+            <View
+              style={[
+                styles.screenWrapper,
+                activeTab !== 'alerts' && styles.hiddenScreen,
+              ]}
+              pointerEvents={activeTab === 'alerts' ? 'auto' : 'none'}
+            >
+              <AlertsScreen />
+            </View>
+          )}
 
-          <View
-            style={[
-              styles.screenWrapper,
-              activeTab !== 'settings' && styles.hiddenScreen,
-            ]}
-            pointerEvents={activeTab === 'settings' ? 'auto' : 'none'}
-          >
-            <SettingsScreen />
-          </View>
+          {visitedTabs.settings && (
+            <View
+              style={[
+                styles.screenWrapper,
+                activeTab !== 'settings' && styles.hiddenScreen,
+              ]}
+              pointerEvents={activeTab === 'settings' ? 'auto' : 'none'}
+            >
+              <SettingsScreen />
+            </View>
+          )}
         </View>
 
         {/* Bottom Tab Bar for iPhone */}
@@ -304,7 +332,7 @@ export const DrawerContainer: React.FC = () => {
                 <TouchableOpacity
                   key={item.key}
                   style={styles.bottomTabBtn}
-                  onPress={() => setActiveTab(item.key)}
+                  onPress={() => handleSelectTab(item.key)}
                   activeOpacity={0.75}
                 >
                   <View style={styles.bottomTabIconWrap}>

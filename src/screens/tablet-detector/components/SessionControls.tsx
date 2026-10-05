@@ -5,6 +5,7 @@ import { StopCircle, Play, Timer } from 'lucide-react-native';
 import { appColors } from '../../../const/app-colors';
 import { useResponsive } from '../../../hooks/use-responsive';
 import { ScanMode } from '../../../model/detector';
+import { useAppSelector } from '../../../store/hooks';
 
 interface SessionControlsProps {
   onStartSession?: () => void;
@@ -19,9 +20,14 @@ export const SessionControls: React.FC<SessionControlsProps> = ({
   onEndSession,
   isSessionActive,
   scanMode = 'room',
-  sessionDurationSeconds = 0,
+  sessionDurationSeconds: propDuration,
 }) => {
   const { isPhone } = useResponsive();
+  const reduxDuration = useAppSelector(
+    state => state.detector.sessionDurationSeconds,
+  );
+  const sessionDurationSeconds =
+    propDuration !== undefined ? propDuration : reduxDuration;
 
   const formattedDuration = useMemo(() => {
     const hours = Math.floor(sessionDurationSeconds / 3600);

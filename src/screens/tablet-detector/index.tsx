@@ -92,25 +92,22 @@ const TabletDetectorScreen: React.FC<TabletDetectorScreenProps> = ({
   const dispatch = useAppDispatch();
   const cameraViewFinderRef = useRef<CameraViewFinderRef>(null);
 
-  const {
-    zones,
-    rooms,
-    userProfiles,
-    selectedZoneId,
-    selectedRoomId,
-    isSessionActive,
-    activeSessionId,
-    attendanceMap,
-    activeDetection,
-    alerts,
-    scanMode,
-    scanDirection,
-    sessionDurationSeconds,
-    scanHistory,
-    sessions,
-    isDeviceAuthorized,
-    deviceLockMessage,
-  } = useAppSelector(state => state.detector);
+  const zones = useAppSelector(state => state.detector.zones);
+  const rooms = useAppSelector(state => state.detector.rooms);
+  const userProfiles = useAppSelector(state => state.detector.userProfiles);
+  const selectedZoneId = useAppSelector(state => state.detector.selectedZoneId);
+  const selectedRoomId = useAppSelector(state => state.detector.selectedRoomId);
+  const isSessionActive = useAppSelector(state => state.detector.isSessionActive);
+  const activeSessionId = useAppSelector(state => state.detector.activeSessionId);
+  const attendanceMap = useAppSelector(state => state.detector.attendanceMap);
+  const activeDetection = useAppSelector(state => state.detector.activeDetection);
+  const alerts = useAppSelector(state => state.detector.alerts);
+  const scanMode = useAppSelector(state => state.detector.scanMode);
+  const scanDirection = useAppSelector(state => state.detector.scanDirection);
+  const scanHistory = useAppSelector(state => state.detector.scanHistory);
+  const sessions = useAppSelector(state => state.detector.sessions);
+  const isDeviceAuthorized = useAppSelector(state => state.detector.isDeviceAuthorized);
+  const deviceLockMessage = useAppSelector(state => state.detector.deviceLockMessage);
 
   // Modals state
   const [addUserVisible, setAddUserVisible] = useState(false);
@@ -893,7 +890,6 @@ const TabletDetectorScreen: React.FC<TabletDetectorScreenProps> = ({
           {/* Session Summary Bar */}
           <SessionSummaryBar
             isSessionActive={isSessionActive}
-            sessionDurationSeconds={sessionDurationSeconds}
             scanHistory={scanHistory}
             scanMode={scanMode}
             totalMembersCount={targetProfiles.length}
@@ -928,7 +924,6 @@ const TabletDetectorScreen: React.FC<TabletDetectorScreenProps> = ({
             onEndSession={handleEndSession}
             isSessionActive={isSessionActive}
             scanMode={scanMode}
-            sessionDurationSeconds={sessionDurationSeconds}
           />
         </ScrollView>
       ) : (
@@ -991,7 +986,6 @@ const TabletDetectorScreen: React.FC<TabletDetectorScreenProps> = ({
 
               <SessionSummaryBar
                 isSessionActive={isSessionActive}
-                sessionDurationSeconds={sessionDurationSeconds}
                 scanHistory={scanHistory}
                 scanMode={scanMode}
                 totalMembersCount={targetProfiles.length}
@@ -1003,7 +997,6 @@ const TabletDetectorScreen: React.FC<TabletDetectorScreenProps> = ({
                 onEndSession={handleEndSession}
                 isSessionActive={isSessionActive}
                 scanMode={scanMode}
-                sessionDurationSeconds={sessionDurationSeconds}
               />
 
               <BottomActions

@@ -11,10 +11,11 @@ import {
 } from 'lucide-react-native';
 import { appColors } from '../../../const/app-colors';
 import { useResponsive } from '../../../hooks/use-responsive';
+import { useAppSelector } from '../../../store/hooks';
 
 interface SessionSummaryBarProps {
   isSessionActive: boolean;
-  sessionDurationSeconds: number;
+  sessionDurationSeconds?: number;
   scanHistory: ScanHistoryItem[];
   scanMode: ScanMode;
   totalMembersCount: number;
@@ -23,13 +24,18 @@ interface SessionSummaryBarProps {
 
 export const SessionSummaryBar: React.FC<SessionSummaryBarProps> = ({
   isSessionActive,
-  sessionDurationSeconds,
+  sessionDurationSeconds: propDuration,
   scanHistory,
   scanMode,
   totalMembersCount,
   scanDirection = 'in',
 }) => {
   const { isPhone } = useResponsive();
+  const reduxDuration = useAppSelector(
+    state => state.detector.sessionDurationSeconds,
+  );
+  const sessionDurationSeconds =
+    propDuration !== undefined ? propDuration : reduxDuration;
   const isAllMode = scanMode === 'all';
   const isOut = scanDirection === 'out';
 
