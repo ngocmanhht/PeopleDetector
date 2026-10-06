@@ -236,13 +236,16 @@ export const EditUserModal: React.FC<EditUserModalProps> = ({
         }
       }
 
+      const avatarIndex = avatarUri ? photos.indexOf(avatarUri) : -1;
       const finalAvatar =
         avatarUri &&
         (avatarUri.startsWith('http://') ||
           avatarUri.startsWith('https://') ||
           avatarUri.startsWith('/uploads'))
           ? avatarUri
-          : serverPhotos[0] || '';
+          : avatarIndex >= 0 && serverPhotos[avatarIndex]
+            ? serverPhotos[avatarIndex]
+            : serverPhotos[0] || '';
 
       const visitedUser = officialProfiles.find(u => u.id === visitedProfileId);
       const updatedData = {

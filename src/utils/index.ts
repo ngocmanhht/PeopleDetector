@@ -1,17 +1,13 @@
-import { HOST_DOMAIN } from '@env';
+import { HOST_DOMAIN, API_URL } from '@env';
 
 class AppUtils {
-  getUrlImage = (url?: string | null) => {
+  getUrlImage = (url?: string | null): string | undefined => {
     if (!url) return undefined;
 
     const isAbsoluteUrl =
       url.startsWith('http://') || url.startsWith('https://');
 
     if (isAbsoluteUrl) return url;
-
-    if (url.startsWith('//')) {
-      return url;
-    }
 
     if (
       url.startsWith('file://') ||
@@ -27,17 +23,17 @@ class AppUtils {
       return url;
     }
 
-    if (url.startsWith('/')) {
-      const formattedHost = HOST_DOMAIN?.endsWith('/')
-        ? HOST_DOMAIN
-        : `${HOST_DOMAIN}/`;
-      return `${formattedHost}${url.slice(1)}`;
+    // Xác định host domain: ưu tiên HOST_DOMAIN, fallback tự suy ra từ API_URL (bỏ /api)
+    let host = (HOST_DOMAIN || '').trim();
+    if (!host && API_URL) {
+      host = API_URL.replace(/\/api\/?$/, '').trim();
     }
 
-    const formattedHost = HOST_DOMAIN?.endsWith('/')
-      ? HOST_DOMAIN
-      : `${HOST_DOMAIN}/`;
-    return `${formattedHost}${url}`;
+    if (!host) return url;
+
+    const cleanHost = host.replace(/\/+$/, '');
+    const cleanPath = url.startsWith('/') ? url : `/${url}`;
+    return `${cleanHost}${cleanPath}`;
   };
 }
 
