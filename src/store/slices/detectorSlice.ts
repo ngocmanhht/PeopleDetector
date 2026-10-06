@@ -466,7 +466,8 @@ const detectorSlice = createSlice({
     startSession: (
       state,
       action: PayloadAction<
-        { id?: string; name?: string; scanMode?: ScanMode; roomId?: string } | undefined
+        | { id?: string; name?: string; scanMode?: ScanMode; roomId?: string }
+        | undefined
       >,
     ) => {
       state.isSessionActive = true;
@@ -479,7 +480,10 @@ const detectorSlice = createSlice({
 
       // Resolve room and zone for session
       const targetRoomId = isRoom
-        ? action?.payload?.roomId || state.selectedRoomId || state.rooms[0]?.id || ''
+        ? action?.payload?.roomId ||
+          state.selectedRoomId ||
+          state.rooms[0]?.id ||
+          ''
         : undefined;
       if (targetRoomId && isRoom) {
         state.selectedRoomId = targetRoomId;
@@ -518,7 +522,10 @@ const detectorSlice = createSlice({
           state.rooms.filter(r => r.zoneId === zone?.id).map(r => r.id),
         );
         targetUsers = state.userProfiles.filter(
-          u => !u.isVisitor && (u.zoneId === zone?.id || (u.roomId && roomIdsInZone.has(u.roomId))),
+          u =>
+            !u.isVisitor &&
+            (u.zoneId === zone?.id ||
+              (u.roomId && roomIdsInZone.has(u.roomId))),
         );
       } else {
         targetUsers = state.userProfiles.filter(
@@ -535,7 +542,11 @@ const detectorSlice = createSlice({
         zoneId: isAll ? undefined : zone?.id || '',
         zoneName: isAll ? 'Toàn cơ sở' : zone?.name || '',
         roomId: isRoom ? room?.id || targetRoomId || '' : undefined,
-        roomName: isRoom ? room?.name || 'Phòng' : isZone ? 'Theo khu vực' : 'Toàn cơ sở',
+        roomName: isRoom
+          ? room?.name || 'Phòng'
+          : isZone
+          ? 'Theo khu vực'
+          : 'Toàn cơ sở',
         startTime: now.format('HH:mm:ss DD/MM/YYYY'),
         createdAt: now.toISOString(),
         isActive: true,
@@ -559,7 +570,9 @@ const detectorSlice = createSlice({
         message: isAll
           ? `Bắt đầu "${sessionName}" - Chế độ Quét All (Vào cơ sở)`
           : isZone
-          ? `Bắt đầu "${sessionName}" - Chế độ Quét Khu vực (${zone?.name || 'Khu'})`
+          ? `Bắt đầu "${sessionName}" - Chế độ Quét Khu vực (${
+              zone?.name || 'Khu'
+            })`
           : `Khởi tạo "${sessionName}" cho ${room?.name || 'phòng'}`,
         timestamp: now.format('HH:mm:ss'),
         type: 'info',
@@ -603,10 +616,15 @@ const detectorSlice = createSlice({
             );
           } else if (activeSess.scanMode === 'zone') {
             const roomIds = new Set(
-              state.rooms.filter(r => r.zoneId === activeSess.zoneId).map(r => r.id),
+              state.rooms
+                .filter(r => r.zoneId === activeSess.zoneId)
+                .map(r => r.id),
             );
             const zoneMembers = state.userProfiles.filter(
-              u => !u.isVisitor && (u.zoneId === activeSess.zoneId || (u.roomId && roomIds.has(u.roomId))),
+              u =>
+                !u.isVisitor &&
+                (u.zoneId === activeSess.zoneId ||
+                  (u.roomId && roomIds.has(u.roomId))),
             );
             activeSess.totalCount = zoneMembers.length;
             activeSess.missingCount = Math.max(

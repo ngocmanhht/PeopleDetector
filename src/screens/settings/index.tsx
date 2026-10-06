@@ -40,19 +40,38 @@ export const SettingsScreen: React.FC = () => {
   const dispatch = useAppDispatch();
   const navigation = useCustomNavigation<RootNavigatorParamList>();
   const currentUser = useAppSelector(state => state.app.currentUser);
-  const isAdmin = currentUser?.role === 'ADMIN' || currentUser?.role === 'SUPER_ADMIN';
+  const isAdmin =
+    currentUser?.role === 'ADMIN' || currentUser?.role === 'SUPER_ADMIN';
 
   const getRoleDisplay = () => {
     switch (currentUser?.role) {
       case 'SUPER_ADMIN':
-        return { label: 'TỐI CAO (SUPER ADMIN)', color: appColors.red600, bg: 'rgba(239, 68, 68, 0.1)' };
+        return {
+          label: 'TỐI CAO (SUPER ADMIN)',
+          color: appColors.red600,
+          bg: 'rgba(239, 68, 68, 0.1)',
+        };
       case 'ADMIN':
-        return { label: 'QUẢN TRỊ VIÊN (ADMIN)', color: appColors.blue600, bg: appColors.blue50 };
+        return {
+          label: 'QUẢN TRỊ VIÊN (ADMIN)',
+          color: appColors.blue600,
+          bg: appColors.blue50,
+        };
       case 'OFFICER':
-        return { label: `QUẢN GIÁO ${currentUser.zoneName ? `(${currentUser.zoneName})` : ''}`, color: appColors.amber600, bg: 'rgba(245, 158, 11, 0.1)' };
+        return {
+          label: `QUẢN GIÁO ${
+            currentUser.zoneName ? `(${currentUser.zoneName})` : ''
+          }`,
+          color: appColors.amber600,
+          bg: 'rgba(245, 158, 11, 0.1)',
+        };
       case 'GUARD':
       default:
-        return { label: 'ĐIỂM DANH (GUARD)', color: appColors.emerald600, bg: appColors.emerald50 };
+        return {
+          label: 'ĐIỂM DANH (GUARD)',
+          color: appColors.emerald600,
+          bg: appColors.emerald50,
+        };
     }
   };
 
@@ -159,9 +178,19 @@ export const SettingsScreen: React.FC = () => {
                 <AppText style={styles.accountEmail}>
                   {currentUser?.email || 'admin@cscns2.ag'}
                 </AppText>
-                <View style={[styles.roleBadge, { backgroundColor: roleInfo.bg, borderColor: roleInfo.color }]}>
+                <View
+                  style={[
+                    styles.roleBadge,
+                    {
+                      backgroundColor: roleInfo.bg,
+                      borderColor: roleInfo.color,
+                    },
+                  ]}
+                >
                   <Shield size={12} color={roleInfo.color} />
-                  <AppText style={[styles.roleBadgeText, { color: roleInfo.color }]}>
+                  <AppText
+                    style={[styles.roleBadgeText, { color: roleInfo.color }]}
+                  >
                     {roleInfo.label}
                   </AppText>
                 </View>
@@ -199,7 +228,9 @@ export const SettingsScreen: React.FC = () => {
           <View style={styles.card}>
             <View style={styles.cardHeader}>
               <Tablet size={20} color={appColors.blue600} />
-              <AppText style={styles.cardTitle}>Chế độ Kiosk (Samsung Tablet)</AppText>
+              <AppText style={styles.cardTitle}>
+                Chế độ Kiosk (Samsung Tablet)
+              </AppText>
             </View>
 
             {/* Device Owner Status */}

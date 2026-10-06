@@ -226,10 +226,15 @@ export class TfliteYoloService {
       try {
         return await loadImage({ url: src });
       } catch (loadErr) {
-        console.log('[TFLite YOLO] NitroWebImage note, falling back to buffer fetch:', loadErr);
+        console.log(
+          '[TFLite YOLO] NitroWebImage note, falling back to buffer fetch:',
+          loadErr,
+        );
         const response = await fetch(src);
         if (!response.ok) {
-          throw new Error(`Failed to fetch image: HTTP ${response.status} from ${src}`);
+          throw new Error(
+            `Failed to fetch image: HTTP ${response.status} from ${src}`,
+          );
         }
         const buffer = await response.arrayBuffer();
         return loadImage({
@@ -349,8 +354,13 @@ export class TfliteYoloService {
             );
             return null;
           }
-          if (Array.isArray(parsed.embeddings) && parsed.embeddings.length > 0) {
-            return parsed.embeddings.map((arr: number[]) => new Float32Array(arr));
+          if (
+            Array.isArray(parsed.embeddings) &&
+            parsed.embeddings.length > 0
+          ) {
+            return parsed.embeddings.map(
+              (arr: number[]) => new Float32Array(arr),
+            );
           }
         }
         // Legacy format: number[][]
@@ -619,8 +629,8 @@ export class TfliteYoloService {
       const rawRollRadians = Math.atan2(eyeDy, eyeDx);
       signedRollDegrees = rawRollRadians * (180 / Math.PI);
       const rollAngle = Math.abs(rawRollRadians); // radians (0 when upright)
-      if (rollAngle > 0.10) {
-        const rollFactor = Math.min(1.0, (rollAngle - 0.10) / 0.65);
+      if (rollAngle > 0.1) {
+        const rollFactor = Math.min(1.0, (rollAngle - 0.1) / 0.65);
         tiltBoostW += rollFactor * 0.16;
         tiltBoostH += rollFactor * 0.14;
       }
@@ -643,7 +653,7 @@ export class TfliteYoloService {
     }
 
     // Adaptive UI bounding box: generous breathing room ensuring forehead, ears, and chin are completely enclosed
-    const expandW = 1.20 + Math.min(0.20, tiltBoostW);
+    const expandW = 1.2 + Math.min(0.2, tiltBoostW);
     const expandH = 1.25 + Math.min(0.18, tiltBoostH);
 
     const uiW = normW * expandW;
@@ -689,7 +699,10 @@ export class TfliteYoloService {
     // Scaled to 1.28x face size, centered slightly higher on the head (lifted by 6% face height)
     // so hair, forehead, eyes, nose, and chin are perfectly framed like a portrait ID photo
     const avatarMultiplier = 1.28;
-    const avatarSide = Math.min(Math.round(faceSize * avatarMultiplier), maxSide);
+    const avatarSide = Math.min(
+      Math.round(faceSize * avatarMultiplier),
+      maxSide,
+    );
     const avatarCenterY = Math.round(faceCy - origBoxH * 0.06);
     let avatarX1 = Math.round(faceCx - avatarSide / 2);
     let avatarY1 = Math.round(avatarCenterY - avatarSide / 2);
@@ -816,7 +829,7 @@ export class TfliteYoloService {
 
       // Non-Maximum Suppression (NMS) with IoU = 0.40
       const selected: RawFaceCandidate[] = [];
-      const IOU_THRESHOLD = 0.40;
+      const IOU_THRESHOLD = 0.4;
       const MAX_FACES = 5;
 
       for (const cand of candidates) {
@@ -889,12 +902,7 @@ export class TfliteYoloService {
         Math.max(cropBox.y2, cropY1 + 1),
       );
 
-      let croppedFaceImage = frameImage.crop(
-        cropX1,
-        cropY1,
-        cropX2,
-        cropY2,
-      );
+      let croppedFaceImage = frameImage.crop(cropX1, cropY1, cropX2, cropY2);
 
       // If front camera was used, mirror the cropped photo so it matches the selfie preview view
       if (isFrontCamera) {
@@ -937,7 +945,11 @@ export class TfliteYoloService {
     // 5-Point Landmark Affine Alignment (Roll Correction):
     // If head is tilted by >= 3 degrees, rotate the face so eyes are horizontal!
     // This dramatically boosts cross-pose accuracy for tilted heads up to 45 degrees.
-    if (rollDegrees && Math.abs(rollDegrees) >= 3 && Math.abs(rollDegrees) <= 65) {
+    if (
+      rollDegrees &&
+      Math.abs(rollDegrees) >= 3 &&
+      Math.abs(rollDegrees) <= 65
+    ) {
       try {
         faceImage = faceImage.rotate(-rollDegrees);
       } catch (rotErr) {
@@ -1143,7 +1155,11 @@ export class TfliteYoloService {
           }
 
           // 1. Normal orientation embedding with landmark roll alignment
-          const emb = await this.extractFaceEmbedding(image, cropBox, rollDegrees);
+          const emb = await this.extractFaceEmbedding(
+            image,
+            cropBox,
+            rollDegrees,
+          );
           if (emb) {
             embeddings.push(emb);
 
@@ -1165,11 +1181,17 @@ export class TfliteYoloService {
                 embeddings.push(mirroredEmb);
               }
             } catch (mirrorErr) {
-              console.warn('[TFLite YOLO] Mirror augmentation note:', mirrorErr);
+              console.warn(
+                '[TFLite YOLO] Mirror augmentation note:',
+                mirrorErr,
+              );
             }
           }
         } catch (e) {
-          console.warn(`[TFLite YOLO] Could not load photo for enrollment (${profile.fullName}):`, e);
+          console.warn(
+            `[TFLite YOLO] Could not load photo for enrollment (${profile.fullName}):`,
+            e,
+          );
         }
       }
     }
@@ -1324,9 +1346,10 @@ export class TfliteYoloService {
           isFrontCamera,
         );
         if (!faceAvatarUri) {
-          faceAvatarUri = photoPath.startsWith('data:') || photoPath.startsWith('file://')
-            ? photoPath
-            : `file://${photoPath}`;
+          faceAvatarUri =
+            photoPath.startsWith('data:') || photoPath.startsWith('file://')
+              ? photoPath
+              : `file://${photoPath}`;
         }
         const liveEmbedding = await this.extractFaceEmbedding(
           frameImage,
@@ -1342,7 +1365,7 @@ export class TfliteYoloService {
 
       // 6. Greedy 1-to-1 Assignment against enrolled profiles:
       // Prevents 2 different faces from claiming the same enrolled profile!
-      const MATCH_THRESHOLD = 0.70;
+      const MATCH_THRESHOLD = 0.7;
 
       interface MatchCandidate {
         faceIdx: number;
@@ -1367,7 +1390,11 @@ export class TfliteYoloService {
               maxSimForThisFace = sim;
             }
             if (sim >= MATCH_THRESHOLD) {
-              allCandidates.push({ faceIdx: fIdx, profile: p, similarity: sim });
+              allCandidates.push({
+                faceIdx: fIdx,
+                profile: p,
+                similarity: sim,
+              });
             }
           }
         }
@@ -1383,7 +1410,10 @@ export class TfliteYoloService {
       const faceAssignedSim = new Map<number, number>();
 
       for (const cand of allCandidates) {
-        if (!assignedFaces.has(cand.faceIdx) && !assignedProfiles.has(cand.profile.id)) {
+        if (
+          !assignedFaces.has(cand.faceIdx) &&
+          !assignedProfiles.has(cand.profile.id)
+        ) {
           assignedFaces.add(cand.faceIdx);
           assignedProfiles.add(cand.profile.id);
           faceAssignedProfile.set(cand.faceIdx, cand.profile);
@@ -1438,34 +1468,47 @@ export class TfliteYoloService {
       const otherVerifiedFaces = evaluatedFaces.filter(
         f => f !== primary && f.status === 'present' && f.profile,
       );
-      const additionalVerified: DetectionResult[] = otherVerifiedFaces.map(f => {
-        const confPct = Math.min(
-          99,
-          Math.max(
-            75,
-            Math.round(
-              75 +
-                ((f.similarity - MATCH_THRESHOLD) / (0.88 - MATCH_THRESHOLD)) *
-                  24,
+      const additionalVerified: DetectionResult[] = otherVerifiedFaces.map(
+        f => {
+          const confPct = Math.min(
+            99,
+            Math.max(
+              75,
+              Math.round(
+                75 +
+                  ((f.similarity - MATCH_THRESHOLD) /
+                    (0.88 - MATCH_THRESHOLD)) *
+                    24,
+              ),
             ),
-          ),
-        );
-        return {
-          userId: f.profile!.id,
-          fullName: f.profile!.fullName,
-          code: f.profile!.code,
-          avatarUri: f.avatarUri,
-          zoneName: 'Khu vực chính',
-          roomName: 'Phòng hiện tại',
-          confidence: confPct,
-          timestamp: timeString,
-          status: 'present',
-          boundingBox: f.detection.boundingBox,
-        };
-      });
+          );
+          return {
+            userId: f.profile!.id,
+            fullName: f.profile!.fullName,
+            code: f.profile!.code,
+            avatarUri: f.avatarUri,
+            zoneName: 'Khu vực chính',
+            roomName: 'Phòng hiện tại',
+            confidence: confPct,
+            timestamp: timeString,
+            status: 'present',
+            boundingBox: f.detection.boundingBox,
+          };
+        },
+      );
 
       console.log(
-        `[TFLite YOLO] Total faces in frame: ${evaluatedFaces.length} | Primary: "${primary.profile?.fullName || 'UNKNOWN'}" (${(primary.similarity * 100).toFixed(1)}%) -> ${primary.status.toUpperCase()}${hasUnverifiedStranger ? ' [WARNING: Stranger detected in frame]' : ''}${additionalVerified.length > 0 ? ` [MULTI-MATCH: +${additionalVerified.length} members]` : ''}`,
+        `[TFLite YOLO] Total faces in frame: ${
+          evaluatedFaces.length
+        } | Primary: "${primary.profile?.fullName || 'UNKNOWN'}" (${(
+          primary.similarity * 100
+        ).toFixed(1)}%) -> ${primary.status.toUpperCase()}${
+          hasUnverifiedStranger ? ' [WARNING: Stranger detected in frame]' : ''
+        }${
+          additionalVerified.length > 0
+            ? ` [MULTI-MATCH: +${additionalVerified.length} members]`
+            : ''
+        }`,
       );
 
       if (primary.status === 'present' && primary.profile) {
@@ -1476,7 +1519,8 @@ export class TfliteYoloService {
             75,
             Math.round(
               75 +
-                ((primary.similarity - MATCH_THRESHOLD) / (0.88 - MATCH_THRESHOLD)) *
+                ((primary.similarity - MATCH_THRESHOLD) /
+                  (0.88 - MATCH_THRESHOLD)) *
                   24,
             ),
           ),
@@ -1494,7 +1538,8 @@ export class TfliteYoloService {
           status: 'present',
           boundingBox: primary.detection.boundingBox,
           hasUnverifiedStranger,
-          additionalVerified: additionalVerified.length > 0 ? additionalVerified : undefined,
+          additionalVerified:
+            additionalVerified.length > 0 ? additionalVerified : undefined,
         };
       }
 
@@ -1502,7 +1547,7 @@ export class TfliteYoloService {
       // Check against session stranger embeddings cache to group repeat sightings of the same stranger
       let matchedStranger: StrangerRecord | null = null;
       let bestStrangerSim = 0;
-      const STRANGER_MATCH_THRESHOLD = 0.70;
+      const STRANGER_MATCH_THRESHOLD = 0.7;
 
       if (primary.embedding) {
         for (const stranger of this.strangerEmbeddingsCache.values()) {
@@ -1578,7 +1623,9 @@ export class TfliteYoloService {
   /**
    * Warm-up room profile embeddings in advance (e.g. on entering room or login)
    */
-  public async warmupRoomEmbeddings(roomProfiles: UserProfile[]): Promise<void> {
+  public async warmupRoomEmbeddings(
+    roomProfiles: UserProfile[],
+  ): Promise<void> {
     if (!this.isInitialized) {
       await this.initModels();
     }

@@ -80,7 +80,8 @@ export const DrawerContainer: React.FC = () => {
   };
 
   const currentUser = useAppSelector(state => state.app.currentUser);
-  const isAdmin = currentUser?.role === 'ADMIN' || currentUser?.role === 'SUPER_ADMIN';
+  const isAdmin =
+    currentUser?.role === 'ADMIN' || currentUser?.role === 'SUPER_ADMIN';
 
   const allNavItems = [
     {

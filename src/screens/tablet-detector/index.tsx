@@ -97,17 +97,27 @@ const TabletDetectorScreen: React.FC<TabletDetectorScreenProps> = ({
   const userProfiles = useAppSelector(state => state.detector.userProfiles);
   const selectedZoneId = useAppSelector(state => state.detector.selectedZoneId);
   const selectedRoomId = useAppSelector(state => state.detector.selectedRoomId);
-  const isSessionActive = useAppSelector(state => state.detector.isSessionActive);
-  const activeSessionId = useAppSelector(state => state.detector.activeSessionId);
+  const isSessionActive = useAppSelector(
+    state => state.detector.isSessionActive,
+  );
+  const activeSessionId = useAppSelector(
+    state => state.detector.activeSessionId,
+  );
   const attendanceMap = useAppSelector(state => state.detector.attendanceMap);
-  const activeDetection = useAppSelector(state => state.detector.activeDetection);
+  const activeDetection = useAppSelector(
+    state => state.detector.activeDetection,
+  );
   const alerts = useAppSelector(state => state.detector.alerts);
   const scanMode = useAppSelector(state => state.detector.scanMode);
   const scanDirection = useAppSelector(state => state.detector.scanDirection);
   const scanHistory = useAppSelector(state => state.detector.scanHistory);
   const sessions = useAppSelector(state => state.detector.sessions);
-  const isDeviceAuthorized = useAppSelector(state => state.detector.isDeviceAuthorized);
-  const deviceLockMessage = useAppSelector(state => state.detector.deviceLockMessage);
+  const isDeviceAuthorized = useAppSelector(
+    state => state.detector.isDeviceAuthorized,
+  );
+  const deviceLockMessage = useAppSelector(
+    state => state.detector.deviceLockMessage,
+  );
 
   // Modals state
   const [addUserVisible, setAddUserVisible] = useState(false);
@@ -199,16 +209,16 @@ const TabletDetectorScreen: React.FC<TabletDetectorScreenProps> = ({
 
   const selectedZone = zones.find(z => z.id === selectedZoneId) || zones[0];
   const selectedRoom = rooms.find(r => r.id === selectedRoomId) || rooms[0];
-  const effectiveZoneId = selectedZoneId || selectedZone?.id || zones[0]?.id || '';
-  const effectiveRoomId = selectedRoomId || selectedRoom?.id || rooms[0]?.id || '';
+  const effectiveZoneId =
+    selectedZoneId || selectedZone?.id || zones[0]?.id || '';
+  const effectiveRoomId =
+    selectedRoomId || selectedRoom?.id || rooms[0]?.id || '';
 
   // 1. Lấy tất cả ID phòng thuộc khu vực đang chọn
   const roomIdsInZone = useMemo(
     () =>
       new Set(
-        (rooms || [])
-          .filter(r => r.zoneId === effectiveZoneId)
-          .map(r => r.id),
+        (rooms || []).filter(r => r.zoneId === effectiveZoneId).map(r => r.id),
       ),
     [rooms, effectiveZoneId],
   );
@@ -788,14 +798,19 @@ const TabletDetectorScreen: React.FC<TabletDetectorScreenProps> = ({
       const actualRoomId = isRoomMode
         ? selectedRoom?.id || effectiveRoomId
         : undefined;
-      const actualZoneId = isRoomMode || isZoneMode
-        ? selectedZone?.id || effectiveZoneId
-        : undefined;
+      const actualZoneId =
+        isRoomMode || isZoneMode
+          ? selectedZone?.id || effectiveZoneId
+          : undefined;
       const payload = {
         name: sessionName,
         scanMode,
         roomId: actualRoomId,
-        roomName: isRoomMode ? selectedRoom?.name : isZoneMode ? 'Theo khu vực' : 'Toàn cơ sở',
+        roomName: isRoomMode
+          ? selectedRoom?.name
+          : isZoneMode
+          ? 'Theo khu vực'
+          : 'Toàn cơ sở',
         zoneId: actualZoneId,
         zoneName: actualZoneId ? selectedZone?.name : 'Toàn cơ sở',
         startTime: new Date().toISOString(),
@@ -875,8 +890,7 @@ const TabletDetectorScreen: React.FC<TabletDetectorScreenProps> = ({
     r => !selectedZoneId || r.zoneId === selectedZoneId,
   );
   // If no rooms match selected zone, show all available rooms so picker isn't empty
-  const availableRooms =
-    filteredRooms.length > 0 ? filteredRooms : rooms || [];
+  const availableRooms = filteredRooms.length > 0 ? filteredRooms : rooms || [];
 
   const roomPickerItems = [
     {
