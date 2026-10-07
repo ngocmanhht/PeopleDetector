@@ -91,8 +91,8 @@ export const ScannedResultsList: React.FC<ScannedResultsListProps> = ({
           <Clock size={40} color={appColors.slate400} />
           <AppText style={styles.emptyTitle}>Phiên chưa bắt đầu</AppText>
           <AppText style={styles.emptySubtitle}>
-            Nhấn "Bắt đầu phiên" để camera kích hoạt quét và ghi nhận thời gian
-            vào/ra của từng nhân sự.
+            Nhấn "Bắt đầu" để camera kích hoạt quét và ghi nhận thời gian vào/ra
+            của từng nhân sự.
           </AppText>
         </View>
       </View>
@@ -218,9 +218,9 @@ export const ScannedResultsList: React.FC<ScannedResultsListProps> = ({
                 style={[
                   styles.heroStatusBadge,
                   activeDetection.status === 'present'
-                    ? (scanDirection === 'out'
-                        ? styles.heroStatusBadgeRed
-                        : styles.heroStatusBadgeGreen)
+                    ? scanDirection === 'out'
+                      ? styles.heroStatusBadgeRed
+                      : styles.heroStatusBadgeGreen
                     : styles.heroStatusBadgeAmber,
                 ]}
               >
@@ -237,16 +237,20 @@ export const ScannedResultsList: React.FC<ScannedResultsListProps> = ({
                   style={[
                     styles.heroStatusText,
                     activeDetection.status === 'present'
-                      ? (scanDirection === 'out'
-                          ? styles.heroStatusTextRed
-                          : styles.heroStatusTextGreen)
+                      ? scanDirection === 'out'
+                        ? styles.heroStatusTextRed
+                        : styles.heroStatusTextGreen
                       : styles.heroStatusTextAmber,
                   ]}
                 >
                   {activeDetection.status === 'present'
                     ? isAllMode
-                      ? (scanDirection === 'out' ? 'Đã ra cơ sở' : 'Đã vào cơ sở')
-                      : (scanDirection === 'out' ? 'Điểm danh RA (OUT)' : 'Đã điểm danh')
+                      ? scanDirection === 'out'
+                        ? 'Đã ra cơ sở'
+                        : 'Đã vào cơ sở'
+                      : scanDirection === 'out'
+                      ? 'Điểm danh RA (OUT)'
+                      : 'Đã điểm danh'
                     : 'Chưa xác minh'}
                 </AppText>
               </View>
@@ -467,9 +471,9 @@ export const ScannedResultsList: React.FC<ScannedResultsListProps> = ({
                     style={[
                       styles.statusPill,
                       isVerified
-                        ? (item.lastDirection === 'out'
-                            ? styles.statusPillRed
-                            : styles.statusPillGreen)
+                        ? item.lastDirection === 'out'
+                          ? styles.statusPillRed
+                          : styles.statusPillGreen
                         : styles.statusPillAmber,
                     ]}
                   >
@@ -486,16 +490,20 @@ export const ScannedResultsList: React.FC<ScannedResultsListProps> = ({
                       style={[
                         styles.statusPillText,
                         isVerified
-                          ? (item.lastDirection === 'out'
-                              ? styles.statusPillTextRed
-                              : styles.statusPillTextGreen)
+                          ? item.lastDirection === 'out'
+                            ? styles.statusPillTextRed
+                            : styles.statusPillTextGreen
                           : styles.statusPillTextAmber,
                       ]}
                     >
                       {isVerified
                         ? isAllMode
-                          ? (item.lastDirection === 'out' ? 'Đã ra cơ sở' : 'Đã vào cơ sở')
-                          : (item.lastDirection === 'out' ? 'Đã ra (OUT)' : 'Đã vào (IN)')
+                          ? item.lastDirection === 'out'
+                            ? 'Đã ra cơ sở'
+                            : 'Đã vào cơ sở'
+                          : item.lastDirection === 'out'
+                          ? 'Đã ra (OUT)'
+                          : 'Đã vào (IN)'
                         : 'Chưa xác minh'}
                     </AppText>
                   </View>
@@ -654,7 +662,13 @@ export const ScannedResultsList: React.FC<ScannedResultsListProps> = ({
                         </AppText>
                       </View>
                       <View style={styles.logTimeCol}>
-                        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                        <View
+                          style={{
+                            flexDirection: 'row',
+                            alignItems: 'center',
+                            gap: 6,
+                          }}
+                        >
                           <AppText style={styles.logTimeText}>
                             {ev.timestamp}
                           </AppText>
@@ -675,7 +689,9 @@ export const ScannedResultsList: React.FC<ScannedResultsListProps> = ({
                                     : styles.logDirectionBadgeTextIn,
                                 ]}
                               >
-                                {ev.direction === 'out' ? 'RA (OUT)' : 'VÀO (IN)'}
+                                {ev.direction === 'out'
+                                  ? 'RA (OUT)'
+                                  : 'VÀO (IN)'}
                               </AppText>
                             </View>
                           )}
@@ -696,28 +712,29 @@ export const ScannedResultsList: React.FC<ScannedResultsListProps> = ({
                   )}
                 />
 
-                {selectedDetailItem.status !== 'present' && onEnrollStranger && (
-                  <TouchableOpacity
-                    style={styles.modalEnrollBtn}
-                    onPress={() => {
-                      const item = selectedDetailItem;
-                      setSelectedDetailItem(null);
-                      onEnrollStranger(
-                        item.avatarUri,
-                        item.fullName !== 'Người chưa xác minh'
-                          ? item.fullName
-                          : '',
-                        item.id || item.userId,
-                      );
-                    }}
-                    activeOpacity={0.85}
-                  >
-                    <UserPlus size={16} color={appColors.white} />
-                    <AppText style={styles.modalEnrollBtnText}>
-                      + Thêm người này vào danh sách nhân sự
-                    </AppText>
-                  </TouchableOpacity>
-                )}
+                {selectedDetailItem.status !== 'present' &&
+                  onEnrollStranger && (
+                    <TouchableOpacity
+                      style={styles.modalEnrollBtn}
+                      onPress={() => {
+                        const item = selectedDetailItem;
+                        setSelectedDetailItem(null);
+                        onEnrollStranger(
+                          item.avatarUri,
+                          item.fullName !== 'Người chưa xác minh'
+                            ? item.fullName
+                            : '',
+                          item.id || item.userId,
+                        );
+                      }}
+                      activeOpacity={0.85}
+                    >
+                      <UserPlus size={16} color={appColors.white} />
+                      <AppText style={styles.modalEnrollBtnText}>
+                        + Thêm người này vào danh sách nhân sự
+                      </AppText>
+                    </TouchableOpacity>
+                  )}
               </>
             )}
           </View>

@@ -28,9 +28,11 @@ export const AttendanceCard: React.FC<AttendanceCardProps> = ({
         ]}
       >
         <UserX size={isPhone ? 38 : 48} color={appColors.slate400} />
-        <AppText style={styles.emptyTitle}>Phiên điểm danh chưa bắt đầu</AppText>
+        <AppText style={styles.emptyTitle}>
+          Phiên điểm danh chưa bắt đầu
+        </AppText>
         <AppText style={styles.emptySubtitle}>
-          Vui lòng nhấn "Bắt đầu phiên" để camera quét và nhận diện khuôn mặt.
+          Vui lòng nhấn "Bắt đầu" để camera quét và nhận diện khuôn mặt.
         </AppText>
       </View>
     );

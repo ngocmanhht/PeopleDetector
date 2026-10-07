@@ -864,7 +864,7 @@ const TabletDetectorScreen: React.FC<TabletDetectorScreenProps> = ({
         }),
       );
       showSuccessToast(
-        'Bắt đầu phiên',
+        'Bắt đầu',
         `Đã khởi tạo phiên trên hệ thống: ${sessionName}`,
       );
     } catch (err: any) {
@@ -884,7 +884,7 @@ const TabletDetectorScreen: React.FC<TabletDetectorScreenProps> = ({
         }),
       );
       showSuccessToast(
-        'Bắt đầu phiên (Offline)',
+        'Bắt đầu (Offline)',
         `Đang chạy phiên cục bộ: ${sessionName}`,
       );
     }
@@ -892,7 +892,7 @@ const TabletDetectorScreen: React.FC<TabletDetectorScreenProps> = ({
 
   const handleEndSession = () => {
     Alert.alert(
-      'Kết thúc phiên quét',
+      'Kết thúc quét',
       'Bạn có chắc chắn muốn kết thúc phiên làm việc hiện tại không?',
       [
         { text: 'Hủy', style: 'cancel' },

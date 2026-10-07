@@ -112,7 +112,7 @@ export const LoginScreen = () => {
         Đăng nhập hệ thống
       </AppText>
       <AppText style={styles.formSubtitle}>
-        Nhập tài khoản quản trị để bắt đầu phiên làm việc
+        Nhập tài khoản quản trị để bắt đầu
       </AppText>
       {/* Email input */}
       <View style={styles.inputGroup}>

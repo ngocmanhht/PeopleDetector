@@ -56,9 +56,7 @@ export const SessionControls: React.FC<SessionControlsProps> = ({
           <AppText
             style={[styles.buttonText, isPhone && styles.buttonTextPhone]}
           >
-            {scanMode === 'all'
-              ? 'Bắt đầu phiên quét All'
-              : 'Bắt đầu phiên điểm danh'}
+            {scanMode === 'all' ? 'Bắt đầu quét All' : 'Bắt đầu điểm danh'}
           </AppText>
         </TouchableOpacity>
       ) : (

@@ -71,7 +71,8 @@ export const RoomsManagerScreen: React.FC = () => {
   const sessions = useAppSelector(state => state.detector.sessions);
 
   const [activeTab, setActiveTab] = useState<'members' | 'sessions'>('members');
-  const [selectedDetailSession, setSelectedDetailSession] = useState<AttendanceSession | null>(null);
+  const [selectedDetailSession, setSelectedDetailSession] =
+    useState<AttendanceSession | null>(null);
   const [sessionSearchQuery, setSessionSearchQuery] = useState('');
 
   const [searchQuery, setSearchQuery] = useState('');
@@ -117,13 +118,13 @@ export const RoomsManagerScreen: React.FC = () => {
   const filteredUsers = usersInRoom.filter(
     u =>
       u.fullName.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      u.code.toLowerCase().includes(searchQuery.toLowerCase())
+      u.code.toLowerCase().includes(searchQuery.toLowerCase()),
   );
 
   const filteredSessions = currentRoomSessions.filter(
     s =>
       s.name.toLowerCase().includes(sessionSearchQuery.toLowerCase()) ||
-      s.startTime.includes(sessionSearchQuery)
+      s.startTime.includes(sessionSearchQuery),
   );
 
   const zonePickerItems = zones.map(z => ({
@@ -152,11 +153,14 @@ export const RoomsManagerScreen: React.FC = () => {
           onPress: () => {
             dispatch(deleteSession(sessionId));
             sessionService.deleteSession(sessionId).catch(err => {
-              console.log('[RoomsManager] Failed to delete session on BE:', err);
+              console.log(
+                '[RoomsManager] Failed to delete session on BE:',
+                err,
+              );
             });
           },
         },
-      ]
+      ],
     );
   };
 
@@ -220,11 +224,14 @@ export const RoomsManagerScreen: React.FC = () => {
             tfliteYoloService.invalidateProfileCache(userId);
             dispatch(deleteUserProfile(userId));
             profileService.deleteProfile(userId).catch(err => {
-              console.log('[RoomsManager] Failed to delete profile on BE:', err);
+              console.log(
+                '[RoomsManager] Failed to delete profile on BE:',
+                err,
+              );
             });
           },
         },
-      ]
+      ],
     );
   };
 
@@ -233,151 +240,171 @@ export const RoomsManagerScreen: React.FC = () => {
       {/* Left Column: Zones and Rooms Explorer (Tablet only) */}
       {isTablet && (
         <View style={styles.sidebarCol}>
-        <View style={styles.colHeader}>
-          <Building2 size={20} color={appColors.blue600} />
-          <AppText style={styles.colHeaderTitle}>Khu vực & Phòng</AppText>
-        </View>
-
-        {/* Zones Horizontal Pills */}
-        <View style={styles.zonesSection}>
-          <View style={styles.sectionTitleRow}>
-            <AppText style={styles.subSectionTitle}>Khu vực (Zones)</AppText>
-            <TouchableOpacity
-              onPress={() => setShowAddZoneInput(!showAddZoneInput)}
-              style={styles.inlineAddBtn}
-            >
-              <Plus size={14} color={appColors.blue600} />
-              <AppText style={styles.inlineAddBtnText}>Thêm khu</AppText>
-            </TouchableOpacity>
+          <View style={styles.colHeader}>
+            <Building2 size={20} color={appColors.blue600} />
+            <AppText style={styles.colHeaderTitle}>Khu vực & Phòng</AppText>
           </View>
 
-          {showAddZoneInput && (
-            <View style={styles.inlineInputRow}>
-              <TextInput
-                style={styles.inlineTextInput}
-                placeholder="Tên khu mới (vd: Khu D)..."
-                value={newZoneName}
-                onChangeText={setNewZoneName}
-                placeholderTextColor={appColors.slate400}
-              />
+          {/* Zones Horizontal Pills */}
+          <View style={styles.zonesSection}>
+            <View style={styles.sectionTitleRow}>
+              <AppText style={styles.subSectionTitle}>Khu vực (Zones)</AppText>
               <TouchableOpacity
-                style={styles.inlineConfirmBtn}
-                onPress={handleCreateZone}
+                onPress={() => setShowAddZoneInput(!showAddZoneInput)}
+                style={styles.inlineAddBtn}
               >
-                <AppText style={styles.inlineConfirmText}>Lưu</AppText>
+                <Plus size={14} color={appColors.blue600} />
+                <AppText style={styles.inlineAddBtnText}>Thêm khu</AppText>
               </TouchableOpacity>
             </View>
-          )}
 
-          <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-            <View style={styles.zonesRow}>
-              {zones.map(z => {
-                const isSelected = z.id === currentZone?.id;
+            {showAddZoneInput && (
+              <View style={styles.inlineInputRow}>
+                <TextInput
+                  style={styles.inlineTextInput}
+                  placeholder="Tên khu mới (vd: Khu D)..."
+                  value={newZoneName}
+                  onChangeText={setNewZoneName}
+                  placeholderTextColor={appColors.slate400}
+                />
+                <TouchableOpacity
+                  style={styles.inlineConfirmBtn}
+                  onPress={handleCreateZone}
+                >
+                  <AppText style={styles.inlineConfirmText}>Lưu</AppText>
+                </TouchableOpacity>
+              </View>
+            )}
+
+            <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+              <View style={styles.zonesRow}>
+                {zones.map(z => {
+                  const isSelected = z.id === currentZone?.id;
+                  return (
+                    <TouchableOpacity
+                      key={z.id}
+                      style={[
+                        styles.zoneChip,
+                        isSelected && styles.zoneChipActive,
+                      ]}
+                      onPress={() => dispatch(setSelectedZoneId(z.id))}
+                    >
+                      <AppText
+                        style={[
+                          styles.zoneChipText,
+                          isSelected && styles.zoneChipTextActive,
+                        ]}
+                        numberOfLines={1}
+                        ellipsizeMode="tail"
+                      >
+                        {z.name}
+                      </AppText>
+                    </TouchableOpacity>
+                  );
+                })}
+              </View>
+            </ScrollView>
+          </View>
+
+          {/* Rooms List in selected Zone */}
+          <View style={styles.roomsSection}>
+            <View style={styles.sectionTitleRow}>
+              <AppText
+                style={styles.subSectionTitle}
+                numberOfLines={1}
+                ellipsizeMode="tail"
+              >
+                Phòng trong {currentZone?.name || 'Khu'} (
+                {roomsInCurrentZone.length})
+              </AppText>
+              <TouchableOpacity
+                onPress={() => setShowAddRoomInput(!showAddRoomInput)}
+                style={styles.inlineAddBtn}
+              >
+                <Plus
+                  size={14}
+                  color={appColors.blue600}
+                  style={{ flexShrink: 0 }}
+                />
+                <AppText style={styles.inlineAddBtnText}>Thêm phòng</AppText>
+              </TouchableOpacity>
+            </View>
+
+            {showAddRoomInput && (
+              <View style={styles.inlineInputRow}>
+                <TextInput
+                  style={styles.inlineTextInput}
+                  placeholder="Tên phòng (vd: Phòng A03)..."
+                  value={newRoomName}
+                  onChangeText={setNewRoomName}
+                  placeholderTextColor={appColors.slate400}
+                />
+                <TouchableOpacity
+                  style={styles.inlineConfirmBtn}
+                  onPress={handleCreateRoom}
+                >
+                  <AppText style={styles.inlineConfirmText}>Lưu</AppText>
+                </TouchableOpacity>
+              </View>
+            )}
+
+            <FlatList
+              data={roomsInCurrentZone}
+              keyExtractor={item => item.id}
+              contentContainerStyle={styles.roomsList}
+              renderItem={({ item }) => {
+                const isSelected = item.id === currentRoom?.id;
+                const count = userProfiles.filter(
+                  u => u.roomId === item.id,
+                ).length;
+
                 return (
                   <TouchableOpacity
-                    key={z.id}
-                    style={[styles.zoneChip, isSelected && styles.zoneChipActive]}
-                    onPress={() => dispatch(setSelectedZoneId(z.id))}
+                    style={[
+                      styles.roomCard,
+                      isSelected && styles.roomCardActive,
+                    ]}
+                    onPress={() => dispatch(setSelectedRoomId(item.id))}
+                    activeOpacity={0.8}
                   >
-                    <AppText
-                      style={[
-                        styles.zoneChipText,
-                        isSelected && styles.zoneChipTextActive,
-                      ]}
-                      numberOfLines={1}
-                      ellipsizeMode="tail"
-                    >
-                      {z.name}
-                    </AppText>
+                    <View style={styles.roomIconWrap}>
+                      <DoorOpen
+                        size={20}
+                        color={
+                          isSelected ? appColors.blue600 : appColors.slate500
+                        }
+                        style={{ flexShrink: 0 }}
+                      />
+                    </View>
+                    <View style={{ flex: 1, minWidth: 0 }}>
+                      <AppText
+                        style={[
+                          styles.roomName,
+                          isSelected && styles.roomNameActive,
+                        ]}
+                        numberOfLines={1}
+                        ellipsizeMode="tail"
+                      >
+                        {item.name}
+                      </AppText>
+                      <AppText style={styles.roomCap} numberOfLines={1}>
+                        Sức chứa: {item.capacity || 30} người
+                      </AppText>
+                    </View>
+                    <View style={styles.roomBadge}>
+                      <Users
+                        size={12}
+                        color={appColors.slate500}
+                        style={{ flexShrink: 0 }}
+                      />
+                      <AppText style={styles.roomBadgeText}>{count}</AppText>
+                    </View>
                   </TouchableOpacity>
                 );
-              })}
-            </View>
-          </ScrollView>
-        </View>
-
-        {/* Rooms List in selected Zone */}
-        <View style={styles.roomsSection}>
-          <View style={styles.sectionTitleRow}>
-            <AppText style={styles.subSectionTitle} numberOfLines={1} ellipsizeMode="tail">
-              Phòng trong {currentZone?.name || 'Khu'} ({roomsInCurrentZone.length})
-            </AppText>
-            <TouchableOpacity
-              onPress={() => setShowAddRoomInput(!showAddRoomInput)}
-              style={styles.inlineAddBtn}
-            >
-              <Plus size={14} color={appColors.blue600} style={{ flexShrink: 0 }} />
-              <AppText style={styles.inlineAddBtnText}>Thêm phòng</AppText>
-            </TouchableOpacity>
+              }}
+            />
           </View>
-
-          {showAddRoomInput && (
-            <View style={styles.inlineInputRow}>
-              <TextInput
-                style={styles.inlineTextInput}
-                placeholder="Tên phòng (vd: Phòng A03)..."
-                value={newRoomName}
-                onChangeText={setNewRoomName}
-                placeholderTextColor={appColors.slate400}
-              />
-              <TouchableOpacity
-                style={styles.inlineConfirmBtn}
-                onPress={handleCreateRoom}
-              >
-                <AppText style={styles.inlineConfirmText}>Lưu</AppText>
-              </TouchableOpacity>
-            </View>
-          )}
-
-          <FlatList
-            data={roomsInCurrentZone}
-            keyExtractor={item => item.id}
-            contentContainerStyle={styles.roomsList}
-            renderItem={({ item }) => {
-              const isSelected = item.id === currentRoom?.id;
-              const count = userProfiles.filter(u => u.roomId === item.id).length;
-
-              return (
-                <TouchableOpacity
-                  style={[
-                    styles.roomCard,
-                    isSelected && styles.roomCardActive,
-                  ]}
-                  onPress={() => dispatch(setSelectedRoomId(item.id))}
-                  activeOpacity={0.8}
-                >
-                  <View style={styles.roomIconWrap}>
-                    <DoorOpen
-                      size={20}
-                      color={isSelected ? appColors.blue600 : appColors.slate500}
-                      style={{ flexShrink: 0 }}
-                    />
-                  </View>
-                  <View style={{ flex: 1, minWidth: 0 }}>
-                    <AppText
-                      style={[
-                        styles.roomName,
-                        isSelected && styles.roomNameActive,
-                      ]}
-                      numberOfLines={1}
-                      ellipsizeMode="tail"
-                    >
-                      {item.name}
-                    </AppText>
-                    <AppText style={styles.roomCap} numberOfLines={1}>
-                      Sức chứa: {item.capacity || 30} người
-                    </AppText>
-                  </View>
-                  <View style={styles.roomBadge}>
-                    <Users size={12} color={appColors.slate500} style={{ flexShrink: 0 }} />
-                    <AppText style={styles.roomBadgeText}>{count}</AppText>
-                  </View>
-                </TouchableOpacity>
-              );
-            }}
-          />
         </View>
-      </View>
       )}
 
       {/* Content Column: User Members in selected Room */}
@@ -390,11 +417,23 @@ export const RoomsManagerScreen: React.FC = () => {
               onPress={() => setZonePickerVisible(true)}
               activeOpacity={0.8}
             >
-              <Building2 size={15} color={appColors.blue600} style={{ flexShrink: 0 }} />
-              <AppText style={styles.phoneSelectorText} numberOfLines={1} ellipsizeMode="tail">
+              <Building2
+                size={15}
+                color={appColors.blue600}
+                style={{ flexShrink: 0 }}
+              />
+              <AppText
+                style={styles.phoneSelectorText}
+                numberOfLines={1}
+                ellipsizeMode="tail"
+              >
                 {currentZone ? currentZone.name : 'Chọn Khu'}
               </AppText>
-              <ChevronDown size={14} color={appColors.slate400} style={{ flexShrink: 0 }} />
+              <ChevronDown
+                size={14}
+                color={appColors.slate400}
+                style={{ flexShrink: 0 }}
+              />
             </TouchableOpacity>
 
             <TouchableOpacity
@@ -402,11 +441,23 @@ export const RoomsManagerScreen: React.FC = () => {
               onPress={() => setRoomPickerVisible(true)}
               activeOpacity={0.8}
             >
-              <DoorOpen size={15} color={appColors.blue600} style={{ flexShrink: 0 }} />
-              <AppText style={styles.phoneSelectorText} numberOfLines={1} ellipsizeMode="tail">
+              <DoorOpen
+                size={15}
+                color={appColors.blue600}
+                style={{ flexShrink: 0 }}
+              />
+              <AppText
+                style={styles.phoneSelectorText}
+                numberOfLines={1}
+                ellipsizeMode="tail"
+              >
                 {currentRoom ? currentRoom.name : 'Chọn Phòng'}
               </AppText>
-              <ChevronDown size={14} color={appColors.slate400} style={{ flexShrink: 0 }} />
+              <ChevronDown
+                size={14}
+                color={appColors.slate400}
+                style={{ flexShrink: 0 }}
+              />
             </TouchableOpacity>
 
             <TouchableOpacity
@@ -414,29 +465,53 @@ export const RoomsManagerScreen: React.FC = () => {
               onPress={() => setManageRoomsModalVisible(true)}
               activeOpacity={0.8}
             >
-              <Sliders size={16} color={appColors.gray600} style={{ flexShrink: 0 }} />
+              <Sliders
+                size={16}
+                color={appColors.gray600}
+                style={{ flexShrink: 0 }}
+              />
             </TouchableOpacity>
           </View>
         )}
         {/* Top Header of Room Detail */}
-        <View style={[styles.roomDetailHeader, isPhone && styles.roomDetailHeaderPhone]}>
+        <View
+          style={[
+            styles.roomDetailHeader,
+            isPhone && styles.roomDetailHeaderPhone,
+          ]}
+        >
           <View style={{ flex: 1, minWidth: 0 }}>
             <View style={styles.roomTitleRow}>
-              <DoorOpen size={isPhone ? 20 : 24} color={appColors.blue600} style={{ flexShrink: 0 }} />
+              <DoorOpen
+                size={isPhone ? 20 : 24}
+                color={appColors.blue600}
+                style={{ flexShrink: 0 }}
+              />
               <AppText
-                style={[styles.roomDetailTitle, isPhone && styles.roomDetailTitlePhone]}
+                style={[
+                  styles.roomDetailTitle,
+                  isPhone && styles.roomDetailTitlePhone,
+                ]}
                 numberOfLines={1}
                 ellipsizeMode="tail"
               >
                 {currentRoom?.name || 'Chưa chọn phòng'}
               </AppText>
               <View style={styles.zoneTag}>
-                <AppText style={styles.zoneTagText} numberOfLines={1} ellipsizeMode="tail">
+                <AppText
+                  style={styles.zoneTagText}
+                  numberOfLines={1}
+                  ellipsizeMode="tail"
+                >
                   {currentZone?.name || 'Khu'}
                 </AppText>
               </View>
             </View>
-            <AppText style={styles.roomDetailSubtitle} numberOfLines={1} ellipsizeMode="tail">
+            <AppText
+              style={styles.roomDetailSubtitle}
+              numberOfLines={1}
+              ellipsizeMode="tail"
+            >
               {activeTab === 'members'
                 ? `Tổng số hồ sơ: ${usersInRoom.length} người đã đăng ký`
                 : `Lịch sử: ${currentRoomSessions.length} phiên đã thực hiện`}
@@ -446,18 +521,28 @@ export const RoomsManagerScreen: React.FC = () => {
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
             {activeTab === 'members' && (
               <TouchableOpacity
-                style={[styles.addUserHeaderBtn, isPhone && styles.addUserHeaderBtnPhone]}
+                style={[
+                  styles.addUserHeaderBtn,
+                  isPhone && styles.addUserHeaderBtnPhone,
+                ]}
                 onPress={() => setShowAddRoomMemberModal(true)}
                 activeOpacity={0.85}
               >
-                <UserPlus size={18} color={appColors.white} style={{ flexShrink: 0 }} />
+                <UserPlus
+                  size={18}
+                  color={appColors.white}
+                  style={{ flexShrink: 0 }}
+                />
                 <AppText style={styles.addUserHeaderBtnText}>
                   + Thêm người
                 </AppText>
               </TouchableOpacity>
             )}
 
-            <RefreshButton size={isPhone ? 34 : 38} iconSize={isPhone ? 16 : 18} />
+            <RefreshButton
+              size={isPhone ? 34 : 38}
+              iconSize={isPhone ? 16 : 18}
+            />
           </View>
         </View>
 
@@ -473,7 +558,9 @@ export const RoomsManagerScreen: React.FC = () => {
           >
             <Users
               size={16}
-              color={activeTab === 'members' ? appColors.blue600 : appColors.slate500}
+              color={
+                activeTab === 'members' ? appColors.blue600 : appColors.slate500
+              }
             />
             <AppText
               style={[
@@ -495,7 +582,11 @@ export const RoomsManagerScreen: React.FC = () => {
           >
             <History
               size={16}
-              color={activeTab === 'sessions' ? appColors.blue600 : appColors.slate500}
+              color={
+                activeTab === 'sessions'
+                  ? appColors.blue600
+                  : appColors.slate500
+              }
             />
             <AppText
               style={[
@@ -534,7 +625,8 @@ export const RoomsManagerScreen: React.FC = () => {
                 const att = attendanceMap[item.id];
                 const isPresent = att?.status === 'present';
                 const isVerify = att?.status === 'verify';
-                const photoCount = item.photos?.length || (item.avatarUri ? 1 : 0);
+                const photoCount =
+                  item.photos?.length || (item.avatarUri ? 1 : 0);
 
                 return (
                   <TouchableOpacity
@@ -549,7 +641,12 @@ export const RoomsManagerScreen: React.FC = () => {
                           style={styles.memberAvatar}
                         />
                       ) : (
-                        <View style={[styles.memberAvatar, styles.placeholderAvatar]}>
+                        <View
+                          style={[
+                            styles.memberAvatar,
+                            styles.placeholderAvatar,
+                          ]}
+                        >
                           <AppText style={styles.placeholderText}>
                             {(item.fullName || 'N')[0]}
                           </AppText>
@@ -558,13 +655,19 @@ export const RoomsManagerScreen: React.FC = () => {
                       {photoCount > 0 && (
                         <View style={styles.photoCountBadge}>
                           <ImageIcon size={10} color={appColors.white} />
-                          <AppText style={styles.photoCountText}>{photoCount}</AppText>
+                          <AppText style={styles.photoCountText}>
+                            {photoCount}
+                          </AppText>
                         </View>
                       )}
                     </View>
 
                     <View style={styles.memberInfo}>
-                      <AppText style={styles.memberName} numberOfLines={1} ellipsizeMode="tail">
+                      <AppText
+                        style={styles.memberName}
+                        numberOfLines={1}
+                        ellipsizeMode="tail"
+                      >
                         {item.fullName}
                       </AppText>
                       <AppText style={styles.memberCode} numberOfLines={1}>
@@ -575,18 +678,34 @@ export const RoomsManagerScreen: React.FC = () => {
                       <View style={styles.statusRow}>
                         {isPresent ? (
                           <View style={styles.presentBadge}>
-                            <CheckCircle2 size={12} color={appColors.green600} style={{ flexShrink: 0 }} />
+                            <CheckCircle2
+                              size={12}
+                              color={appColors.green600}
+                              style={{ flexShrink: 0 }}
+                            />
                             <AppText style={styles.presentText}>Đã có</AppText>
                           </View>
                         ) : isVerify ? (
                           <View style={styles.verifyBadge}>
-                            <AlertCircle size={12} color={appColors.red600} style={{ flexShrink: 0 }} />
-                            <AppText style={styles.verifyText}>Cần xác minh</AppText>
+                            <AlertCircle
+                              size={12}
+                              color={appColors.red600}
+                              style={{ flexShrink: 0 }}
+                            />
+                            <AppText style={styles.verifyText}>
+                              Cần xác minh
+                            </AppText>
                           </View>
                         ) : (
                           <View style={styles.missingBadge}>
-                            <AlertTriangle size={12} color={appColors.amber600} style={{ flexShrink: 0 }} />
-                            <AppText style={styles.missingText}>Còn thiếu</AppText>
+                            <AlertTriangle
+                              size={12}
+                              color={appColors.amber600}
+                              style={{ flexShrink: 0 }}
+                            />
+                            <AppText style={styles.missingText}>
+                              Còn thiếu
+                            </AppText>
                           </View>
                         )}
                       </View>
@@ -614,9 +733,12 @@ export const RoomsManagerScreen: React.FC = () => {
               ListEmptyComponent={
                 <View style={styles.emptyContainer}>
                   <Users size={48} color={appColors.slate300} />
-                  <AppText style={styles.emptyTitle}>Chưa có người nào trong phòng</AppText>
+                  <AppText style={styles.emptyTitle}>
+                    Chưa có người nào trong phòng
+                  </AppText>
                   <AppText style={styles.emptyDesc}>
-                    Nhấn "+ Thêm người" để tạo hồ sơ và chụp hoặc chọn ảnh nhận diện.
+                    Nhấn "+ Thêm người" để tạo hồ sơ và chụp hoặc chọn ảnh nhận
+                    diện.
                   </AppText>
                 </View>
               }
@@ -626,7 +748,11 @@ export const RoomsManagerScreen: React.FC = () => {
           <>
             {/* Search Bar for Sessions */}
             <View style={styles.searchBar}>
-              <Search size={18} color={appColors.slate400} style={{ flexShrink: 0 }} />
+              <Search
+                size={18}
+                color={appColors.slate400}
+                style={{ flexShrink: 0 }}
+              />
               <TextInput
                 style={styles.searchInput}
                 placeholder="Tìm kiếm phiên theo tên hoặc thời gian..."
@@ -647,7 +773,8 @@ export const RoomsManagerScreen: React.FC = () => {
                 const present = item.presentCount || 0;
                 const missing = item.missingCount || 0;
                 const verify = item.verifyCount || 0;
-                const rate = total > 0 ? Math.round((present / total) * 100) : 0;
+                const rate =
+                  total > 0 ? Math.round((present / total) * 100) : 0;
 
                 return (
                   <View style={styles.sessionCard}>
@@ -655,7 +782,11 @@ export const RoomsManagerScreen: React.FC = () => {
                     <View style={styles.sessionCardTop}>
                       <View style={{ flex: 1, minWidth: 0, marginRight: 8 }}>
                         <View style={styles.sessionNameRow}>
-                          <AppText style={styles.sessionNameText} numberOfLines={1} ellipsizeMode="tail">
+                          <AppText
+                            style={styles.sessionNameText}
+                            numberOfLines={1}
+                            ellipsizeMode="tail"
+                          >
                             {item.name}
                           </AppText>
                           {item.isActive ? (
@@ -667,7 +798,11 @@ export const RoomsManagerScreen: React.FC = () => {
                             </View>
                           ) : (
                             <View style={styles.sessionStatusFinished}>
-                              <CheckCircle2 size={12} color={appColors.slate500} style={{ flexShrink: 0 }} />
+                              <CheckCircle2
+                                size={12}
+                                color={appColors.slate500}
+                                style={{ flexShrink: 0 }}
+                              />
                               <AppText style={styles.sessionStatusFinishedText}>
                                 Đã hoàn thành
                               </AppText>
@@ -676,10 +811,20 @@ export const RoomsManagerScreen: React.FC = () => {
                         </View>
 
                         <View style={styles.sessionTimeRow}>
-                          <Clock size={13} color={appColors.slate400} style={{ flexShrink: 0 }} />
-                          <AppText style={styles.sessionTimeText} numberOfLines={1} ellipsizeMode="tail">
+                          <Clock
+                            size={13}
+                            color={appColors.slate400}
+                            style={{ flexShrink: 0 }}
+                          />
+                          <AppText
+                            style={styles.sessionTimeText}
+                            numberOfLines={1}
+                            ellipsizeMode="tail"
+                          >
                             Bắt đầu: {item.startTime}
-                            {item.endTime ? `  •  Kết thúc: ${item.endTime}` : ''}
+                            {item.endTime
+                              ? `  •  Kết thúc: ${item.endTime}`
+                              : ''}
                           </AppText>
                         </View>
                       </View>
@@ -695,46 +840,115 @@ export const RoomsManagerScreen: React.FC = () => {
 
                     {/* Metric Pills */}
                     <View style={styles.sessionMetricsRow}>
-                      <View style={[styles.sessionMetricPill, { backgroundColor: appColors.slate100 }]}>
-                        <AppText style={styles.sessionMetricPillLabel}>Sĩ số:</AppText>
-                        <AppText style={styles.sessionMetricPillVal}>{total}</AppText>
+                      <View
+                        style={[
+                          styles.sessionMetricPill,
+                          { backgroundColor: appColors.slate100 },
+                        ]}
+                      >
+                        <AppText style={styles.sessionMetricPillLabel}>
+                          Sĩ số:
+                        </AppText>
+                        <AppText style={styles.sessionMetricPillVal}>
+                          {total}
+                        </AppText>
                       </View>
 
-                      <View style={[styles.sessionMetricPill, { backgroundColor: appColors.green50 }]}>
+                      <View
+                        style={[
+                          styles.sessionMetricPill,
+                          { backgroundColor: appColors.green50 },
+                        ]}
+                      >
                         <CheckCircle2 size={12} color={appColors.green600} />
-                        <AppText style={[styles.sessionMetricPillLabel, { color: appColors.green700 }]}>
+                        <AppText
+                          style={[
+                            styles.sessionMetricPillLabel,
+                            { color: appColors.green700 },
+                          ]}
+                        >
                           Đã có:
                         </AppText>
-                        <AppText style={[styles.sessionMetricPillVal, { color: appColors.green700 }]}>
+                        <AppText
+                          style={[
+                            styles.sessionMetricPillVal,
+                            { color: appColors.green700 },
+                          ]}
+                        >
                           {present}
                         </AppText>
                       </View>
 
-                      <View style={[styles.sessionMetricPill, { backgroundColor: appColors.amber50 }]}>
+                      <View
+                        style={[
+                          styles.sessionMetricPill,
+                          { backgroundColor: appColors.amber50 },
+                        ]}
+                      >
                         <AlertTriangle size={12} color={appColors.amber600} />
-                        <AppText style={[styles.sessionMetricPillLabel, { color: appColors.amber600 }]}>
+                        <AppText
+                          style={[
+                            styles.sessionMetricPillLabel,
+                            { color: appColors.amber600 },
+                          ]}
+                        >
                           Còn thiếu:
                         </AppText>
-                        <AppText style={[styles.sessionMetricPillVal, { color: appColors.amber600 }]}>
+                        <AppText
+                          style={[
+                            styles.sessionMetricPillVal,
+                            { color: appColors.amber600 },
+                          ]}
+                        >
                           {missing}
                         </AppText>
                       </View>
 
-                      <View style={[styles.sessionMetricPill, { backgroundColor: appColors.red50 }]}>
+                      <View
+                        style={[
+                          styles.sessionMetricPill,
+                          { backgroundColor: appColors.red50 },
+                        ]}
+                      >
                         <AlertCircle size={12} color={appColors.red600} />
-                        <AppText style={[styles.sessionMetricPillLabel, { color: appColors.red700 }]}>
+                        <AppText
+                          style={[
+                            styles.sessionMetricPillLabel,
+                            { color: appColors.red700 },
+                          ]}
+                        >
                           Xác minh:
                         </AppText>
-                        <AppText style={[styles.sessionMetricPillVal, { color: appColors.red700 }]}>
+                        <AppText
+                          style={[
+                            styles.sessionMetricPillVal,
+                            { color: appColors.red700 },
+                          ]}
+                        >
                           {verify}
                         </AppText>
                       </View>
 
-                      <View style={[styles.sessionMetricPill, { backgroundColor: appColors.blue50 }]}>
-                        <AppText style={[styles.sessionMetricPillLabel, { color: appColors.blue700 }]}>
+                      <View
+                        style={[
+                          styles.sessionMetricPill,
+                          { backgroundColor: appColors.blue50 },
+                        ]}
+                      >
+                        <AppText
+                          style={[
+                            styles.sessionMetricPillLabel,
+                            { color: appColors.blue700 },
+                          ]}
+                        >
                           Tỷ lệ:
                         </AppText>
-                        <AppText style={[styles.sessionMetricPillVal, { color: appColors.blue700 }]}>
+                        <AppText
+                          style={[
+                            styles.sessionMetricPillVal,
+                            { color: appColors.blue700 },
+                          ]}
+                        >
                           {rate}%
                         </AppText>
                       </View>
@@ -743,7 +957,12 @@ export const RoomsManagerScreen: React.FC = () => {
                     {/* Progress Bar & Detail View Action */}
                     <View style={styles.sessionCardBottom}>
                       <View style={styles.progressBarBg}>
-                        <View style={[styles.progressBarFill, { width: `${Math.min(100, rate)}%` }]} />
+                        <View
+                          style={[
+                            styles.progressBarFill,
+                            { width: `${Math.min(100, rate)}%` },
+                          ]}
+                        />
                       </View>
 
                       <TouchableOpacity
@@ -763,9 +982,12 @@ export const RoomsManagerScreen: React.FC = () => {
               ListEmptyComponent={
                 <View style={styles.emptyContainer}>
                   <History size={48} color={appColors.slate300} />
-                  <AppText style={styles.emptyTitle}>Chưa có phiên điểm danh nào</AppText>
+                  <AppText style={styles.emptyTitle}>
+                    Chưa có phiên điểm danh nào
+                  </AppText>
                   <AppText style={styles.emptyDesc}>
-                    Để điểm danh theo phiên, hãy chọn phòng này và nhấn "Bắt đầu phiên" trên màn hình chính.
+                    Để điểm danh theo phiên, hãy chọn phòng này và nhấn "Bắt
+                    đầu" trên màn hình chính.
                   </AppText>
                 </View>
               }
@@ -791,7 +1013,7 @@ export const RoomsManagerScreen: React.FC = () => {
             setShowAddRoomMemberModal(false);
             setShowAddUserModal(true);
           }}
-          onAssignUsers={async (userIds) => {
+          onAssignUsers={async userIds => {
             try {
               await roomService.assignMembers(currentRoom.id, {
                 userIds,
@@ -802,16 +1024,16 @@ export const RoomsManagerScreen: React.FC = () => {
                   userIds,
                   roomId: currentRoom.id,
                   zoneId: currentZone.id,
-                })
+                }),
               );
               Alert.alert(
                 'Thành công',
-                `Đã thêm ${userIds.length} nhân sự vào phòng ${currentRoom.name}`
+                `Đã thêm ${userIds.length} nhân sự vào phòng ${currentRoom.name}`,
               );
             } catch (e: any) {
               Alert.alert(
                 'Lỗi thêm vào phòng',
-                e?.message || 'Không kết nối được server. Vui lòng thử lại.'
+                e?.message || 'Không kết nối được server. Vui lòng thử lại.',
               );
             }
           }}

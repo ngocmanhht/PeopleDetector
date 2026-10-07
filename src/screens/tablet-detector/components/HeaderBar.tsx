@@ -97,10 +97,12 @@ export const HeaderBar: React.FC<HeaderBarProps> = ({
 
   const selectedZone = zones.find(z => z.id === selectedZoneId) || zones[0];
   const selectedRoom = rooms.find(r => r.id === selectedRoomId) || rooms[0];
-  const effectiveZoneId = selectedZoneId || selectedZone?.id || zones[0]?.id || '';
+  const effectiveZoneId =
+    selectedZoneId || selectedZone?.id || zones[0]?.id || '';
 
   const zoneRoomIds = useMemo(
-    () => new Set(rooms.filter(r => r.zoneId === effectiveZoneId).map(r => r.id)),
+    () =>
+      new Set(rooms.filter(r => r.zoneId === effectiveZoneId).map(r => r.id)),
     [rooms, effectiveZoneId],
   );
   const zoneMembersCount = useMemo(
@@ -108,14 +110,16 @@ export const HeaderBar: React.FC<HeaderBarProps> = ({
       (userProfiles || []).filter(
         u =>
           !u.isVisitor &&
-          (u.zoneId === effectiveZoneId || (u.roomId && zoneRoomIds.has(u.roomId))),
+          (u.zoneId === effectiveZoneId ||
+            (u.roomId && zoneRoomIds.has(u.roomId))),
       ).length,
     [userProfiles, effectiveZoneId, zoneRoomIds],
   );
   const targetMemberCount = useMemo(() => {
     if (scanMode === 'all') return (userProfiles || []).length;
     if (scanMode === 'zone') return zoneMembersCount;
-    return (userProfiles || []).filter(u => u.roomId === selectedRoom?.id).length;
+    return (userProfiles || []).filter(u => u.roomId === selectedRoom?.id)
+      .length;
   }, [scanMode, userProfiles, zoneMembersCount, selectedRoom]);
 
   const handleStartPress = () => {
@@ -144,12 +148,19 @@ export const HeaderBar: React.FC<HeaderBarProps> = ({
       const isZoneMode = scanMode === 'zone';
       const isRoomMode = scanMode === 'room';
       const actualRoomId = isRoomMode ? selectedRoom?.id : undefined;
-      const actualZoneId = isRoomMode || isZoneMode ? selectedZone?.id || effectiveZoneId : undefined;
+      const actualZoneId =
+        isRoomMode || isZoneMode
+          ? selectedZone?.id || effectiveZoneId
+          : undefined;
       const payload = {
         name: sessionName,
         scanMode,
         roomId: actualRoomId,
-        roomName: isRoomMode ? selectedRoom?.name : isZoneMode ? 'Theo khu vực' : 'Toàn cơ sở',
+        roomName: isRoomMode
+          ? selectedRoom?.name
+          : isZoneMode
+          ? 'Theo khu vực'
+          : 'Toàn cơ sở',
         zoneId: actualZoneId,
         zoneName: actualZoneId ? selectedZone?.name : 'Toàn cơ sở',
         startTime: new Date().toISOString(),
@@ -165,7 +176,7 @@ export const HeaderBar: React.FC<HeaderBarProps> = ({
         }),
       );
       showSuccessToast(
-        'Bắt đầu phiên',
+        'Bắt đầu',
         `Đã khởi tạo phiên trên hệ thống: ${sessionName}`,
       );
     } catch (err: any) {
@@ -183,7 +194,7 @@ export const HeaderBar: React.FC<HeaderBarProps> = ({
         }),
       );
       showSuccessToast(
-        'Bắt đầu phiên (Offline)',
+        'Bắt đầu (Offline)',
         `Đang chạy phiên cục bộ: ${sessionName}`,
       );
     }
@@ -254,9 +265,7 @@ export const HeaderBar: React.FC<HeaderBarProps> = ({
                   color={appColors.white}
                   fill={appColors.white}
                 />
-                <AppText style={styles.startSessionTextPhone}>
-                  Bắt đầu phiên
-                </AppText>
+                <AppText style={styles.startSessionTextPhone}>Bắt đầu</AppText>
               </TouchableOpacity>
             ) : (
               <View style={styles.sessionActiveBadgePhone}>
@@ -447,9 +456,24 @@ export const HeaderBar: React.FC<HeaderBarProps> = ({
                 style={{ flexShrink: 0 }}
               />
             </TouchableOpacity>
-            <View style={[styles.phoneFacilityBanner, { flex: 1.2, backgroundColor: appColors.warningBg, borderColor: appColors.warning }]}>
-              <AppText style={[styles.phoneFacilityBannerText, { color: appColors.warningText, fontSize: 11 }]}>
-                {rooms.filter(r => r.zoneId === effectiveZoneId).length} phòng • {zoneMembersCount} người
+            <View
+              style={[
+                styles.phoneFacilityBanner,
+                {
+                  flex: 1.2,
+                  backgroundColor: appColors.warningBg,
+                  borderColor: appColors.warning,
+                },
+              ]}
+            >
+              <AppText
+                style={[
+                  styles.phoneFacilityBannerText,
+                  { color: appColors.warningText, fontSize: 11 },
+                ]}
+              >
+                {rooms.filter(r => r.zoneId === effectiveZoneId).length} phòng •{' '}
+                {zoneMembersCount} người
               </AppText>
             </View>
           </View>
@@ -675,9 +699,23 @@ export const HeaderBar: React.FC<HeaderBarProps> = ({
               />
             </TouchableOpacity>
 
-            <View style={[styles.tabletFacilityBanner, { backgroundColor: appColors.warningBg, borderColor: appColors.warning }]}>
-              <AppText style={[styles.tabletFacilityBannerText, { color: appColors.warningText }]}>
-                Toàn bộ {rooms.filter(r => r.zoneId === effectiveZoneId).length} phòng trong khu • {zoneMembersCount} nhân sự
+            <View
+              style={[
+                styles.tabletFacilityBanner,
+                {
+                  backgroundColor: appColors.warningBg,
+                  borderColor: appColors.warning,
+                },
+              ]}
+            >
+              <AppText
+                style={[
+                  styles.tabletFacilityBannerText,
+                  { color: appColors.warningText },
+                ]}
+              >
+                Toàn bộ {rooms.filter(r => r.zoneId === effectiveZoneId).length}{' '}
+                phòng trong khu • {zoneMembersCount} nhân sự
               </AppText>
             </View>
           </>

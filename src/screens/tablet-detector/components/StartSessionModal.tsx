@@ -43,18 +43,17 @@ export const StartSessionModal: React.FC<StartSessionModalProps> = ({
 }) => {
   const isAllMode = scanMode === 'all';
   const isZoneMode = scanMode === 'zone';
-  const getDefaultName = useCallback(
-    () => {
-      if (isAllMode) {
-        return `Phiên vào cơ sở ${dayjs().format('HH:mm DD-MM-YYYY')}`;
-      }
-      if (isZoneMode) {
-        return `Phiên Khu ${zoneName || ''} ${dayjs().format('HH:mm DD-MM-YYYY')}`;
-      }
-      return `Phiên ${dayjs().format('HH:mm DD-MM-YYYY')}`;
-    },
-    [isAllMode, isZoneMode, zoneName],
-  );
+  const getDefaultName = useCallback(() => {
+    if (isAllMode) {
+      return `Phiên vào cơ sở ${dayjs().format('HH:mm DD-MM-YYYY')}`;
+    }
+    if (isZoneMode) {
+      return `Phiên Khu ${zoneName || ''} ${dayjs().format(
+        'HH:mm DD-MM-YYYY',
+      )}`;
+    }
+    return `Phiên ${dayjs().format('HH:mm DD-MM-YYYY')}`;
+  }, [isAllMode, isZoneMode, zoneName]);
   const [sessionName, setSessionName] = useState(getDefaultName());
 
   useEffect(() => {
@@ -77,7 +76,12 @@ export const StartSessionModal: React.FC<StartSessionModalProps> = ({
       visible={visible}
       transparent
       animationType="fade"
-      supportedOrientations={['portrait', 'landscape', 'landscape-left', 'landscape-right']}
+      supportedOrientations={[
+        'portrait',
+        'landscape',
+        'landscape-left',
+        'landscape-right',
+      ]}
       onRequestClose={onClose}
     >
       <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
@@ -93,21 +97,27 @@ export const StartSessionModal: React.FC<StartSessionModalProps> = ({
                     isZoneMode && { backgroundColor: appColors.amber600 },
                   ]}
                 >
-                  <Play size={20} color={appColors.white} fill={appColors.white} />
+                  <Play
+                    size={20}
+                    color={appColors.white}
+                    fill={appColors.white}
+                  />
                 </View>
                 <View>
                   <AppText style={styles.title}>
                     {isAllMode
-                      ? 'Bắt đầu phiên quét vào cơ sở'
+                      ? 'Bắt đầu quét vào cơ sở'
                       : isZoneMode
-                      ? 'Bắt đầu phiên quét theo khu vực'
-                      : 'Bắt đầu phiên điểm danh'}
+                      ? 'Bắt đầu quét theo khu vực'
+                      : 'Bắt đầu điểm danh'}
                   </AppText>
                   <AppText style={styles.subtitle}>
                     {isAllMode
                       ? 'Xác nhận vào cơ sở cho toàn bộ phòng ban / nhân sự'
                       : isZoneMode
-                      ? `Quét kiểm soát nhân sự toàn bộ các phòng trong ${zoneName || 'khu vực'}`
+                      ? `Quét kiểm soát nhân sự toàn bộ các phòng trong ${
+                          zoneName || 'khu vực'
+                        }`
                       : 'Khởi tạo phiên nhận diện khuôn mặt tự động'}
                   </AppText>
                 </View>
@@ -146,7 +156,9 @@ export const StartSessionModal: React.FC<StartSessionModalProps> = ({
               <View style={styles.infoItem}>
                 <Users size={16} color={appColors.emerald600} />
                 <AppText style={styles.infoLabel}>Sĩ số:</AppText>
-                <AppText style={[styles.infoValue, { color: appColors.emerald600 }]}>
+                <AppText
+                  style={[styles.infoValue, { color: appColors.emerald600 }]}
+                >
                   {memberCount} người
                 </AppText>
               </View>
@@ -161,7 +173,9 @@ export const StartSessionModal: React.FC<StartSessionModalProps> = ({
                   style={styles.defaultRuleBtn}
                 >
                   <RotateCcw size={12} color={appColors.blue600} />
-                  <AppText style={styles.defaultRuleBtnText}>Đặt lại mặc định</AppText>
+                  <AppText style={styles.defaultRuleBtnText}>
+                    Đặt lại mặc định
+                  </AppText>
                 </TouchableOpacity>
               </View>
 
@@ -191,7 +205,9 @@ export const StartSessionModal: React.FC<StartSessionModalProps> = ({
                 <Sparkles size={13} color={appColors.slate500} />
                 <AppText style={styles.hintText}>
                   Nếu để trống, tên sẽ tự động là{' '}
-                  <AppText style={styles.hintHighlight}>Phiên HH:mm dd-mm-yyyy</AppText>
+                  <AppText style={styles.hintHighlight}>
+                    Phiên HH:mm dd-mm-yyyy
+                  </AppText>
                 </AppText>
               </View>
             </View>
@@ -211,7 +227,11 @@ export const StartSessionModal: React.FC<StartSessionModalProps> = ({
                 onPress={handleStart}
                 activeOpacity={0.88}
               >
-                <Play size={16} color={appColors.white} fill={appColors.white} />
+                <Play
+                  size={16}
+                  color={appColors.white}
+                  fill={appColors.white}
+                />
                 <AppText style={styles.startBtnText}>Bắt đầu ngay</AppText>
               </TouchableOpacity>
             </View>

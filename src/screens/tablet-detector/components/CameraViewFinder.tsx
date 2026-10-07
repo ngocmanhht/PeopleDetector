@@ -476,8 +476,8 @@ export const CameraViewFinder = forwardRef<
         {!isSessionActive && (
           <View style={styles.inactiveOverlay}>
             <AppText style={styles.inactiveText}>
-              Phiên chưa bắt đầu. Nhấn "Bắt đầu phiên" để kích hoạt camera & tự
-              động quét.
+              Phiên chưa bắt đầu. Nhấn "Bắt đầu" để kích hoạt camera & tự động
+              quét.
             </AppText>
           </View>
         )}
@@ -589,7 +589,10 @@ export const CameraViewFinder = forwardRef<
             <View style={styles.cameraStrangerAlertBanner}>
               <View style={styles.cameraStrangerAlertLeft}>
                 <AlertTriangle size={15} color={appColors.amber500} />
-                <AppText style={styles.cameraStrangerAlertText} numberOfLines={1}>
+                <AppText
+                  style={styles.cameraStrangerAlertText}
+                  numberOfLines={1}
+                >
                   Khuôn mặt chưa có hồ sơ ({detection.confidence}%)
                 </AppText>
               </View>
