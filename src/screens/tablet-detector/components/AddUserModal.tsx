@@ -155,7 +155,7 @@ export const AddUserModal: React.FC<AddUserModalProps> = ({
   const handleRegenerateCode = async () => {
     setIsGeneratingCode(true);
     try {
-      const code = await settingService.getNextUserCode(userProfiles.length);
+      const code = await settingService.getNextUserCode(userProfiles);
       setValue('code', code, { shouldValidate: true });
     } catch {
       setValue('code', `AA-BB-${Math.floor(1000 + Math.random() * 9000)}`);

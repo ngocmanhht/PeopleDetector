@@ -42,9 +42,9 @@ export class SettingService {
   }
 
   /**
-   * Generates next user code based on current format and total enrolled count
+   * Generates next user code based on current format and total enrolled count / profiles
    */
-  public async getNextUserCode(existingCount = 0): Promise<string> {
+  public async getNextUserCode(existingOrCount: number | any[] = 0): Promise<string> {
     try {
       const res: any = await apiClient.get(
         '/settings/user-code-format/next-code',
@@ -57,9 +57,25 @@ export class SettingService {
       // Offline fallback
     }
 
+    let maxIndex = 0;
+    if (Array.isArray(existingOrCount)) {
+      maxIndex = existingOrCount.length;
+      for (const p of existingOrCount) {
+        const match = (p?.code || '').match(/(\d+)$/);
+        if (match) {
+          const num = parseInt(match[1], 10);
+          if (!isNaN(num) && num > maxIndex) {
+            maxIndex = num;
+          }
+        }
+      }
+    } else {
+      maxIndex = Number(existingOrCount) || 0;
+    }
+
     const config = await this.getUserCodeFormat();
     const format = config.format || 'AG-MT-CS2-index';
-    const idx = (existingCount + 1).toString().padStart(4, '0');
+    const idx = (maxIndex + 1).toString().padStart(4, '0');
     const now = new Date();
     const yyyy = now.getFullYear().toString();
     const yy = yyyy.slice(-2);
