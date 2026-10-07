@@ -340,6 +340,18 @@ const TabletDetectorScreen: React.FC<TabletDetectorScreenProps> = ({
   const alertsRef = useRef(alerts);
   alertsRef.current = alerts;
 
+  // Thermal Power Management & Network Throttle refs
+  const lastAttendanceSyncedTimeRef = useRef<Record<string, number>>({});
+  const lastFaceSeenTimestampRef = useRef<number>(Date.now());
+
+  // Periodically flush any queued offline scans when network is restored
+  useEffect(() => {
+    const flushInterval = setInterval(() => {
+      attendanceService.flushOfflineQueue().catch(() => {});
+    }, 20000);
+    return () => clearInterval(flushInterval);
+  }, []);
+
   const isSessionRunningRef = useRef(false);
   isSessionRunningRef.current =
     isSessionActive && isTabFocused && isDeviceAuthorized !== false;
@@ -449,11 +461,18 @@ const TabletDetectorScreen: React.FC<TabletDetectorScreenProps> = ({
             );
             dispatch(setActiveDetection(realResult));
 
+            // Cooldown 5s per user to prevent high-frequency request flooding
+            const now = Date.now();
+            const lastSyncTime =
+              lastAttendanceSyncedTimeRef.current[realResult.userId] || 0;
+            const COOLDOWN_SYNC_MS = 5000;
+
             if (
-              activeSessionId &&
               realResult.userId &&
-              realResult.userId !== 'unverified-unknown'
+              realResult.userId !== 'unverified-unknown' &&
+              now - lastSyncTime > COOLDOWN_SYNC_MS
             ) {
+              lastAttendanceSyncedTimeRef.current[realResult.userId] = now;
               attendanceService.recordAttendance(attPayload).catch(err => {
                 console.log(
                   '[TabletDetector] Failed to sync attendance to BE:',
@@ -569,11 +588,16 @@ const TabletDetectorScreen: React.FC<TabletDetectorScreenProps> = ({
                       boundingBox: addResult.boundingBox,
                     }),
                   );
+                  const nowAdd = Date.now();
+                  const lastAddSyncTime =
+                    lastAttendanceSyncedTimeRef.current[addResult.userId] || 0;
                   if (
-                    activeSessionId &&
                     addResult.userId &&
-                    addResult.userId !== 'unverified-unknown'
+                    addResult.userId !== 'unverified-unknown' &&
+                    nowAdd - lastAddSyncTime > COOLDOWN_SYNC_MS
                   ) {
+                    lastAttendanceSyncedTimeRef.current[addResult.userId] =
+                      nowAdd;
                     attendanceService
                       .recordAttendance(addAttPayload)
                       .catch(err => {
@@ -702,7 +726,8 @@ const TabletDetectorScreen: React.FC<TabletDetectorScreenProps> = ({
               }
             }
 
-            // Face is actively tracked: fast chained scan (80ms) for high-FPS, butter-smooth tracking
+            // Face is actively tracked: update timestamp and fast chained scan (80ms) for high-FPS, butter-smooth tracking
+            lastFaceSeenTimestampRef.current = Date.now();
             scheduleNextScan(80);
           } else {
             // Debounce 2 consecutive missed frames before clearing active detection
@@ -710,15 +735,28 @@ const TabletDetectorScreen: React.FC<TabletDetectorScreenProps> = ({
             if (consecutiveMissedFramesRef.current >= 2) {
               dispatch(setActiveDetection(null));
             }
-            // No face in current frame: moderate delay (200ms) to save CPU/battery
-            scheduleNextScan(200);
+            // Dynamic Idle Power Management:
+            // If room is empty for > 10s, throttle down to 1 FPS (1000ms) to cool CPU/GPU and prevent thermal throttling
+            const idleTime = Date.now() - lastFaceSeenTimestampRef.current;
+            if (idleTime > 10000) {
+              scheduleNextScan(1000); // 1 FPS deep idle to keep tablet cool
+            } else if (idleTime > 3000) {
+              scheduleNextScan(400); // 2.5 FPS transition
+            } else {
+              scheduleNextScan(200); // 5 FPS normal search
+            }
           }
         } else {
           consecutiveMissedFramesRef.current += 1;
           if (consecutiveMissedFramesRef.current >= 2) {
             dispatch(setActiveDetection(null));
           }
-          scheduleNextScan(250);
+          const idleTime = Date.now() - lastFaceSeenTimestampRef.current;
+          if (idleTime > 10000) {
+            scheduleNextScan(1000);
+          } else {
+            scheduleNextScan(250);
+          }
         }
       } catch (err) {
         console.warn('[TabletDetectorScreen] auto-scan error:', err);

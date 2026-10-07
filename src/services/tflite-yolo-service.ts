@@ -169,6 +169,10 @@ export class TfliteYoloService {
   private strangerEmbeddingsCache: Map<string, StrangerRecord> = new Map();
   private strangerSequenceCounter = 0;
 
+  // Zero-allocation buffer pool for YOLO & FaceNet tensors (eliminates ~50MB/s garbage collection churn)
+  private readonly yoloTensorBuffer: Float32Array = new Float32Array(3 * 640 * 640);
+  private readonly faceNetTensorBuffer: Float32Array = new Float32Array(3 * 112 * 112);
+
   constructor() {
     this.initModels();
   }
@@ -523,7 +527,7 @@ export class TfliteYoloService {
     const { buffer, pixelFormat } = resized.toRawPixelData();
     const u8 = new Uint8Array(buffer);
     const totalPixels = 640 * 640;
-    const tensor = new Float32Array(3 * totalPixels);
+    const tensor = this.yoloTensorBuffer;
 
     const rOffset = 0;
     const gOffset = totalPixels;
@@ -961,7 +965,7 @@ export class TfliteYoloService {
     const { buffer, pixelFormat } = resized.toRawPixelData();
     const u8 = new Uint8Array(buffer);
     const facePixels = 112 * 112;
-    const tensor = new Float32Array(facePixels * 3);
+    const tensor = this.faceNetTensorBuffer;
 
     const fmt = (pixelFormat || 'RGBA').toUpperCase();
     let rIdx = 0;

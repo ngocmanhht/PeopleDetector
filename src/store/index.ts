@@ -38,13 +38,34 @@ const rootReducer = combineReducers({
 export type RootState = ReturnType<typeof rootReducer>;
 
 // Transform to filter out high-frequency ephemeral fields (camera detection frames & 1-second ticks)
-// from heavy AES-256 MMKV disk encryption while keeping all essential business data.
+// and strip bulky base64 images from heavy AES-256 MMKV disk encryption while keeping all essential business data.
 const detectorTransform = createTransform<any, any>(
   (inboundState: any) => {
     if (!inboundState || typeof inboundState !== 'object') return inboundState;
     const { sessionDurationSeconds, activeDetection, ...persistedState } =
       inboundState;
-    return persistedState;
+
+    // Sanitize scanHistory: retain top 50 entries and strip bulky nested base64 strings
+    let sanitizedScanHistory = persistedState.scanHistory;
+    if (Array.isArray(sanitizedScanHistory)) {
+      sanitizedScanHistory = sanitizedScanHistory.slice(0, 50).map((item: any) => ({
+        ...item,
+        history: Array.isArray(item.history)
+          ? item.history.slice(0, 3).map((h: any) => ({ ...h, avatarUri: undefined }))
+          : [],
+      }));
+    }
+
+    let sanitizedAlerts = persistedState.alerts;
+    if (Array.isArray(sanitizedAlerts)) {
+      sanitizedAlerts = sanitizedAlerts.slice(0, 30);
+    }
+
+    return {
+      ...persistedState,
+      scanHistory: sanitizedScanHistory,
+      alerts: sanitizedAlerts,
+    };
   },
   (outboundState: any) => {
     if (!outboundState || typeof outboundState !== 'object') return outboundState;

@@ -745,6 +745,9 @@ const detectorSlice = createSlice({
           }
 
           existing.history.unshift(event);
+          if (existing.history.length > 5) {
+            existing.history = existing.history.slice(0, 5);
+          }
           // Move to top of the list for fresh real-time feed
           state.scanHistory.splice(existingIdx, 1);
           state.scanHistory.unshift(existing);
@@ -810,6 +813,9 @@ const detectorSlice = createSlice({
           }
           if (avatarUri) existingStranger.avatarUri = avatarUri;
           existingStranger.history.unshift(event);
+          if (existingStranger.history.length > 5) {
+            existingStranger.history = existingStranger.history.slice(0, 5);
+          }
           // Move to top of the list for fresh real-time feed
           const strangerIdx = state.scanHistory.indexOf(existingStranger);
           if (strangerIdx > 0) {
@@ -846,6 +852,11 @@ const detectorSlice = createSlice({
           };
           state.scanHistory.unshift(newStranger);
         }
+      }
+
+      // Bound total scanHistory entries to 100 to prevent OOM
+      if (state.scanHistory.length > 100) {
+        state.scanHistory = state.scanHistory.slice(0, 100);
       }
 
       // Keep active session in sessions array synced with latest scanHistory
@@ -1013,6 +1024,9 @@ const detectorSlice = createSlice({
         id: `alert-${Date.now()}`,
         ...action.payload,
       });
+      if (state.alerts.length > 50) {
+        state.alerts = state.alerts.slice(0, 50);
+      }
     },
     clearAlerts: state => {
       state.alerts = [];
