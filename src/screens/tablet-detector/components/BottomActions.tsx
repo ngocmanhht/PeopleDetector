@@ -1,11 +1,13 @@
 import React from 'react';
 import { StyleSheet, View, TouchableOpacity } from 'react-native';
 import { AppText } from '../../../components/app-text';
-import { List, Bell, History, Lock, Unlock } from 'lucide-react-native';
+import { List, Bell, History, Lock, Unlock, UserPlus } from 'lucide-react-native';
 import { appColors } from '../../../const/app-colors';
 
 interface BottomActionsProps {
-  onOpenList: () => void;
+  onOpenList?: () => void;
+  onOpenAddUser?: () => void;
+  isGuard?: boolean;
   onOpenSessionsHistory?: () => void;
   onOpenAlerts: () => void;
   unreadAlertsCount?: number;
@@ -15,6 +17,8 @@ interface BottomActionsProps {
 
 export const BottomActions: React.FC<BottomActionsProps> = ({
   onOpenList,
+  onOpenAddUser,
+  isGuard = false,
   onOpenSessionsHistory,
   onOpenAlerts,
   unreadAlertsCount = 0,
@@ -23,26 +27,47 @@ export const BottomActions: React.FC<BottomActionsProps> = ({
 }) => {
   return (
     <View style={styles.container}>
-      {/* Hàng 1: Danh sách + Lịch sử phiên */}
+      {/* Hàng 1: Danh sách (Admin/Officer) HOẶC Thêm người/khách (Guard) + Lịch sử phiên */}
       <View style={styles.row}>
-        <TouchableOpacity
-          style={styles.actionBtn}
-          onPress={onOpenList}
-          activeOpacity={0.75}
-        >
-          <View style={styles.iconWrap}>
-            <List size={16} color={appColors.slate700} />
-          </View>
-          <AppText
-            style={styles.btnText}
-            numberOfLines={1}
-            ellipsizeMode="tail"
+        {isGuard ? (
+          <TouchableOpacity
+            style={[styles.actionBtn, styles.addBtnGuard]}
+            onPress={onOpenAddUser}
+            activeOpacity={0.75}
           >
-            Danh sách
-          </AppText>
-        </TouchableOpacity>
+            <View style={[styles.iconWrap, styles.addIconWrapGuard]}>
+              <UserPlus size={15} color={appColors.white} />
+            </View>
+            <AppText
+              style={[styles.btnText, { color: appColors.blue700, fontWeight: '700' }]}
+              numberOfLines={1}
+              ellipsizeMode="tail"
+            >
+              + Thêm khách / Người
+            </AppText>
+          </TouchableOpacity>
+        ) : (
+          Boolean(onOpenList) && (
+            <TouchableOpacity
+              style={styles.actionBtn}
+              onPress={onOpenList}
+              activeOpacity={0.75}
+            >
+              <View style={styles.iconWrap}>
+                <List size={16} color={appColors.slate700} />
+              </View>
+              <AppText
+                style={styles.btnText}
+                numberOfLines={1}
+                ellipsizeMode="tail"
+              >
+                Danh sách
+              </AppText>
+            </TouchableOpacity>
+          )
+        )}
 
-        {Boolean(onOpenSessionsHistory) && (
+        {!isGuard && Boolean(onOpenSessionsHistory) && (
           <TouchableOpacity
             style={styles.actionBtn}
             onPress={onOpenSessionsHistory}
@@ -212,5 +237,15 @@ const styles = StyleSheet.create({
     fontSize: 9,
     fontWeight: '800',
     lineHeight: 11,
+  },
+  addBtnGuard: {
+    backgroundColor: '#EFF6FF',
+    borderColor: '#BFDBFE',
+  },
+  addIconWrapGuard: {
+    backgroundColor: appColors.blue600,
+    borderRadius: 6,
+    width: 22,
+    height: 22,
   },
 });

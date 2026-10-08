@@ -286,6 +286,58 @@ export const RoomsManagerScreen: React.FC = () => {
     );
   };
 
+  if (isGuard) {
+    return (
+      <View
+        style={[
+          styles.container,
+          {
+            justifyContent: 'center',
+            alignItems: 'center',
+            padding: 32,
+            backgroundColor: appColors.slate50,
+          },
+        ]}
+      >
+        <View
+          style={{
+            width: 80,
+            height: 80,
+            borderRadius: 40,
+            backgroundColor: '#FEF3C7',
+            justifyContent: 'center',
+            alignItems: 'center',
+            marginBottom: 20,
+          }}
+        >
+          <AlertTriangle size={42} color={appColors.amber600} />
+        </View>
+        <AppText
+          style={{
+            fontSize: 20,
+            fontWeight: '700',
+            color: appColors.slate800,
+            marginBottom: 8,
+            textAlign: 'center',
+          }}
+        >
+          Không có quyền truy cập
+        </AppText>
+        <AppText
+          style={{
+            fontSize: 14,
+            color: appColors.slate500,
+            textAlign: 'center',
+            maxWidth: 380,
+            lineHeight: 22,
+          }}
+        >
+          Tài khoản Bảo vệ chỉ thực hiện nhiệm vụ điểm danh ra vào cơ sở. Bạn không có quyền xem danh sách phòng hay hồ sơ nhân sự.
+        </AppText>
+      </View>
+    );
+  }
+
   return (
     <View style={[styles.container, isPhone && styles.containerPhone]}>
       {/* Left Column: Zones and Rooms Explorer (Tablet only) */}

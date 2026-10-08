@@ -1378,7 +1378,7 @@ export class TfliteYoloService {
     photoPath: string,
     roomProfiles: UserProfile[],
     isFrontCamera?: boolean,
-    minConfidenceThreshold: number = 85,
+    minConfidenceThreshold: number = 75,
   ): Promise<DetectionResult | null> {
     if (!photoPath) return null;
 
@@ -1548,7 +1548,7 @@ export class TfliteYoloService {
 
       // 6. Greedy 1-to-1 Assignment against enrolled profiles:
       // Prevents 2 different faces from claiming the same enrolled profile!
-      const MATCH_THRESHOLD = 0.7;
+      const MATCH_THRESHOLD = 0.65;
 
       interface MatchCandidate {
         faceIdx: number;

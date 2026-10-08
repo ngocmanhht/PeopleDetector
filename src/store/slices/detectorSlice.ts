@@ -65,7 +65,7 @@ const initialState: DetectorState = {
   scanHistory: [],
   isDeviceAuthorized: null,
   deviceLockMessage: '',
-  confidenceThreshold: 85,
+  confidenceThreshold: 75,
   targetFps: 30,
   soundEnabled: true,
   autoSessionReset: false,

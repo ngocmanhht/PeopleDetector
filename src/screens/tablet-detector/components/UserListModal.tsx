@@ -90,6 +90,10 @@ export const UserListModal: React.FC<UserListModalProps> = ({
     );
   };
 
+  if (isGuard || !visible) {
+    return null;
+  }
+
   return (
     <Modal
       visible={visible}

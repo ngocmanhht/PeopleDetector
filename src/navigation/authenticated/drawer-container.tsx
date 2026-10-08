@@ -119,8 +119,17 @@ export const DrawerContainer: React.FC = () => {
     },
   ];
 
+  const isGuard = currentUser?.role === 'GUARD';
+
+  React.useEffect(() => {
+    if (isGuard && activeTab === 'rooms') {
+      setActiveTab('home');
+    }
+  }, [isGuard, activeTab]);
+
   const navItems = allNavItems.filter(item => {
     if (item.key === 'cms' && !isAdmin) return false;
+    if (item.key === 'rooms' && isGuard) return false;
     return true;
   });
 

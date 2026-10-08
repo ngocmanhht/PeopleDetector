@@ -63,6 +63,7 @@ export const HeaderBar: React.FC<HeaderBarProps> = ({
 
   const currentUser = useAppSelector(state => state.app.currentUser);
   const isOfficer = currentUser?.role === 'OFFICER';
+  const isGuard = currentUser?.role === 'GUARD';
   const isAdmin =
     currentUser?.role === 'ADMIN' || currentUser?.role === 'SUPER_ADMIN';
 
@@ -70,7 +71,10 @@ export const HeaderBar: React.FC<HeaderBarProps> = ({
     if (isOfficer && scanMode !== 'room') {
       dispatch(setScanMode('room'));
     }
-  }, [isOfficer, scanMode, dispatch]);
+    if (isGuard && scanMode !== 'all') {
+      dispatch(setScanMode('all'));
+    }
+  }, [isOfficer, isGuard, scanMode, dispatch]);
 
   const { showWarnToast, showSuccessToast } = useAppToast();
   const [showStartSessionModal, setShowStartSessionModal] = useState(false);
@@ -368,98 +372,149 @@ export const HeaderBar: React.FC<HeaderBarProps> = ({
 
         {/* Phone Mode Toggle Row: Quét All vs Theo khu vs Theo phòng */}
         <View style={styles.modeToggleWrapPhone}>
-          {!isOfficer && (
-            <TouchableOpacity
+          {isGuard ? (
+            <View
               style={[
                 styles.modeToggleTabPhone,
-                scanMode === 'all' && styles.modeToggleTabActiveAll,
+                styles.modeToggleTabActiveAll,
+                { flex: 1 },
               ]}
-              onPress={() => {
-                dispatch(setScanMode('all'));
-                showSuccessToast(
-                  'Chế độ Quét All',
-                  'Xác nhận vào cơ sở cho toàn bộ nhân sự!',
-                );
-              }}
-              activeOpacity={0.8}
             >
-              <Building2
-                size={13}
-                color={scanMode === 'all' ? appColors.white : appColors.slate600}
-              />
+              <Building2 size={13} color={appColors.white} />
               <AppText
                 style={[
                   styles.modeToggleTextPhone,
-                  scanMode === 'all' && styles.modeToggleTextActive,
+                  styles.modeToggleTextActive,
                 ]}
               >
-                Quét All
+                Điểm danh Ra / Vào cơ sở
               </AppText>
-            </TouchableOpacity>
-          )}
+            </View>
+          ) : (
+            <>
+              {!isOfficer && (
+                <TouchableOpacity
+                  style={[
+                    styles.modeToggleTabPhone,
+                    scanMode === 'all' && styles.modeToggleTabActiveAll,
+                  ]}
+                  onPress={() => {
+                    dispatch(setScanMode('all'));
+                    showSuccessToast(
+                      'Chế độ Quét All',
+                      'Xác nhận vào cơ sở cho toàn bộ nhân sự!',
+                    );
+                  }}
+                  activeOpacity={0.8}
+                >
+                  <Building2
+                    size={13}
+                    color={scanMode === 'all' ? appColors.white : appColors.slate600}
+                  />
+                  <AppText
+                    style={[
+                      styles.modeToggleTextPhone,
+                      scanMode === 'all' && styles.modeToggleTextActive,
+                    ]}
+                  >
+                    Quét All
+                  </AppText>
+                </TouchableOpacity>
+              )}
 
-          {!isOfficer && (
-            <TouchableOpacity
-              style={[
-                styles.modeToggleTabPhone,
-                scanMode === 'zone' && styles.modeToggleTabActiveZone,
-              ]}
-              onPress={() => {
-                dispatch(setScanMode('zone'));
-                showSuccessToast(
-                  'Chế độ Theo khu',
-                  'Quét nhân sự các phòng thuộc khu đã chọn!',
-                );
-              }}
-              activeOpacity={0.8}
-            >
-              <Building2
-                size={13}
-                color={scanMode === 'zone' ? appColors.white : appColors.slate600}
-              />
-              <AppText
+              {!isOfficer && (
+                <TouchableOpacity
+                  style={[
+                    styles.modeToggleTabPhone,
+                    scanMode === 'zone' && styles.modeToggleTabActiveZone,
+                  ]}
+                  onPress={() => {
+                    dispatch(setScanMode('zone'));
+                    showSuccessToast(
+                      'Chế độ Theo khu',
+                      'Quét nhân sự các phòng thuộc khu đã chọn!',
+                    );
+                  }}
+                  activeOpacity={0.8}
+                >
+                  <Building2
+                    size={13}
+                    color={scanMode === 'zone' ? appColors.white : appColors.slate600}
+                  />
+                  <AppText
+                    style={[
+                      styles.modeToggleTextPhone,
+                      scanMode === 'zone' && styles.modeToggleTextActive,
+                    ]}
+                  >
+                    Theo khu
+                  </AppText>
+                </TouchableOpacity>
+              )}
+
+              <TouchableOpacity
                 style={[
-                  styles.modeToggleTextPhone,
-                  scanMode === 'zone' && styles.modeToggleTextActive,
+                  styles.modeToggleTabPhone,
+                  scanMode === 'room' && styles.modeToggleTabActiveRoom,
+                  isOfficer && { flex: 1 },
                 ]}
+                onPress={() => {
+                  dispatch(setScanMode('room'));
+                  showSuccessToast(
+                    'Chế độ Theo phòng',
+                    'Chỉ điểm danh nhân sự thuộc phòng đã chọn!',
+                  );
+                }}
+                activeOpacity={0.8}
               >
-                Theo khu
-              </AppText>
-            </TouchableOpacity>
+                <DoorOpen
+                  size={13}
+                  color={scanMode === 'room' ? appColors.white : appColors.slate600}
+                />
+                <AppText
+                  style={[
+                    styles.modeToggleTextPhone,
+                    scanMode === 'room' && styles.modeToggleTextActive,
+                  ]}
+                >
+                  {isOfficer ? 'Điểm danh theo phòng (Khu được giao)' : 'Theo phòng'}
+                </AppText>
+              </TouchableOpacity>
+            </>
           )}
-
-          <TouchableOpacity
-            style={[
-              styles.modeToggleTabPhone,
-              scanMode === 'room' && styles.modeToggleTabActiveRoom,
-              isOfficer && { flex: 1 },
-            ]}
-            onPress={() => {
-              dispatch(setScanMode('room'));
-              showSuccessToast(
-                'Chế độ Theo phòng',
-                'Chỉ điểm danh nhân sự thuộc phòng đã chọn!',
-              );
-            }}
-            activeOpacity={0.8}
-          >
-            <DoorOpen
-              size={13}
-              color={scanMode === 'room' ? appColors.white : appColors.slate600}
-            />
-            <AppText
-              style={[
-                styles.modeToggleTextPhone,
-                scanMode === 'room' && styles.modeToggleTextActive,
-              ]}
-            >
-              {isOfficer ? 'Điểm danh theo phòng (Khu được giao)' : 'Theo phòng'}
-            </AppText>
-          </TouchableOpacity>
         </View>
 
         {/* Phone Row 2: Selectors for Zone & Room & Manage */}
-        {scanMode === 'room' ? (
+        {isGuard ? (
+          <View style={styles.phoneRow2}>
+            <View
+              style={[
+                styles.dropdownBtnPhone,
+                {
+                  flex: 1,
+                  backgroundColor: appColors.slate100,
+                  borderWidth: 1,
+                  borderColor: appColors.slate200,
+                },
+              ]}
+            >
+              <Building2
+                size={15}
+                color={appColors.blue600}
+                style={{ flexShrink: 0 }}
+              />
+              <AppText
+                style={[
+                  styles.dropdownTextPhone,
+                  { color: appColors.slate700, fontWeight: '600' },
+                ]}
+                numberOfLines={1}
+              >
+                Cơ sở: Toàn cơ sở (Cổng chốt)
+              </AppText>
+            </View>
+          </View>
+        ) : scanMode === 'room' ? (
           <View style={styles.phoneRow2}>
             <TouchableOpacity
               style={[styles.dropdownBtnPhone, isOfficer && { opacity: 0.85 }]}
@@ -627,97 +682,145 @@ export const HeaderBar: React.FC<HeaderBarProps> = ({
       <View style={styles.selectorsRow}>
         {/* Mode Toggle: Quét All (Cơ sở) vs Theo khu vs Theo phòng */}
         <View style={styles.modeToggleWrapTablet}>
-          {!isOfficer && (
-            <>
-              <TouchableOpacity
+          {isGuard ? (
+            <View
+              style={[
+                styles.modeToggleTabTablet,
+                styles.modeToggleTabActiveAll,
+                { minWidth: 200 },
+              ]}
+            >
+              <Building2 size={14} color={appColors.white} />
+              <AppText
                 style={[
-                  styles.modeToggleTabTablet,
-                  scanMode === 'all' && styles.modeToggleTabActiveAll,
+                  styles.modeToggleTextTablet,
+                  styles.modeToggleTextActive,
                 ]}
-                onPress={() => {
-                  dispatch(setScanMode('all'));
-                  showSuccessToast(
-                    'Chế độ Quét All',
-                    'Xác nhận vào cơ sở cho toàn bộ nhân sự!',
-                  );
-                }}
-                activeOpacity={0.8}
               >
-                <Building2
-                  size={14}
-                  color={scanMode === 'all' ? appColors.white : appColors.slate600}
-                />
-                <AppText
-                  style={[
-                    styles.modeToggleTextTablet,
-                    scanMode === 'all' && styles.modeToggleTextActive,
-                  ]}
-                >
-                  Quét All (Cơ sở)
-                </AppText>
-              </TouchableOpacity>
+                Điểm danh Ra / Vào cơ sở
+              </AppText>
+            </View>
+          ) : (
+            <>
+              {!isOfficer && (
+                <>
+                  <TouchableOpacity
+                    style={[
+                      styles.modeToggleTabTablet,
+                      scanMode === 'all' && styles.modeToggleTabActiveAll,
+                    ]}
+                    onPress={() => {
+                      dispatch(setScanMode('all'));
+                      showSuccessToast(
+                        'Chế độ Quét All',
+                        'Xác nhận vào cơ sở cho toàn bộ nhân sự!',
+                      );
+                    }}
+                    activeOpacity={0.8}
+                  >
+                    <Building2
+                      size={14}
+                      color={scanMode === 'all' ? appColors.white : appColors.slate600}
+                    />
+                    <AppText
+                      style={[
+                        styles.modeToggleTextTablet,
+                        scanMode === 'all' && styles.modeToggleTextActive,
+                      ]}
+                    >
+                      Quét All (Cơ sở)
+                    </AppText>
+                  </TouchableOpacity>
+
+                  <TouchableOpacity
+                    style={[
+                      styles.modeToggleTabTablet,
+                      scanMode === 'zone' && styles.modeToggleTabActiveZone,
+                    ]}
+                    onPress={() => {
+                      dispatch(setScanMode('zone'));
+                      showSuccessToast(
+                        'Chế độ Theo khu vực',
+                        'Quét nhân sự các phòng thuộc khu đã chọn!',
+                      );
+                    }}
+                    activeOpacity={0.8}
+                  >
+                    <Building2
+                      size={14}
+                      color={scanMode === 'zone' ? appColors.white : appColors.slate600}
+                    />
+                    <AppText
+                      style={[
+                        styles.modeToggleTextTablet,
+                        scanMode === 'zone' && styles.modeToggleTextActive,
+                      ]}
+                    >
+                      Theo khu
+                    </AppText>
+                  </TouchableOpacity>
+                </>
+              )}
 
               <TouchableOpacity
                 style={[
                   styles.modeToggleTabTablet,
-                  scanMode === 'zone' && styles.modeToggleTabActiveZone,
+                  scanMode === 'room' && styles.modeToggleTabActiveRoom,
+                  isOfficer && { flex: 1 },
                 ]}
                 onPress={() => {
-                  dispatch(setScanMode('zone'));
+                  dispatch(setScanMode('room'));
                   showSuccessToast(
-                    'Chế độ Theo khu vực',
-                    'Quét nhân sự các phòng thuộc khu đã chọn!',
+                    'Chế độ Theo phòng',
+                    'Chỉ điểm danh nhân sự thuộc phòng đã chọn!',
                   );
                 }}
                 activeOpacity={0.8}
               >
-                <Building2
+                <DoorOpen
                   size={14}
-                  color={scanMode === 'zone' ? appColors.white : appColors.slate600}
+                  color={scanMode === 'room' ? appColors.white : appColors.slate600}
                 />
                 <AppText
                   style={[
                     styles.modeToggleTextTablet,
-                    scanMode === 'zone' && styles.modeToggleTextActive,
+                    scanMode === 'room' && styles.modeToggleTextActive,
                   ]}
                 >
-                  Theo khu
+                  {isOfficer ? 'Điểm danh theo phòng (Khu được giao)' : 'Theo phòng'}
                 </AppText>
               </TouchableOpacity>
             </>
           )}
+        </View>
 
-          <TouchableOpacity
+        {isGuard ? (
+          <View
             style={[
-              styles.modeToggleTabTablet,
-              scanMode === 'room' && styles.modeToggleTabActiveRoom,
-              isOfficer && { flex: 1 },
+              styles.dropdownBtn,
+              {
+                backgroundColor: appColors.slate100,
+                borderWidth: 1,
+                borderColor: appColors.slate200,
+              },
             ]}
-            onPress={() => {
-              dispatch(setScanMode('room'));
-              showSuccessToast(
-                'Chế độ Theo phòng',
-                'Chỉ điểm danh nhân sự thuộc phòng đã chọn!',
-              );
-            }}
-            activeOpacity={0.8}
           >
-            <DoorOpen
-              size={14}
-              color={scanMode === 'room' ? appColors.white : appColors.slate600}
+            <Building2
+              size={16}
+              color={appColors.blue600}
+              style={{ flexShrink: 0 }}
             />
             <AppText
               style={[
-                styles.modeToggleTextTablet,
-                scanMode === 'room' && styles.modeToggleTextActive,
+                styles.dropdownText,
+                { color: appColors.slate700, fontWeight: '600' },
               ]}
+              numberOfLines={1}
             >
-              {isOfficer ? 'Điểm danh theo phòng (Khu được giao)' : 'Theo phòng'}
+              Vị trí: Cổng ra vào toàn cơ sở
             </AppText>
-          </TouchableOpacity>
-        </View>
-
-        {scanMode === 'room' ? (
+          </View>
+        ) : scanMode === 'room' ? (
           <>
             {/* Zone Selector */}
             <TouchableOpacity

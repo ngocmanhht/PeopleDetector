@@ -15,6 +15,7 @@ import {
   Vibration,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import dayjs from 'dayjs';
 import { HeaderBar } from './components/HeaderBar';
 import {
   CameraViewFinder,
@@ -128,7 +129,7 @@ const TabletDetectorScreen: React.FC<TabletDetectorScreenProps> = ({
     state => state.detector.deviceLockMessage,
   );
   const confidenceThreshold = useAppSelector(
-    state => state.detector.confidenceThreshold ?? 85,
+    state => state.detector.confidenceThreshold ?? 75,
   );
   const targetFps = useAppSelector(
     state => state.detector.targetFps ?? 30,
@@ -211,6 +212,15 @@ const TabletDetectorScreen: React.FC<TabletDetectorScreenProps> = ({
     rooms,
     dispatch,
   ]);
+
+  // Role Enforcement: Guard chỉ điểm danh ra vào toàn cơ sở (chế độ all)
+  useEffect(() => {
+    if (isGuard) {
+      if (scanMode !== 'all') {
+        dispatch(setScanMode('all'));
+      }
+    }
+  }, [isGuard, scanMode, dispatch]);
 
   // Kiosk Mode States
   const [kioskExitModalVisible, setKioskExitModalVisible] = useState(false);
@@ -972,7 +982,7 @@ const TabletDetectorScreen: React.FC<TabletDetectorScreenProps> = ({
   }, [isSessionActive, isTabFocused, handleScanDetection]);
 
   const handleOpenStartSession = () => {
-    if (scanMode === 'zone' && (!selectedZone || !selectedZone.id)) {
+    if (!isGuard && scanMode === 'zone' && (!selectedZone || !selectedZone.id)) {
       showWarnToast(
         'Chưa chọn khu vực',
         'Vui lòng chọn khu vực trước khi bắt đầu phiên quét theo khu!',
@@ -980,7 +990,7 @@ const TabletDetectorScreen: React.FC<TabletDetectorScreenProps> = ({
       setZonePickerVisible(true);
       return;
     }
-    if (scanMode === 'room' && (!selectedRoom || !selectedRoom.id)) {
+    if (!isGuard && scanMode === 'room' && (!selectedRoom || !selectedRoom.id)) {
       showWarnToast(
         'Chưa chọn phòng',
         'Vui lòng tạo hoặc chọn phòng trước khi bắt đầu phiên quét theo phòng!',
@@ -995,8 +1005,12 @@ const TabletDetectorScreen: React.FC<TabletDetectorScreenProps> = ({
     setStartSessionModalVisible(false);
     YoloDetectorService.clearStrangerCache();
     try {
-      const isZoneMode = scanMode === 'zone';
-      const isRoomMode = scanMode === 'room';
+      const finalScanMode = isGuard ? 'all' : scanMode;
+      const finalSessionName = isGuard
+        ? sessionName || `Điểm danh ra vào cơ sở - ${dayjs().format('DD/MM/YYYY HH:mm')}`
+        : sessionName;
+      const isZoneMode = finalScanMode === 'zone';
+      const isRoomMode = finalScanMode === 'room';
       const actualRoomId = isRoomMode
         ? selectedRoom?.id || effectiveRoomId
         : undefined;
@@ -1023,8 +1037,8 @@ const TabletDetectorScreen: React.FC<TabletDetectorScreenProps> = ({
       }
 
       const payload = {
-        name: sessionName,
-        scanMode,
+        name: finalSessionName,
+        scanMode: finalScanMode,
         roomId: actualRoomId,
         roomName: isRoomMode
           ? selectedRoom?.name
@@ -1040,14 +1054,14 @@ const TabletDetectorScreen: React.FC<TabletDetectorScreenProps> = ({
       dispatch(
         startSession({
           id: beId,
-          name: sessionName,
-          scanMode,
+          name: finalSessionName,
+          scanMode: finalScanMode,
           roomId: actualRoomId,
         }),
       );
       showSuccessToast(
         'Bắt đầu',
-        `Đã khởi tạo phiên trên hệ thống: ${sessionName}`,
+        `Đã khởi tạo phiên trên hệ thống: ${finalSessionName}`,
       );
     } catch (err: unknown) {
       console.log(
@@ -1163,7 +1177,15 @@ const TabletDetectorScreen: React.FC<TabletDetectorScreenProps> = ({
     subtitle: z.description,
   }));
 
-  const roomPickerItems = isOfficer
+  const roomPickerItems = isGuard
+    ? [
+        {
+          id: 'all_mode_option',
+          label: 'Toàn cơ sở (Quét All - Ra/Vào cơ sở)',
+          subtitle: `Điểm danh ra vào cổng cơ sở (${(userProfiles || []).length} nhân sự)`,
+        },
+      ]
+    : isOfficer
     ? roomsInSelectedZone.map(r => ({
         id: r.id,
         label: r.name,
@@ -1235,7 +1257,9 @@ const TabletDetectorScreen: React.FC<TabletDetectorScreenProps> = ({
 
           {/* Quick List & Sessions History & Alerts Actions */}
           <BottomActions
-            onOpenList={() => setListModalVisible(true)}
+            onOpenList={isGuard ? undefined : () => setListModalVisible(true)}
+            onOpenAddUser={() => setAddUserVisible(true)}
+            isGuard={isGuard}
             onOpenSessionsHistory={
               isGuard ? undefined : () => setSessionsHistoryVisible(true)
             }
@@ -1339,7 +1363,9 @@ const TabletDetectorScreen: React.FC<TabletDetectorScreenProps> = ({
               />
 
               <BottomActions
-                onOpenList={() => setListModalVisible(true)}
+                onOpenList={isGuard ? undefined : () => setListModalVisible(true)}
+                onOpenAddUser={() => setAddUserVisible(true)}
+                isGuard={isGuard}
                 onOpenSessionsHistory={
                   isGuard ? undefined : () => setSessionsHistoryVisible(true)
                 }

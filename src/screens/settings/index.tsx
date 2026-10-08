@@ -88,7 +88,7 @@ export const SettingsScreen: React.FC = () => {
 
   // Settings states persisted via Redux MMKV storage
   const confidenceThreshold = useAppSelector(
-    state => state.detector.confidenceThreshold ?? 85,
+    state => state.detector.confidenceThreshold ?? 75,
   );
   const targetFps = useAppSelector(
     state => state.detector.targetFps ?? 30,
