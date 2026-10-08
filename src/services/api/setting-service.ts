@@ -44,11 +44,15 @@ export class SettingService {
   /**
    * Generates next user code based on current format and total enrolled count / profiles
    */
-  public async getNextUserCode(existingOrCount: number | any[] = 0): Promise<string> {
+  public async getNextUserCode(
+    existingOrCount: number | Array<{ code?: string }> = 0,
+  ): Promise<string> {
     try {
-      const res: any = await apiClient.get(
-        '/settings/user-code-format/next-code',
-      );
+      const res = await apiClient.get<{
+        code?: string;
+        nextCode?: string;
+        data?: { code?: string; nextCode?: string };
+      }>('/settings/user-code-format/next-code');
       const code = res?.data?.code || res?.code || res?.data?.nextCode;
       if (code) {
         return code;

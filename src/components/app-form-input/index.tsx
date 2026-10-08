@@ -6,7 +6,7 @@ type AppFormInputProps<T extends FieldValues> = {
   control: Control<T>;
   label?: string;
   secure?: boolean;
-  [key: string]: any;
+  [key: string]: unknown;
 };
 
 export const AppFormInput = <T extends FieldValues>({

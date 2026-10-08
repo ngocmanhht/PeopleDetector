@@ -5,8 +5,10 @@ import { AppText } from '../components/app-text';
 import { AppSvgKey } from '../const/app-svg';
 import { appColors } from '../const/app-colors';
 
+import { ToastConfig } from 'react-native-toast-message';
+
 interface ToastBaseProps {
-  text1: string;
+  text1?: string;
   text2?: string;
   bgColor: string;
   icon: AppSvgKey;
@@ -30,23 +32,23 @@ const ToastBase = ({ bgColor, icon, text1, text2 }: ToastBaseProps) => (
       style={{ marginRight: 12, alignSelf: 'center' }}
     />
     <View style={{ flex: 1, justifyContent: 'center' }}>
-      <AppText style={{ color: appColors.white, fontWeight: 'bold' }}>{text1}</AppText>
+      {text1 ? <AppText style={{ color: appColors.white, fontWeight: 'bold' }}>{text1}</AppText> : null}
       {text2 && <AppText style={{ color: appColors.white }}>{text2}</AppText>}
     </View>
   </View>
 );
 
-export const toastConfig = {
-  success: ({ text1, text2 }: any) => (
+export const toastConfig: ToastConfig = {
+  success: ({ text1, text2 }) => (
     <ToastBase text1={text1} text2={text2} bgColor={appColors.greenMaterial} icon="success" />
   ),
-  error: ({ text1, text2 }: any) => (
+  error: ({ text1, text2 }) => (
     <ToastBase text1={text1} text2={text2} bgColor={appColors.redMaterial} icon="error" />
   ),
-  info: ({ text1, text2 }: any) => (
+  info: ({ text1, text2 }) => (
     <ToastBase text1={text1} text2={text2} bgColor={appColors.blue500} icon="infor" />
   ),
-  warn: ({ text1, text2 }: any) => (
+  warn: ({ text1, text2 }) => (
     <ToastBase text1={text1} text2={text2} bgColor={appColors.amberMaterial} icon="warning" />
   ),
 };

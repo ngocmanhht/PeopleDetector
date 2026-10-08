@@ -52,7 +52,7 @@ export const AddRoomMemberModal: React.FC<AddRoomMemberModalProps> = ({
   onClose,
   onOpenCreateNew,
   onAssignUsers,
-}) => {
+}: AddRoomMemberModalProps) => {
   const { isPhone } = useResponsive();
   const [search, setSearch] = useState('');
   const [selectedUserIds, setSelectedUserIds] = useState<string[]>([]);

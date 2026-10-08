@@ -56,6 +56,17 @@ export const HeaderBar: React.FC<HeaderBarProps> = ({
     scanMode,
   } = useAppSelector(state => state.detector);
 
+  const currentUser = useAppSelector(state => state.app.currentUser);
+  const isOfficer = currentUser?.role === 'OFFICER';
+  const isAdmin =
+    currentUser?.role === 'ADMIN' || currentUser?.role === 'SUPER_ADMIN';
+
+  useEffect(() => {
+    if (isOfficer && scanMode !== 'room') {
+      dispatch(setScanMode('room'));
+    }
+  }, [isOfficer, scanMode, dispatch]);
+
   const { showWarnToast, showSuccessToast } = useAppToast();
   const [showStartSessionModal, setShowStartSessionModal] = useState(false);
 
@@ -179,10 +190,10 @@ export const HeaderBar: React.FC<HeaderBarProps> = ({
         'Bắt đầu',
         `Đã khởi tạo phiên trên hệ thống: ${sessionName}`,
       );
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.log(
         '[HeaderBar] BE start session error, running offline session:',
-        err?.message || err,
+        (err as Error)?.message || err,
       );
       const isRoomMode = scanMode === 'room';
       const actualRoomId = isRoomMode ? selectedRoom?.id : undefined;
@@ -283,66 +294,71 @@ export const HeaderBar: React.FC<HeaderBarProps> = ({
 
         {/* Phone Mode Toggle Row: Quét All vs Theo khu vs Theo phòng */}
         <View style={styles.modeToggleWrapPhone}>
-          <TouchableOpacity
-            style={[
-              styles.modeToggleTabPhone,
-              scanMode === 'all' && styles.modeToggleTabActiveAll,
-            ]}
-            onPress={() => {
-              dispatch(setScanMode('all'));
-              showSuccessToast(
-                'Chế độ Quét All',
-                'Xác nhận vào cơ sở cho toàn bộ nhân sự!',
-              );
-            }}
-            activeOpacity={0.8}
-          >
-            <Building2
-              size={13}
-              color={scanMode === 'all' ? appColors.white : appColors.slate600}
-            />
-            <AppText
+          {!isOfficer && (
+            <TouchableOpacity
               style={[
-                styles.modeToggleTextPhone,
-                scanMode === 'all' && styles.modeToggleTextActive,
+                styles.modeToggleTabPhone,
+                scanMode === 'all' && styles.modeToggleTabActiveAll,
               ]}
+              onPress={() => {
+                dispatch(setScanMode('all'));
+                showSuccessToast(
+                  'Chế độ Quét All',
+                  'Xác nhận vào cơ sở cho toàn bộ nhân sự!',
+                );
+              }}
+              activeOpacity={0.8}
             >
-              Quét All
-            </AppText>
-          </TouchableOpacity>
+              <Building2
+                size={13}
+                color={scanMode === 'all' ? appColors.white : appColors.slate600}
+              />
+              <AppText
+                style={[
+                  styles.modeToggleTextPhone,
+                  scanMode === 'all' && styles.modeToggleTextActive,
+                ]}
+              >
+                Quét All
+              </AppText>
+            </TouchableOpacity>
+          )}
 
-          <TouchableOpacity
-            style={[
-              styles.modeToggleTabPhone,
-              scanMode === 'zone' && styles.modeToggleTabActiveZone,
-            ]}
-            onPress={() => {
-              dispatch(setScanMode('zone'));
-              showSuccessToast(
-                'Chế độ Theo khu',
-                'Quét nhân sự các phòng thuộc khu đã chọn!',
-              );
-            }}
-            activeOpacity={0.8}
-          >
-            <Building2
-              size={13}
-              color={scanMode === 'zone' ? appColors.white : appColors.slate600}
-            />
-            <AppText
+          {!isOfficer && (
+            <TouchableOpacity
               style={[
-                styles.modeToggleTextPhone,
-                scanMode === 'zone' && styles.modeToggleTextActive,
+                styles.modeToggleTabPhone,
+                scanMode === 'zone' && styles.modeToggleTabActiveZone,
               ]}
+              onPress={() => {
+                dispatch(setScanMode('zone'));
+                showSuccessToast(
+                  'Chế độ Theo khu',
+                  'Quét nhân sự các phòng thuộc khu đã chọn!',
+                );
+              }}
+              activeOpacity={0.8}
             >
-              Theo khu
-            </AppText>
-          </TouchableOpacity>
+              <Building2
+                size={13}
+                color={scanMode === 'zone' ? appColors.white : appColors.slate600}
+              />
+              <AppText
+                style={[
+                  styles.modeToggleTextPhone,
+                  scanMode === 'zone' && styles.modeToggleTextActive,
+                ]}
+              >
+                Theo khu
+              </AppText>
+            </TouchableOpacity>
+          )}
 
           <TouchableOpacity
             style={[
               styles.modeToggleTabPhone,
               scanMode === 'room' && styles.modeToggleTabActiveRoom,
+              isOfficer && { flex: 1 },
             ]}
             onPress={() => {
               dispatch(setScanMode('room'));
@@ -363,7 +379,7 @@ export const HeaderBar: React.FC<HeaderBarProps> = ({
                 scanMode === 'room' && styles.modeToggleTextActive,
               ]}
             >
-              Theo phòng
+              {isOfficer ? 'Điểm danh theo phòng (Khu được giao)' : 'Theo phòng'}
             </AppText>
           </TouchableOpacity>
         </View>
@@ -372,9 +388,9 @@ export const HeaderBar: React.FC<HeaderBarProps> = ({
         {scanMode === 'room' ? (
           <View style={styles.phoneRow2}>
             <TouchableOpacity
-              style={styles.dropdownBtnPhone}
-              onPress={onSelectZone}
-              activeOpacity={0.8}
+              style={[styles.dropdownBtnPhone, isOfficer && { opacity: 0.85 }]}
+              onPress={isOfficer ? undefined : onSelectZone}
+              activeOpacity={isOfficer ? 1 : 0.8}
             >
               <Building2
                 size={15}
@@ -388,15 +404,17 @@ export const HeaderBar: React.FC<HeaderBarProps> = ({
               >
                 {selectedZone ? selectedZone.name : 'Chọn Khu'}
               </AppText>
-              <ChevronDown
-                size={14}
-                color={appColors.gray500}
-                style={{ flexShrink: 0 }}
-              />
+              {!isOfficer && (
+                <ChevronDown
+                  size={14}
+                  color={appColors.gray500}
+                  style={{ flexShrink: 0 }}
+                />
+              )}
             </TouchableOpacity>
 
             <TouchableOpacity
-              style={styles.dropdownBtnPhone}
+              style={[styles.dropdownBtnPhone, { flex: isAdmin ? 1 : 1.4 }]}
               onPress={onSelectRoom}
               activeOpacity={0.8}
             >
@@ -419,17 +437,19 @@ export const HeaderBar: React.FC<HeaderBarProps> = ({
               />
             </TouchableOpacity>
 
-            <TouchableOpacity
-              style={styles.manageBtnPhone}
-              onPress={onOpenManageRooms}
-              activeOpacity={0.8}
-            >
-              <Sliders
-                size={16}
-                color={appColors.gray600}
-                style={{ flexShrink: 0 }}
-              />
-            </TouchableOpacity>
+            {isAdmin && (
+              <TouchableOpacity
+                style={styles.manageBtnPhone}
+                onPress={onOpenManageRooms}
+                activeOpacity={0.8}
+              >
+                <Sliders
+                  size={16}
+                  color={appColors.gray600}
+                  style={{ flexShrink: 0 }}
+                />
+              </TouchableOpacity>
+            )}
           </View>
         ) : scanMode === 'zone' ? (
           <View style={styles.phoneRow2}>
@@ -522,66 +542,71 @@ export const HeaderBar: React.FC<HeaderBarProps> = ({
       <View style={styles.selectorsRow}>
         {/* Mode Toggle: Quét All (Cơ sở) vs Theo khu vs Theo phòng */}
         <View style={styles.modeToggleWrapTablet}>
-          <TouchableOpacity
-            style={[
-              styles.modeToggleTabTablet,
-              scanMode === 'all' && styles.modeToggleTabActiveAll,
-            ]}
-            onPress={() => {
-              dispatch(setScanMode('all'));
-              showSuccessToast(
-                'Chế độ Quét All',
-                'Xác nhận vào cơ sở cho toàn bộ nhân sự!',
-              );
-            }}
-            activeOpacity={0.8}
-          >
-            <Building2
-              size={14}
-              color={scanMode === 'all' ? appColors.white : appColors.slate600}
-            />
-            <AppText
-              style={[
-                styles.modeToggleTextTablet,
-                scanMode === 'all' && styles.modeToggleTextActive,
-              ]}
-            >
-              Quét All (Cơ sở)
-            </AppText>
-          </TouchableOpacity>
+          {!isOfficer && (
+            <>
+              <TouchableOpacity
+                style={[
+                  styles.modeToggleTabTablet,
+                  scanMode === 'all' && styles.modeToggleTabActiveAll,
+                ]}
+                onPress={() => {
+                  dispatch(setScanMode('all'));
+                  showSuccessToast(
+                    'Chế độ Quét All',
+                    'Xác nhận vào cơ sở cho toàn bộ nhân sự!',
+                  );
+                }}
+                activeOpacity={0.8}
+              >
+                <Building2
+                  size={14}
+                  color={scanMode === 'all' ? appColors.white : appColors.slate600}
+                />
+                <AppText
+                  style={[
+                    styles.modeToggleTextTablet,
+                    scanMode === 'all' && styles.modeToggleTextActive,
+                  ]}
+                >
+                  Quét All (Cơ sở)
+                </AppText>
+              </TouchableOpacity>
 
-          <TouchableOpacity
-            style={[
-              styles.modeToggleTabTablet,
-              scanMode === 'zone' && styles.modeToggleTabActiveZone,
-            ]}
-            onPress={() => {
-              dispatch(setScanMode('zone'));
-              showSuccessToast(
-                'Chế độ Theo khu vực',
-                'Quét nhân sự các phòng thuộc khu đã chọn!',
-              );
-            }}
-            activeOpacity={0.8}
-          >
-            <Building2
-              size={14}
-              color={scanMode === 'zone' ? appColors.white : appColors.slate600}
-            />
-            <AppText
-              style={[
-                styles.modeToggleTextTablet,
-                scanMode === 'zone' && styles.modeToggleTextActive,
-              ]}
-            >
-              Theo khu
-            </AppText>
-          </TouchableOpacity>
+              <TouchableOpacity
+                style={[
+                  styles.modeToggleTabTablet,
+                  scanMode === 'zone' && styles.modeToggleTabActiveZone,
+                ]}
+                onPress={() => {
+                  dispatch(setScanMode('zone'));
+                  showSuccessToast(
+                    'Chế độ Theo khu vực',
+                    'Quét nhân sự các phòng thuộc khu đã chọn!',
+                  );
+                }}
+                activeOpacity={0.8}
+              >
+                <Building2
+                  size={14}
+                  color={scanMode === 'zone' ? appColors.white : appColors.slate600}
+                />
+                <AppText
+                  style={[
+                    styles.modeToggleTextTablet,
+                    scanMode === 'zone' && styles.modeToggleTextActive,
+                  ]}
+                >
+                  Theo khu
+                </AppText>
+              </TouchableOpacity>
+            </>
+          )}
 
           <TouchableOpacity
             style={[
               styles.modeToggleTabTablet,
               scanMode === 'room' && styles.modeToggleTabActiveRoom,
+              isOfficer && { flex: 1 },
             ]}
             onPress={() => {
               dispatch(setScanMode('room'));
@@ -602,7 +627,7 @@ export const HeaderBar: React.FC<HeaderBarProps> = ({
                 scanMode === 'room' && styles.modeToggleTextActive,
               ]}
             >
-              Theo phòng
+              {isOfficer ? 'Điểm danh theo phòng (Khu được giao)' : 'Theo phòng'}
             </AppText>
           </TouchableOpacity>
         </View>
@@ -611,9 +636,10 @@ export const HeaderBar: React.FC<HeaderBarProps> = ({
           <>
             {/* Zone Selector */}
             <TouchableOpacity
-              style={styles.dropdownBtn}
-              onPress={onSelectZone}
-              activeOpacity={0.8}
+              style={[styles.dropdownBtn, isOfficer && { opacity: 0.85 }]}
+              onPress={isOfficer ? undefined : onSelectZone}
+              disabled={isOfficer}
+              activeOpacity={isOfficer ? 1 : 0.8}
             >
               <Building2
                 size={16}
@@ -625,13 +651,15 @@ export const HeaderBar: React.FC<HeaderBarProps> = ({
                 numberOfLines={1}
                 ellipsizeMode="tail"
               >
-                {selectedZone ? selectedZone.name : 'Chọn Khu'}
+                {selectedZone ? (isOfficer ? `Khu: ${selectedZone.name}` : selectedZone.name) : 'Chọn Khu'}
               </AppText>
-              <ChevronDown
-                size={16}
-                color={appColors.gray500}
-                style={{ flexShrink: 0 }}
-              />
+              {!isOfficer && (
+                <ChevronDown
+                  size={16}
+                  color={appColors.gray500}
+                  style={{ flexShrink: 0 }}
+                />
+              )}
             </TouchableOpacity>
 
             {/* Room Selector */}
@@ -660,17 +688,19 @@ export const HeaderBar: React.FC<HeaderBarProps> = ({
             </TouchableOpacity>
 
             {/* Manage Zones & Rooms */}
-            <TouchableOpacity
-              style={styles.manageBtn}
-              onPress={onOpenManageRooms}
-              activeOpacity={0.8}
-            >
-              <Sliders
-                size={16}
-                color={appColors.gray600}
-                style={{ flexShrink: 0 }}
-              />
-            </TouchableOpacity>
+            {isAdmin && (
+              <TouchableOpacity
+                style={styles.manageBtn}
+                onPress={onOpenManageRooms}
+                activeOpacity={0.8}
+              >
+                <Sliders
+                  size={16}
+                  color={appColors.gray600}
+                  style={{ flexShrink: 0 }}
+                />
+              </TouchableOpacity>
+            )}
           </>
         ) : scanMode === 'zone' ? (
           <>

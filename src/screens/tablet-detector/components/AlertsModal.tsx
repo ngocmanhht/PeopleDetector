@@ -21,7 +21,7 @@ interface AlertsModalProps {
 export const AlertsModal: React.FC<AlertsModalProps> = ({
   visible,
   onClose,
-}) => {
+}: AlertsModalProps) => {
   const { isPhone } = useResponsive();
   const dispatch = useAppDispatch();
   const alerts = useAppSelector(state => state.detector.alerts);

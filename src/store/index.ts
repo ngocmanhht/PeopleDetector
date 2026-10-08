@@ -37,21 +37,25 @@ const rootReducer = combineReducers({
 
 export type RootState = ReturnType<typeof rootReducer>;
 
+import { PersistConfig } from 'redux-persist';
+import { DetectorState } from './slices/detectorSlice';
+import { ScanHistoryItem, ScanEvent } from '../model/detector';
+
 // Transform to filter out high-frequency ephemeral fields (camera detection frames & 1-second ticks)
 // and strip bulky base64 images from heavy AES-256 MMKV disk encryption while keeping all essential business data.
-const detectorTransform = createTransform<any, any>(
-  (inboundState: any) => {
+const detectorTransform = createTransform<DetectorState, DetectorState>(
+  (inboundState: DetectorState) => {
     if (!inboundState || typeof inboundState !== 'object') return inboundState;
-    const { sessionDurationSeconds, activeDetection, ...persistedState } =
+    const { sessionDurationSeconds: _sec, activeDetection: _act, ...persistedState } =
       inboundState;
 
     // Sanitize scanHistory: retain top 50 entries and strip bulky nested base64 strings
     let sanitizedScanHistory = persistedState.scanHistory;
     if (Array.isArray(sanitizedScanHistory)) {
-      sanitizedScanHistory = sanitizedScanHistory.slice(0, 50).map((item: any) => ({
+      sanitizedScanHistory = sanitizedScanHistory.slice(0, 50).map((item: ScanHistoryItem) => ({
         ...item,
         history: Array.isArray(item.history)
-          ? item.history.slice(0, 3).map((h: any) => ({ ...h, avatarUri: undefined }))
+          ? item.history.slice(0, 3).map((h: ScanEvent) => ({ ...h, avatarUri: undefined }))
           : [],
       }));
     }
@@ -63,11 +67,13 @@ const detectorTransform = createTransform<any, any>(
 
     return {
       ...persistedState,
+      sessionDurationSeconds: 0,
+      activeDetection: null,
       scanHistory: sanitizedScanHistory,
       alerts: sanitizedAlerts,
     };
   },
-  (outboundState: any) => {
+  (outboundState: DetectorState) => {
     if (!outboundState || typeof outboundState !== 'object') return outboundState;
     return {
       ...outboundState,
@@ -79,7 +85,7 @@ const detectorTransform = createTransform<any, any>(
 );
 
 // Persist configs
-const persistConfig: any = {
+const persistConfig: PersistConfig<RootState> = {
   key: 'root',
   storage: storage,
   whitelist: ['app', 'detector'],

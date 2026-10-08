@@ -16,7 +16,7 @@ class NavigationService {
     params?: RootNavigatorParamList[T],
   ) {
     if (this.navigationRef.isReady()) {
-      this.navigationRef.navigate(name as any, params as any);
+      (this.navigationRef.navigate as (screen: T, p?: RootNavigatorParamList[T]) => void)(name, params);
     }
   }
 
@@ -26,7 +26,10 @@ class NavigationService {
     }
   }
 
-  public reset(routeName: keyof RootNavigatorParamList, params?: any) {
+  public reset<T extends keyof RootNavigatorParamList>(
+    routeName: T,
+    params?: RootNavigatorParamList[T],
+  ) {
     if (this.navigationRef.isReady()) {
       this.navigationRef.reset({
         index: 0,

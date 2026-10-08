@@ -40,7 +40,7 @@ export const StartSessionModal: React.FC<StartSessionModalProps> = ({
   memberCount,
   onClose,
   onStart,
-}) => {
+}: StartSessionModalProps) => {
   const isAllMode = scanMode === 'all';
   const isZoneMode = scanMode === 'zone';
   const getDefaultName = useCallback(() => {

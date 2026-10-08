@@ -28,11 +28,13 @@ export class YoloDetectorService {
     photoPath: string,
     roomProfiles: UserProfile[],
     isFrontCamera?: boolean,
+    minConfidenceThreshold?: number,
   ): Promise<DetectionResult | null> {
     return TfliteYoloService.processCapturedFrame(
       photoPath,
       roomProfiles,
       isFrontCamera,
+      minConfidenceThreshold,
     );
   }
 

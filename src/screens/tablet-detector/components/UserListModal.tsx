@@ -38,7 +38,7 @@ export const UserListModal: React.FC<UserListModalProps> = ({
   visible,
   onClose,
   onOpenAddUser,
-}) => {
+}: UserListModalProps) => {
   const { isPhone } = useResponsive();
   const dispatch = useAppDispatch();
   const {
@@ -50,6 +50,8 @@ export const UserListModal: React.FC<UserListModalProps> = ({
     attendanceMap,
     isSessionActive,
   } = useAppSelector(state => state.detector);
+  const currentUser = useAppSelector(state => state.app.currentUser);
+  const isGuard = currentUser?.role === 'GUARD';
 
   const [search, setSearch] = useState('');
 
@@ -192,8 +194,8 @@ export const UserListModal: React.FC<UserListModalProps> = ({
                     )}
                   </View>
 
-                  {/* Manual check-in trigger */}
-                  {isSessionActive && (
+                  {/* Manual check-in trigger - Bảo vệ không được điểm danh thủ công */}
+                  {isSessionActive && !isGuard && (
                     <TouchableOpacity
                       style={styles.scanBtn}
                       onPress={() => handleManualCheckIn(item)}

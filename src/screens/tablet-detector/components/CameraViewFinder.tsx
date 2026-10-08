@@ -558,10 +558,12 @@ export const CameraViewFinder = forwardRef<
               )}
               <AppText style={styles.detectionLabelText} numberOfLines={1}>
                 {detection
-                  ? `${detection.fullName} (${detection.confidence}%)`
+                  ? detection.qualityWarning
+                    ? detection.qualityWarning
+                    : `${detection.fullName} (${detection.confidence}%)`
                   : 'Phát hiện mặt'}
               </AppText>
-              {!isVerified && onEnrollStranger && (
+              {!isVerified && !detection?.qualityWarning && onEnrollStranger && (
                 <TouchableOpacity
                   style={styles.boxEnrollBtn}
                   onPress={() =>
@@ -585,6 +587,7 @@ export const CameraViewFinder = forwardRef<
         {isSessionActive &&
           detection &&
           detection.status === 'verify' &&
+          !detection.qualityWarning &&
           onEnrollStranger && (
             <View style={styles.cameraStrangerAlertBanner}>
               <View style={styles.cameraStrangerAlertLeft}>

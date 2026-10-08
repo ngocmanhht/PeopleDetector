@@ -1,6 +1,6 @@
 import { useCallback, useState } from 'react';
 
-export function useRefresh<T extends (...args: any[]) => Promise<any>>(fn: T) {
+export function useRefresh<T extends (...args: unknown[]) => Promise<unknown>>(fn: T) {
   const [refreshing, setRefreshing] = useState(false);
 
   const onRefresh = useCallback(

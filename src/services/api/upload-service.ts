@@ -118,7 +118,7 @@ export class UploadService {
       uri: readyUri,
       name,
       type: 'image/jpeg',
-    } as any);
+    } as unknown as Blob);
 
     return apiClient.postFormData<UploadFileResponse>(
       `/upload/image?folder=${folder}`,
@@ -152,7 +152,7 @@ export class UploadService {
         uri,
         name,
         type: 'image/jpeg',
-      } as any);
+      } as unknown as Blob);
     });
 
     return apiClient.postFormData<UploadFilesResponse>(

@@ -24,7 +24,7 @@ class AppUtils {
     }
 
     // Xác định host domain: ưu tiên HOST_DOMAIN, fallback tự suy ra từ API_URL (bỏ /api)
-    let host = (HOST_DOMAIN || '').trim();
+    let host = (HOST_DOMAIN || 'http://192.168.1.4:3000').trim();
     if (!host && API_URL) {
       host = API_URL.replace(/\/api\/?$/, '').trim();
     }

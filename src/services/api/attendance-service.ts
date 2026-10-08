@@ -164,8 +164,8 @@ export class AttendanceService {
 
   public async getHistory(
     params?: GetAttendanceHistoryParams,
-  ): Promise<PaginatedResponse<any>> {
-    return apiClient.get<PaginatedResponse<any>>(
+  ): Promise<PaginatedResponse<AttendanceRecord>> {
+    return apiClient.get<PaginatedResponse<AttendanceRecord>>(
       '/attendance/history',
       params,
     );

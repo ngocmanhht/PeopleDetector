@@ -62,11 +62,21 @@ export const AddUserModal: React.FC<AddUserModalProps> = ({
   initialPhotoUri,
   initialFullName,
   onUserCreated,
-}) => {
+}: AddUserModalProps) => {
   const { isPhone, height: screenHeight } = useResponsive();
   const dispatch = useAppDispatch();
   const { zones, rooms, userProfiles, selectedZoneId, selectedRoomId } =
     useAppSelector(state => state.detector);
+  const currentUser = useAppSelector(state => state.app.currentUser);
+  const isAdmin =
+    currentUser?.role === 'SUPER_ADMIN' || currentUser?.role === 'ADMIN';
+  const isOfficer = currentUser?.role === 'OFFICER';
+  const isGuard = currentUser?.role === 'GUARD';
+
+  const availableZones =
+    isOfficer && currentUser?.zoneId
+      ? zones.filter(z => z.id === currentUser.zoneId)
+      : zones;
 
   const [activeTab, setActiveTab] = useState<FormTab>('basic');
   const [photos, setPhotos] = useState<string[]>([]);
@@ -77,7 +87,7 @@ export const AddUserModal: React.FC<AddUserModalProps> = ({
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isGeneratingCode, setIsGeneratingCode] = useState(false);
 
-  const bodyScrollRef = useRef<any>(null);
+  const bodyScrollRef = useRef<React.ElementRef<typeof ScrollView>>(null);
 
   const handleTabPress = (tab: FormTab) => {
     setActiveTab(tab);
@@ -206,7 +216,10 @@ export const AddUserModal: React.FC<AddUserModalProps> = ({
         motherName: '',
         ethnicity: 'Kinh',
         religion: 'Không',
-        zoneId: selectedZoneId || (zones[0]?.id ?? ''),
+        zoneId:
+          isOfficer && currentUser?.zoneId
+            ? currentUser.zoneId
+            : selectedZoneId || (zones[0]?.id ?? ''),
         roomId: selectedRoomId || (rooms[0]?.id ?? ''),
         zoneManagerName: '',
       });
@@ -423,8 +436,11 @@ export const AddUserModal: React.FC<AddUserModalProps> = ({
       });
 
       onClose();
-    } catch (err: any) {
-      Alert.alert('Lỗi', err?.message || 'Không thể tạo hồ sơ người dùng');
+    } catch (err: unknown) {
+      Alert.alert(
+        'Lỗi',
+        (err as Error)?.message || 'Không thể tạo hồ sơ người dùng',
+      );
     } finally {
       setIsSubmitting(false);
     }
@@ -615,10 +631,14 @@ export const AddUserModal: React.FC<AddUserModalProps> = ({
                 >
                   {[
                     { key: 'basic', label: 'Cơ bản (*)' },
-                    { key: 'residence', label: 'Thường trú' },
-                    { key: 'decision', label: 'Quyết định' },
-                    { key: 'drug', label: 'Ma túy & Nghiện' },
-                    { key: 'personal', label: 'Nhân thân' },
+                    ...(!isGuard ? [{ key: 'residence', label: 'Thường trú' }] : []),
+                    ...(!isGuard && isAdmin
+                      ? [
+                          { key: 'decision', label: 'Quyết định' },
+                          { key: 'drug', label: 'Ma túy & Nghiện' },
+                          { key: 'personal', label: 'Nhân thân' },
+                        ]
+                      : []),
                     { key: 'facility', label: 'Cơ sở' },
                   ].map(t => {
                     const isActive = activeTab === t.key;
@@ -1597,9 +1617,13 @@ export const AddUserModal: React.FC<AddUserModalProps> = ({
                     <View style={styles.formGroup}>
                       <AppText style={styles.label}>Khu vực (Zone)</AppText>
                       <TouchableOpacity
-                        style={styles.dropdownBtn}
-                        onPress={() => setShowZonePicker(true)}
-                        activeOpacity={0.8}
+                        style={[
+                          styles.dropdownBtn,
+                          isOfficer && { opacity: 0.85 },
+                        ]}
+                        onPress={() => !isOfficer && setShowZonePicker(true)}
+                        disabled={isOfficer}
+                        activeOpacity={isOfficer ? 1 : 0.8}
                       >
                         <AppText style={styles.dropdownText} numberOfLines={1}>
                           {selectedZone?.name || 'Chọn khu vực'}
@@ -1700,7 +1724,7 @@ export const AddUserModal: React.FC<AddUserModalProps> = ({
       <PickerModal
         visible={showZonePicker}
         title="Chọn Khu vực"
-        items={zones.map(z => ({ id: z.id, label: z.name, subtitle: z.description }))}
+        items={availableZones.map(z => ({ id: z.id, label: z.name, subtitle: z.description }))}
         selectedId={zoneId || ''}
         onSelect={id => {
           setValue('zoneId', id);

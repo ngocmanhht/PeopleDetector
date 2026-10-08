@@ -25,7 +25,7 @@ interface BatchAddUserModalProps {
 export const BatchAddUserModal: React.FC<BatchAddUserModalProps> = ({
   visible,
   onClose,
-}) => {
+}: BatchAddUserModalProps) => {
   const { isPhone } = useResponsive();
   const dispatch = useAppDispatch();
   const zones = useAppSelector(state => state.detector.zones);
@@ -181,10 +181,10 @@ export const BatchAddUserModal: React.FC<BatchAddUserModalProps> = ({
         `Đã thêm ${res?.count ?? 0} nhân sự vào phòng đã chọn.${skippedMsg}`,
       );
       onClose();
-    } catch (e: any) {
+    } catch (e: unknown) {
       Alert.alert(
         'Lỗi lưu danh sách',
-        e?.message || 'Không kết nối được server. Vui lòng thử lại.',
+        (e as Error)?.message || 'Không kết nối được server. Vui lòng thử lại.',
       );
     } finally {
       setIsSaving(false);

@@ -41,7 +41,7 @@ export const DeviceInfoModal: React.FC<DeviceInfoModalProps> = ({
   isLocked = false,
   lockMessage,
   onUnlocked,
-}) => {
+}: DeviceInfoModalProps) => {
   const dispatch = useAppDispatch();
   const { showSuccessToast, showErrorToast, showWarnToast } = useAppToast();
   const [deviceId, setDeviceId] = useState<string>('');
@@ -70,9 +70,10 @@ export const DeviceInfoModal: React.FC<DeviceInfoModalProps> = ({
           }),
         );
       }
-    } catch (err: any) {
+    } catch (err: unknown) {
       const errMsg =
-        err?.message || 'Không thể kết nối đến máy chủ kiểm tra thiết bị';
+        (err as Error)?.message ||
+        'Không thể kết nối đến máy chủ kiểm tra thiết bị';
       setStatus({
         allowed: false,
         deviceId: id,
@@ -118,10 +119,10 @@ export const DeviceInfoModal: React.FC<DeviceInfoModalProps> = ({
             'Vui lòng cấu hình Device ID này trên Web CMS trước khi thử lại.',
         );
       }
-    } catch (err: any) {
+    } catch (err: unknown) {
       showErrorToast(
         'Lỗi kiểm tra',
-        err?.message || 'Không thể kết nối đến máy chủ.',
+        (err as Error)?.message || 'Không thể kết nối đến máy chủ.',
       );
     } finally {
       setLoading(false);
@@ -135,8 +136,11 @@ export const DeviceInfoModal: React.FC<DeviceInfoModalProps> = ({
         title: 'Mã thiết bị People Detector',
       });
       showSuccessToast('Đã mở chia sẻ', 'Sao chép mã thiết bị thành công!');
-    } catch (err: any) {
-      showErrorToast('Lỗi chia sẻ', err?.message || 'Không thể sao chép');
+    } catch (err: unknown) {
+      showErrorToast(
+        'Lỗi chia sẻ',
+        (err as Error)?.message || 'Không thể sao chép',
+      );
     }
   };
 

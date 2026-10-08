@@ -49,11 +49,15 @@ export const EditUserModal: React.FC<EditUserModalProps> = ({
   visible,
   user,
   onClose,
-}) => {
+}: EditUserModalProps) => {
   const { isPhone } = useResponsive();
   const dispatch = useAppDispatch();
   const rooms = useAppSelector(state => state.detector.rooms);
   const userProfiles = useAppSelector(state => state.detector.userProfiles);
+  const currentUser = useAppSelector(state => state.app.currentUser);
+  const isAdmin =
+    currentUser?.role === 'SUPER_ADMIN' || currentUser?.role === 'ADMIN';
+  const isOfficer = currentUser?.role === 'OFFICER';
 
   const [fullName, setFullName] = useState('');
   const [code, setCode] = useState('');
@@ -203,17 +207,19 @@ export const EditUserModal: React.FC<EditUserModalProps> = ({
 
   const handleSave = async () => {
     if (!user) return;
-    if (!fullName.trim()) {
-      setError('Vui lòng nhập họ và tên');
-      return;
-    }
-    if (!code.trim()) {
-      setError('Vui lòng nhập mã định danh');
-      return;
-    }
-    if (isVisitor && !visitedProfileId) {
-      setError('Vui lòng chọn người được thân nhân');
-      return;
+    if (isAdmin) {
+      if (!fullName.trim()) {
+        setError('Vui lòng nhập họ và tên');
+        return;
+      }
+      if (!code.trim()) {
+        setError('Vui lòng nhập mã định danh');
+        return;
+      }
+      if (isVisitor && !visitedProfileId) {
+        setError('Vui lòng chọn người được thân nhân');
+        return;
+      }
     }
 
     setIsSubmitting(true);
@@ -249,20 +255,24 @@ export const EditUserModal: React.FC<EditUserModalProps> = ({
 
       const visitedUser = officialProfiles.find(u => u.id === visitedProfileId);
       const updatedData = {
-        fullName: fullName.trim(),
-        code: code.trim(),
+        fullName: isAdmin ? fullName.trim() : user.fullName,
+        code: isAdmin ? code.trim() : user.code,
         roomId:
-          isVisitor && visitedUser?.roomId
+          isAdmin && isVisitor && visitedUser?.roomId
             ? visitedUser.roomId
-            : roomId || user.roomId,
+            : isAdmin
+            ? roomId || user.roomId
+            : user.roomId,
         zoneId:
-          isVisitor && visitedUser?.zoneId ? visitedUser.zoneId : user.zoneId,
+          isAdmin && isVisitor && visitedUser?.zoneId
+            ? visitedUser.zoneId
+            : user.zoneId,
         avatarUri: finalAvatar,
         photos: serverPhotos,
-        isVisitor,
-        visitedProfileId: isVisitor ? visitedProfileId : null,
+        isVisitor: isAdmin ? isVisitor : !!user.isVisitor,
+        visitedProfileId: isAdmin ? (isVisitor ? visitedProfileId : null) : user.visitedProfileId,
         visitedProfile:
-          isVisitor && visitedUser
+          isAdmin && isVisitor && visitedUser
             ? {
                 id: visitedUser.id,
                 fullName: visitedUser.fullName,
@@ -270,7 +280,7 @@ export const EditUserModal: React.FC<EditUserModalProps> = ({
                 roomName:
                   rooms.find(r => r.id === visitedUser.roomId)?.name || '',
               }
-            : null,
+            : user.visitedProfile,
       };
 
       tfliteYoloService.invalidateProfileCache(user.id);
@@ -327,10 +337,12 @@ export const EditUserModal: React.FC<EditUserModalProps> = ({
                     style={[styles.title, isPhone && styles.titlePhone]}
                     numberOfLines={1}
                   >
-                    Chỉnh sửa nhân sự
+                    {isAdmin ? 'Chỉnh sửa nhân sự' : 'Bổ sung ảnh nhận diện'}
                   </AppText>
                   <AppText style={styles.subtitle} numberOfLines={1}>
-                    Cập nhật thông tin & ảnh nhận diện
+                    {isAdmin
+                      ? 'Cập nhật thông tin & ảnh nhận diện'
+                      : 'Cán bộ khu vực bổ sung ảnh mẫu (tối đa 3 ảnh)'}
                   </AppText>
                 </View>
               </View>
@@ -339,6 +351,25 @@ export const EditUserModal: React.FC<EditUserModalProps> = ({
                 <X size={20} color={appColors.slate500} />
               </TouchableOpacity>
             </View>
+
+            {isOfficer && (
+              <View
+                style={{
+                  backgroundColor: '#eff6ff',
+                  padding: 10,
+                  marginHorizontal: 20,
+                  marginTop: 10,
+                  borderRadius: 8,
+                  borderWidth: 1,
+                  borderColor: '#bfdbfe',
+                }}
+              >
+                <AppText style={{ fontSize: 12, color: '#1e40af' }}>
+                  Cán bộ chỉ có quyền bổ sung ảnh mẫu cho hồ sơ chưa đủ 3 ảnh.
+                  Thông tin hồ sơ do Quản lý cơ sở cập nhật.
+                </AppText>
+              </View>
+            )}
 
             <ScrollView
               showsVerticalScrollIndicator={false}
@@ -437,13 +468,15 @@ export const EditUserModal: React.FC<EditUserModalProps> = ({
                               </TouchableOpacity>
                             )}
 
-                            <TouchableOpacity
-                              style={styles.deletePhotoBtn}
-                              onPress={() => handleDeletePhoto(uri)}
-                              activeOpacity={0.8}
-                            >
-                              <Trash2 size={12} color={appColors.red600} />
-                            </TouchableOpacity>
+                            {isAdmin && (
+                              <TouchableOpacity
+                                style={styles.deletePhotoBtn}
+                                onPress={() => handleDeletePhoto(uri)}
+                                activeOpacity={0.8}
+                              >
+                                <Trash2 size={12} color={appColors.red600} />
+                              </TouchableOpacity>
+                            )}
 
                             {/* Bottom Action Tools: Flip and Rotate */}
                             <View style={styles.photoBottomTools}>
@@ -478,9 +511,10 @@ export const EditUserModal: React.FC<EditUserModalProps> = ({
                 <View style={styles.formGroup}>
                   <AppText style={styles.label}>Họ và tên *</AppText>
                   <TextInput
-                    style={styles.input}
+                    style={[styles.input, !isAdmin && styles.inputDisabled]}
                     value={fullName}
                     onChangeText={setFullName}
+                    editable={isAdmin}
                     placeholderTextColor={appColors.slate400}
                   />
                 </View>
@@ -488,9 +522,10 @@ export const EditUserModal: React.FC<EditUserModalProps> = ({
                 <View style={styles.formGroup}>
                   <AppText style={styles.label}>Mã định danh / ID *</AppText>
                   <TextInput
-                    style={styles.input}
+                    style={[styles.input, !isAdmin && styles.inputDisabled]}
                     value={code}
                     onChangeText={setCode}
+                    editable={isAdmin}
                     placeholderTextColor={appColors.slate400}
                   />
                 </View>
@@ -506,6 +541,7 @@ export const EditUserModal: React.FC<EditUserModalProps> = ({
                 </View>
                 <Switch
                   value={isVisitor}
+                  disabled={!isAdmin}
                   onValueChange={val => {
                     setIsVisitor(val);
                     if (!val) {
@@ -923,6 +959,11 @@ const styles = StyleSheet.create({
     height: 44,
     fontSize: 14,
     color: appColors.slate900,
+  },
+  inputDisabled: {
+    backgroundColor: appColors.slate100,
+    color: appColors.slate500,
+    borderColor: appColors.slate200,
   },
   chipsRow: {
     flexDirection: 'row',

@@ -12,6 +12,7 @@ import {
   Alert,
   ScrollView,
   useWindowDimensions,
+  Vibration,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { HeaderBar } from './components/HeaderBar';
@@ -52,6 +53,7 @@ import {
   startSession,
   tickSessionDuration,
   setDeviceAuthorized,
+  resetAttendanceMap,
 } from '../../store/slices/detectorSlice';
 import { YoloDetectorService } from '../../services/yolo-detector';
 import { useResponsive } from '../../hooks/use-responsive';
@@ -95,6 +97,8 @@ const TabletDetectorScreen: React.FC<TabletDetectorScreenProps> = ({
   const zones = useAppSelector(state => state.detector.zones);
   const rooms = useAppSelector(state => state.detector.rooms);
   const userProfiles = useAppSelector(state => state.detector.userProfiles);
+  const currentUser = useAppSelector(state => state.app.currentUser);
+  const isGuard = currentUser?.role === 'GUARD';
   const selectedZoneId = useAppSelector(state => state.detector.selectedZoneId);
   const selectedRoomId = useAppSelector(state => state.detector.selectedRoomId);
   const isSessionActive = useAppSelector(
@@ -117,6 +121,18 @@ const TabletDetectorScreen: React.FC<TabletDetectorScreenProps> = ({
   );
   const deviceLockMessage = useAppSelector(
     state => state.detector.deviceLockMessage,
+  );
+  const confidenceThreshold = useAppSelector(
+    state => state.detector.confidenceThreshold ?? 85,
+  );
+  const targetFps = useAppSelector(
+    state => state.detector.targetFps ?? 30,
+  );
+  const soundEnabled = useAppSelector(
+    state => state.detector.soundEnabled ?? true,
+  );
+  const autoSessionReset = useAppSelector(
+    state => state.detector.autoSessionReset ?? false,
   );
 
   // Modals state
@@ -272,6 +288,25 @@ const TabletDetectorScreen: React.FC<TabletDetectorScreenProps> = ({
     dispatch(clearMockData());
   }, [dispatch]);
 
+  // Tự động làm mới điểm danh khi đổi phòng nếu bật autoSessionReset
+  const prevRoomIdRef = useRef(effectiveRoomId);
+  useEffect(() => {
+    if (
+      autoSessionReset &&
+      prevRoomIdRef.current &&
+      prevRoomIdRef.current !== effectiveRoomId
+    ) {
+      console.log(
+        '[TabletDetector] Auto resetting attendance session due to room switch:',
+        prevRoomIdRef.current,
+        '->',
+        effectiveRoomId,
+      );
+      dispatch(resetAttendanceMap());
+    }
+    prevRoomIdRef.current = effectiveRoomId;
+  }, [effectiveRoomId, autoSessionReset, dispatch]);
+
   // Kiểm tra tình trạng cấp quyền thiết bị ngay khi vào màn hình
   useEffect(() => {
     let isMounted = true;
@@ -293,9 +328,9 @@ const TabletDetectorScreen: React.FC<TabletDetectorScreenProps> = ({
             );
           }
         }
-      } catch (err: any) {
+      } catch (err: unknown) {
         if (isMounted) {
-          const msg = err?.message || 'Không thể xác thực thiết bị';
+          const msg = (err as Error)?.message || 'Không thể xác thực thiết bị';
           if (
             msg.includes('Thiết bị') ||
             msg.includes('403') ||
@@ -392,10 +427,23 @@ const TabletDetectorScreen: React.FC<TabletDetectorScreenProps> = ({
             photoPath,
             targetProfiles,
             isFront,
+            confidenceThreshold,
           );
 
           if (realResult) {
             consecutiveMissedFramesRef.current = 0;
+
+            // Face Quality Gate: if frame is blurry or angle is partial/extreme, guide user without recording attendance
+            if (realResult.qualityWarning) {
+              dispatch(setActiveDetection(realResult));
+              lastFaceSeenTimestampRef.current = Date.now();
+              const activeTrackDelay = Math.max(
+                16,
+                Math.round(1000 / Math.max(15, targetFps)),
+              );
+              scheduleNextScan(activeTrackDelay);
+              return;
+            }
 
             // Lookup room and zone details for the detected user
             const matchedProfile = targetProfiles.find(
@@ -484,6 +532,9 @@ const TabletDetectorScreen: React.FC<TabletDetectorScreenProps> = ({
             if (realResult.status === 'present') {
               const prevAtt = attendanceMapRef.current?.[realResult.userId];
               if (!prevAtt || prevAtt.status !== 'present') {
+                if (soundEnabled) {
+                  Vibration.vibrate(80);
+                }
                 const isVisitorUser = matchedProfile?.isVisitor;
                 const visitorTag =
                   isVisitorUser && matchedProfile?.visitedProfile?.fullName
@@ -610,6 +661,9 @@ const TabletDetectorScreen: React.FC<TabletDetectorScreenProps> = ({
                   const prevAddAtt =
                     attendanceMapRef.current?.[addResult.userId];
                   if (!prevAddAtt || prevAddAtt.status !== 'present') {
+                    if (soundEnabled) {
+                      Vibration.vibrate(80);
+                    }
                     const isAddVisitor = addMatched?.isVisitor;
                     const addVisitorTag =
                       isAddVisitor && addMatched?.visitedProfile?.fullName
@@ -726,9 +780,13 @@ const TabletDetectorScreen: React.FC<TabletDetectorScreenProps> = ({
               }
             }
 
-            // Face is actively tracked: update timestamp and fast chained scan (80ms) for high-FPS, butter-smooth tracking
+            // Face is actively tracked: update timestamp and dynamic scan delay based on targetFps
             lastFaceSeenTimestampRef.current = Date.now();
-            scheduleNextScan(80);
+            const activeTrackDelay = Math.max(
+              16,
+              Math.round(1000 / Math.max(15, targetFps)),
+            );
+            scheduleNextScan(activeTrackDelay);
           } else {
             // Debounce 2 consecutive missed frames before clearing active detection
             consecutiveMissedFramesRef.current += 1;
@@ -741,9 +799,9 @@ const TabletDetectorScreen: React.FC<TabletDetectorScreenProps> = ({
             if (idleTime > 10000) {
               scheduleNextScan(1000); // 1 FPS deep idle to keep tablet cool
             } else if (idleTime > 3000) {
-              scheduleNextScan(400); // 2.5 FPS transition
+              scheduleNextScan(Math.max(200, Math.round(8000 / targetFps))); // 2.5 FPS transition
             } else {
-              scheduleNextScan(200); // 5 FPS normal search
+              scheduleNextScan(Math.max(40, Math.round(2000 / targetFps))); // Fast search
             }
           }
         } else {
@@ -755,12 +813,12 @@ const TabletDetectorScreen: React.FC<TabletDetectorScreenProps> = ({
           if (idleTime > 10000) {
             scheduleNextScan(1000);
           } else {
-            scheduleNextScan(250);
+            scheduleNextScan(Math.max(50, Math.round(2500 / targetFps)));
           }
         }
       } catch (err) {
         console.warn('[TabletDetectorScreen] auto-scan error:', err);
-        scheduleNextScan(350);
+        scheduleNextScan(Math.max(100, Math.round(3000 / targetFps)));
       } finally {
         if (photoPath) {
           deleteTempFile(photoPath).catch(() => {});
@@ -780,6 +838,9 @@ const TabletDetectorScreen: React.FC<TabletDetectorScreenProps> = ({
       selectedZoneId,
       rooms,
       zones,
+      confidenceThreshold,
+      targetFps,
+      soundEnabled,
     ],
   );
   handleScanDetectionRef.current = handleScanDetection;
@@ -867,10 +928,10 @@ const TabletDetectorScreen: React.FC<TabletDetectorScreenProps> = ({
         'Bắt đầu',
         `Đã khởi tạo phiên trên hệ thống: ${sessionName}`,
       );
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.log(
         '[TabletDetectorScreen] BE start session error, running offline session:',
-        err?.message || err,
+        (err as Error)?.message || err,
       );
       const isRoomMode = scanMode === 'room';
       const actualRoomId = isRoomMode
@@ -997,7 +1058,9 @@ const TabletDetectorScreen: React.FC<TabletDetectorScreenProps> = ({
           {/* Quick List & Sessions History & Alerts Actions */}
           <BottomActions
             onOpenList={() => setListModalVisible(true)}
-            onOpenSessionsHistory={() => setSessionsHistoryVisible(true)}
+            onOpenSessionsHistory={
+              isGuard ? undefined : () => setSessionsHistoryVisible(true)
+            }
             onOpenAlerts={() => setAlertsModalVisible(true)}
             unreadAlertsCount={
               (alerts || []).filter(a => a.type === 'warning').length
@@ -1099,7 +1162,9 @@ const TabletDetectorScreen: React.FC<TabletDetectorScreenProps> = ({
 
               <BottomActions
                 onOpenList={() => setListModalVisible(true)}
-                onOpenSessionsHistory={() => setSessionsHistoryVisible(true)}
+                onOpenSessionsHistory={
+                  isGuard ? undefined : () => setSessionsHistoryVisible(true)
+                }
                 onOpenAlerts={() => setAlertsModalVisible(true)}
                 unreadAlertsCount={
                   (alerts || []).filter(a => a.type === 'warning').length

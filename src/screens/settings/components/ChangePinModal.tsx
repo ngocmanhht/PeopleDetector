@@ -23,7 +23,7 @@ export const ChangePinModal: React.FC<ChangePinModalProps> = ({
   visible,
   onClose,
   onSuccess,
-}) => {
+}: ChangePinModalProps) => {
   const { showSuccessToast } = useAppToast();
   const [currentPin, setCurrentPin] = useState('');
   const [newPin, setNewPin] = useState('');

@@ -36,6 +36,10 @@ export interface DetectorState {
   scanHistory: ScanHistoryItem[]; // Lịch sử các người/khuôn mặt quét được trong phiên kèm IN/OUT
   isDeviceAuthorized: boolean | null; // null = chưa kiểm tra, true = hợp lệ, false = chưa được cấp quyền/bị khóa
   deviceLockMessage: string;
+  confidenceThreshold: number; // Ngưỡng % tin cậy AI (75, 80, 85, 90, 95)
+  targetFps: number; // Tốc độ quét FPS (15, 30, 60)
+  soundEnabled: boolean; // Bật âm thanh / rung phản hồi khi điểm danh thành công
+  autoSessionReset: boolean; // Tự động làm mới điểm danh khi chuyển phòng
 }
 
 import { PHOTO_CONFIG } from '../../const/photo-config';
@@ -61,6 +65,10 @@ const initialState: DetectorState = {
   scanHistory: [],
   isDeviceAuthorized: null,
   deviceLockMessage: '',
+  confidenceThreshold: 85,
+  targetFps: 30,
+  soundEnabled: true,
+  autoSessionReset: false,
 };
 
 const detectorSlice = createSlice({
@@ -1040,6 +1048,45 @@ const detectorSlice = createSlice({
         state.deviceLockMessage = action.payload.message;
       }
     },
+    setConfidenceThreshold: (state, action: PayloadAction<number>) => {
+      state.confidenceThreshold = action.payload;
+    },
+    setTargetFps: (state, action: PayloadAction<number>) => {
+      state.targetFps = action.payload;
+    },
+    setSoundEnabled: (state, action: PayloadAction<boolean>) => {
+      state.soundEnabled = action.payload;
+    },
+    setAutoSessionReset: (state, action: PayloadAction<boolean>) => {
+      state.autoSessionReset = action.payload;
+    },
+    updateDetectorSettings: (
+      state,
+      action: PayloadAction<{
+        confidenceThreshold?: number;
+        targetFps?: number;
+        soundEnabled?: boolean;
+        autoSessionReset?: boolean;
+      }>,
+    ) => {
+      if (action.payload.confidenceThreshold !== undefined) {
+        state.confidenceThreshold = action.payload.confidenceThreshold;
+      }
+      if (action.payload.targetFps !== undefined) {
+        state.targetFps = action.payload.targetFps;
+      }
+      if (action.payload.soundEnabled !== undefined) {
+        state.soundEnabled = action.payload.soundEnabled;
+      }
+      if (action.payload.autoSessionReset !== undefined) {
+        state.autoSessionReset = action.payload.autoSessionReset;
+      }
+    },
+    resetAttendanceMap: state => {
+      state.attendanceMap = {};
+      state.activeDetection = null;
+      state.scanHistory = [];
+    },
   },
 });
 
@@ -1079,6 +1126,12 @@ export const {
   setActiveDetection,
   addAlert,
   clearAlerts,
+  setConfidenceThreshold,
+  setTargetFps,
+  setSoundEnabled,
+  setAutoSessionReset,
+  updateDetectorSettings,
+  resetAttendanceMap,
 } = detectorSlice.actions;
 
 export const detectorReducer = detectorSlice.reducer;

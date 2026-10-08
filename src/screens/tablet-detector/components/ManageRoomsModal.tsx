@@ -35,7 +35,7 @@ interface ManageRoomsModalProps {
 export const ManageRoomsModal: React.FC<ManageRoomsModalProps> = ({
   visible,
   onClose,
-}) => {
+}: ManageRoomsModalProps) => {
   const { isPhone } = useResponsive();
   const dispatch = useAppDispatch();
   const { zones, rooms, userProfiles, selectedZoneId, selectedRoomId } =

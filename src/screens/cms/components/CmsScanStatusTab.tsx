@@ -137,8 +137,11 @@ export const CmsScanStatusTab: React.FC<CmsScanStatusTabProps> = ({
           'Không tìm thấy nhân sự phù hợp với khuôn mặt vừa quét. Bạn có thể chọn trực tiếp từ danh sách.',
         );
       }
-    } catch (e: any) {
-      Alert.alert('Lỗi quét khuôn mặt', e?.message || 'Không thể xử lý ảnh');
+    } catch (e: unknown) {
+      Alert.alert(
+        'Lỗi quét khuôn mặt',
+        (e as Error)?.message || 'Không thể xử lý ảnh',
+      );
     } finally {
       if (photoUri) {
         deleteTempFile(photoUri).catch(() => {});
@@ -172,7 +175,7 @@ export const CmsScanStatusTab: React.FC<CmsScanStatusTabProps> = ({
         'Thành công',
         `Đã cập nhật tình trạng [${STATUS_CONFIG[targetStatus].label}] cho ${selectedUser.fullName} và lưu nhật ký thay đổi.`,
       );
-    } catch (e: any) {
+    } catch (e: unknown) {
       // Keep the change locally so the admin doesn't lose it; it will be overwritten on next sync
       dispatch(
         updateUserCondition({
@@ -184,7 +187,7 @@ export const CmsScanStatusTab: React.FC<CmsScanStatusTabProps> = ({
       );
       Alert.alert(
         'Chưa đồng bộ được với server',
-        `Đã lưu tạm trên máy. Lỗi: ${e?.message || 'không kết nối được server'}`,
+        `Đã lưu tạm trên máy. Lỗi: ${(e as Error)?.message || 'không kết nối được server'}`,
       );
     } finally {
       setIsSavingCondition(false);

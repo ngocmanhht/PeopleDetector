@@ -50,8 +50,11 @@ export const CmsReportsTab: React.FC = () => {
           (result as { message?: string }).message || 'Không thể tạo file Excel',
         );
       }
-    } catch (e: any) {
-      Alert.alert('Lỗi xuất báo cáo', e?.message || 'Không thể tạo file Excel');
+    } catch (e: unknown) {
+      Alert.alert(
+        'Lỗi xuất báo cáo',
+        (e as Error)?.message || 'Không thể tạo file Excel',
+      );
     } finally {
       setIsExporting(false);
     }

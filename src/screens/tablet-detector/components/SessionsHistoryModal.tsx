@@ -44,7 +44,7 @@ export const SessionsHistoryModal: React.FC<SessionsHistoryModalProps> = ({
   sessions,
   onClose,
   onSelectSession,
-}) => {
+}: SessionsHistoryModalProps) => {
   const { isPhone } = useResponsive();
   const dispatch = useAppDispatch();
   const [searchQuery, setSearchQuery] = useState('');

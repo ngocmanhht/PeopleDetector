@@ -5,6 +5,7 @@ import {
   Control,
   FieldValues,
   Path,
+  Resolver,
 } from 'react-hook-form';
 import { yupResolver } from '@hookform/resolvers/yup';
 import { View } from 'react-native';
@@ -25,7 +26,7 @@ export type FormField<T extends FieldValues> = {
 
 type FormBuilderProps<T extends FieldValues> = {
   fields: FormField<T>[];
-  schema: yup.ObjectSchema<any>;
+  schema: yup.ObjectSchema<T>;
   onSubmit: SubmitHandler<T>;
   submitLabel?: string;
 };
@@ -41,7 +42,7 @@ export function FormBuilder<T extends FieldValues>({
     handleSubmit,
     formState: { isSubmitting },
   } = useForm<T>({
-    resolver: yupResolver(schema),
+    resolver: yupResolver(schema) as unknown as Resolver<T>,
   });
 
   const renderField = (field: FormField<T>) => {

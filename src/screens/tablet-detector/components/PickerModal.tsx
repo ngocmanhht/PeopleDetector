@@ -33,7 +33,7 @@ export const PickerModal: React.FC<PickerModalProps> = ({
   selectedId,
   onSelect,
   onClose,
-}) => {
+}: PickerModalProps) => {
   const { isPhone } = useResponsive();
   return (
     <Modal

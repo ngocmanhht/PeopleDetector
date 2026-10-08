@@ -57,7 +57,7 @@ export const SessionDetailModal: React.FC<SessionDetailModalProps> = ({
   rooms = [],
   zones = [],
   onClose,
-}) => {
+}: SessionDetailModalProps) => {
   const { isPhone } = useResponsive();
   const [filter, setFilter] = useState<FilterType>('all');
   const [searchQuery, setSearchQuery] = useState('');
@@ -94,7 +94,19 @@ export const SessionDetailModal: React.FC<SessionDetailModalProps> = ({
 
           const rawRecords = historyRes?.data;
           if (Array.isArray(rawRecords) && rawRecords.length > 0) {
-            const dbHistory: ScanHistoryItem[] = rawRecords.map((r: any) => {
+            interface RawRecordItem {
+              id?: string;
+              userId: string;
+              createdAt?: string;
+              timestamp?: string;
+              detectedImageUrl?: string;
+              status?: 'present' | 'verify' | 'missing';
+              confidence: number;
+              userProfile?: UserProfile;
+            }
+            const dbHistory: ScanHistoryItem[] = (
+              rawRecords as RawRecordItem[]
+            ).map(r => {
               const prof =
                 r.userProfile || userProfiles.find(u => u.id === r.userId);
               const userRoom = rooms.find(rm => rm.id === prof?.roomId);
@@ -121,7 +133,7 @@ export const SessionDetailModal: React.FC<SessionDetailModalProps> = ({
                 roomName: userRoom?.name || session.roomName || 'Phòng',
                 zoneId: prof?.zoneId,
                 zoneName: userZone?.name || session.zoneName || 'Khu',
-                status: (r.status as any) || 'present',
+                status: r.status || 'present',
                 confidence:
                   r.confidence > 1
                     ? Math.round(r.confidence)

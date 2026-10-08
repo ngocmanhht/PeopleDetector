@@ -96,8 +96,27 @@ export const RoomsManagerScreen: React.FC = () => {
   const [showAddRoomInput, setShowAddRoomInput] = useState(false);
   const [newRoomName, setNewRoomName] = useState('');
 
-  const currentZone = zones.find(z => z.id === selectedZoneId) || zones[0];
+  const currentUser = useAppSelector(state => state.app.currentUser);
+  const isAdmin =
+    currentUser?.role === 'SUPER_ADMIN' || currentUser?.role === 'ADMIN';
+  const isOfficer = currentUser?.role === 'OFFICER';
+  const isGuard = currentUser?.role === 'GUARD';
+
+  const availableZones =
+    isOfficer && currentUser?.zoneId
+      ? zones.filter(z => z.id === currentUser.zoneId)
+      : zones;
+
+  const currentZone =
+    availableZones.find(z => z.id === selectedZoneId) || availableZones[0];
   const currentRoom = rooms.find(r => r.id === selectedRoomId) || rooms[0];
+
+  // Auto set zone for officer if needed
+  React.useEffect(() => {
+    if (isOfficer && currentUser?.zoneId && selectedZoneId !== currentUser.zoneId) {
+      dispatch(setSelectedZoneId(currentUser.zoneId));
+    }
+  }, [isOfficer, currentUser?.zoneId, selectedZoneId, dispatch]);
 
   // Rooms in currently selected zone
   const roomsInCurrentZone = rooms.filter(r => r.zoneId === currentZone?.id);
@@ -127,7 +146,7 @@ export const RoomsManagerScreen: React.FC = () => {
       s.startTime.includes(sessionSearchQuery),
   );
 
-  const zonePickerItems = zones.map(z => ({
+  const zonePickerItems = availableZones.map(z => ({
     id: z.id,
     label: z.name,
     subtitle: z.description,
@@ -249,16 +268,18 @@ export const RoomsManagerScreen: React.FC = () => {
           <View style={styles.zonesSection}>
             <View style={styles.sectionTitleRow}>
               <AppText style={styles.subSectionTitle}>Khu vực (Zones)</AppText>
-              <TouchableOpacity
-                onPress={() => setShowAddZoneInput(!showAddZoneInput)}
-                style={styles.inlineAddBtn}
-              >
-                <Plus size={14} color={appColors.blue600} />
-                <AppText style={styles.inlineAddBtnText}>Thêm khu</AppText>
-              </TouchableOpacity>
+              {isAdmin && (
+                <TouchableOpacity
+                  onPress={() => setShowAddZoneInput(!showAddZoneInput)}
+                  style={styles.inlineAddBtn}
+                >
+                  <Plus size={14} color={appColors.blue600} />
+                  <AppText style={styles.inlineAddBtnText}>Thêm khu</AppText>
+                </TouchableOpacity>
+              )}
             </View>
 
-            {showAddZoneInput && (
+            {isAdmin && showAddZoneInput && (
               <View style={styles.inlineInputRow}>
                 <TextInput
                   style={styles.inlineTextInput}
@@ -278,7 +299,7 @@ export const RoomsManagerScreen: React.FC = () => {
 
             <ScrollView horizontal showsHorizontalScrollIndicator={false}>
               <View style={styles.zonesRow}>
-                {zones.map(z => {
+                {availableZones.map(z => {
                   const isSelected = z.id === currentZone?.id;
                   return (
                     <TouchableOpacity
@@ -317,20 +338,22 @@ export const RoomsManagerScreen: React.FC = () => {
                 Phòng trong {currentZone?.name || 'Khu'} (
                 {roomsInCurrentZone.length})
               </AppText>
-              <TouchableOpacity
-                onPress={() => setShowAddRoomInput(!showAddRoomInput)}
-                style={styles.inlineAddBtn}
-              >
-                <Plus
-                  size={14}
-                  color={appColors.blue600}
-                  style={{ flexShrink: 0 }}
-                />
-                <AppText style={styles.inlineAddBtnText}>Thêm phòng</AppText>
-              </TouchableOpacity>
+              {isAdmin && (
+                <TouchableOpacity
+                  onPress={() => setShowAddRoomInput(!showAddRoomInput)}
+                  style={styles.inlineAddBtn}
+                >
+                  <Plus
+                    size={14}
+                    color={appColors.blue600}
+                    style={{ flexShrink: 0 }}
+                  />
+                  <AppText style={styles.inlineAddBtnText}>Thêm phòng</AppText>
+                </TouchableOpacity>
+              )}
             </View>
 
-            {showAddRoomInput && (
+            {isAdmin && showAddRoomInput && (
               <View style={styles.inlineInputRow}>
                 <TextInput
                   style={styles.inlineTextInput}
@@ -460,17 +483,19 @@ export const RoomsManagerScreen: React.FC = () => {
               />
             </TouchableOpacity>
 
-            <TouchableOpacity
-              style={styles.phoneManageBtn}
-              onPress={() => setManageRoomsModalVisible(true)}
-              activeOpacity={0.8}
-            >
-              <Sliders
-                size={16}
-                color={appColors.gray600}
-                style={{ flexShrink: 0 }}
-              />
-            </TouchableOpacity>
+            {isAdmin && (
+              <TouchableOpacity
+                style={styles.phoneManageBtn}
+                onPress={() => setManageRoomsModalVisible(true)}
+                activeOpacity={0.8}
+              >
+                <Sliders
+                  size={16}
+                  color={appColors.gray600}
+                  style={{ flexShrink: 0 }}
+                />
+              </TouchableOpacity>
+            )}
           </View>
         )}
         {/* Top Header of Room Detail */}
@@ -525,7 +550,13 @@ export const RoomsManagerScreen: React.FC = () => {
                   styles.addUserHeaderBtn,
                   isPhone && styles.addUserHeaderBtnPhone,
                 ]}
-                onPress={() => setShowAddRoomMemberModal(true)}
+                onPress={() => {
+                  if (isAdmin) {
+                    setShowAddRoomMemberModal(true);
+                  } else {
+                    setShowAddUserModal(true);
+                  }
+                }}
                 activeOpacity={0.85}
               >
                 <UserPlus
@@ -534,7 +565,7 @@ export const RoomsManagerScreen: React.FC = () => {
                   style={{ flexShrink: 0 }}
                 />
                 <AppText style={styles.addUserHeaderBtnText}>
-                  + Thêm người
+                  {isAdmin ? '+ Thêm người' : '+ Tạo hồ sơ'}
                 </AppText>
               </TouchableOpacity>
             )}
@@ -572,31 +603,33 @@ export const RoomsManagerScreen: React.FC = () => {
             </AppText>
           </TouchableOpacity>
 
-          <TouchableOpacity
-            style={[
-              styles.segmentBtn,
-              activeTab === 'sessions' && styles.segmentBtnActive,
-            ]}
-            onPress={() => setActiveTab('sessions')}
-            activeOpacity={0.8}
-          >
-            <History
-              size={16}
-              color={
-                activeTab === 'sessions'
-                  ? appColors.blue600
-                  : appColors.slate500
-              }
-            />
-            <AppText
+          {!isGuard && (
+            <TouchableOpacity
               style={[
-                styles.segmentBtnText,
-                activeTab === 'sessions' && styles.segmentBtnTextActive,
+                styles.segmentBtn,
+                activeTab === 'sessions' && styles.segmentBtnActive,
               ]}
+              onPress={() => setActiveTab('sessions')}
+              activeOpacity={0.8}
             >
-              Lịch sử theo phiên ({currentRoomSessions.length})
-            </AppText>
-          </TouchableOpacity>
+              <History
+                size={16}
+                color={
+                  activeTab === 'sessions'
+                    ? appColors.blue600
+                    : appColors.slate500
+                }
+              />
+              <AppText
+                style={[
+                  styles.segmentBtnText,
+                  activeTab === 'sessions' && styles.segmentBtnTextActive,
+                ]}
+              >
+                Lịch sử theo phiên ({currentRoomSessions.length})
+              </AppText>
+            </TouchableOpacity>
+          )}
         </View>
 
         {activeTab === 'members' ? (
@@ -631,8 +664,18 @@ export const RoomsManagerScreen: React.FC = () => {
                 return (
                   <TouchableOpacity
                     style={styles.memberCard}
-                    onPress={() => setEditingUser(item)}
-                    activeOpacity={0.88}
+                    onPress={() => {
+                      if (isGuard) {
+                        Alert.alert('Giới hạn quyền', 'Bảo vệ không có quyền xem hoặc sửa hồ sơ chi tiết.');
+                        return;
+                      }
+                      if (isOfficer && photoCount >= 3) {
+                        Alert.alert('Thông báo', 'Hồ sơ đã đủ ảnh mẫu nhận diện. Chỉ Quản lý cơ sở mới có quyền sửa đổi.');
+                        return;
+                      }
+                      setEditingUser(item);
+                    }}
+                    activeOpacity={isGuard ? 1 : 0.88}
                   >
                     <View style={styles.avatarWrapper}>
                       {item.avatarUri ? (
@@ -713,19 +756,29 @@ export const RoomsManagerScreen: React.FC = () => {
 
                     {/* Action Buttons: Edit & Delete */}
                     <View style={styles.memberActions}>
-                      <TouchableOpacity
-                        style={styles.editBtn}
-                        onPress={() => setEditingUser(item)}
-                      >
-                        <Edit2 size={15} color={appColors.blue600} />
-                      </TouchableOpacity>
+                      {!isGuard && (
+                        <TouchableOpacity
+                          style={styles.editBtn}
+                          onPress={() => {
+                            if (isOfficer && photoCount >= 3) {
+                              Alert.alert('Thông báo', 'Hồ sơ đã đủ ảnh mẫu nhận diện. Chỉ Quản lý cơ sở mới có quyền sửa đổi.');
+                              return;
+                            }
+                            setEditingUser(item);
+                          }}
+                        >
+                          <Edit2 size={15} color={appColors.blue600} />
+                        </TouchableOpacity>
+                      )}
 
-                      <TouchableOpacity
-                        style={styles.deleteBtn}
-                        onPress={() => handleDeleteUser(item.id, item.fullName)}
-                      >
-                        <Trash2 size={15} color={appColors.red600} />
-                      </TouchableOpacity>
+                      {isAdmin && (
+                        <TouchableOpacity
+                          style={styles.deleteBtn}
+                          onPress={() => handleDeleteUser(item.id, item.fullName)}
+                        >
+                          <Trash2 size={15} color={appColors.red600} />
+                        </TouchableOpacity>
+                      )}
                     </View>
                   </TouchableOpacity>
                 );
@@ -829,13 +882,15 @@ export const RoomsManagerScreen: React.FC = () => {
                         </View>
                       </View>
 
-                      <TouchableOpacity
-                        style={styles.deleteSessionBtn}
-                        onPress={() => handleDeleteSession(item.id, item.name)}
-                        hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-                      >
-                        <Trash2 size={16} color={appColors.red500} />
-                      </TouchableOpacity>
+                      {isAdmin && (
+                        <TouchableOpacity
+                          style={styles.deleteSessionBtn}
+                          onPress={() => handleDeleteSession(item.id, item.name)}
+                          hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                        >
+                          <Trash2 size={16} color={appColors.red500} />
+                        </TouchableOpacity>
+                      )}
                     </View>
 
                     {/* Metric Pills */}
@@ -1030,10 +1085,10 @@ export const RoomsManagerScreen: React.FC = () => {
                 'Thành công',
                 `Đã thêm ${userIds.length} nhân sự vào phòng ${currentRoom.name}`,
               );
-            } catch (e: any) {
+            } catch (e: unknown) {
               Alert.alert(
                 'Lỗi thêm vào phòng',
-                e?.message || 'Không kết nối được server. Vui lòng thử lại.',
+                (e as Error)?.message || 'Không kết nối được server. Vui lòng thử lại.',
               );
             }
           }}

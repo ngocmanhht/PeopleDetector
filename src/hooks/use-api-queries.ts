@@ -428,7 +428,9 @@ export const useRecordAttendanceMutation = () => {
     mutationFn: (payload: RecordAttendancePayload) =>
       attendanceService.recordAttendance(payload),
     onSuccess: res => {
-      dispatch(recordAttendance(res.data));
+      if (res.data) {
+        dispatch(recordAttendance(res.data));
+      }
     },
   });
 };

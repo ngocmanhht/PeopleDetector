@@ -72,7 +72,7 @@ export const exportMonthlyAttendanceExcel = async ({
     // ==========================================
     // 1. SHEET 1: TỔNG HỢP CHUYÊN CẦN THÁNG
     // ==========================================
-    const summaryRows: any[][] = [
+    const summaryRows: (string | number | null | undefined)[][] = [
       [`BÁO CÁO ĐIỂM DANH & NHÂN SỰ THÁNG ${monthYearSlash}`],
       [`Thời gian xuất báo cáo: ${dayjs().format('HH:mm:ss DD/MM/YYYY')}`],
       [
@@ -174,7 +174,7 @@ export const exportMonthlyAttendanceExcel = async ({
     // ==========================================
     // 2. SHEET 2: CHI TIẾT CÁC PHIÊN ĐIỂM DANH
     // ==========================================
-    const detailRows: any[][] = [
+    const detailRows: (string | number | null | undefined)[][] = [
       [`CHI TIẾT LỊCH SỬ ĐIỂM DANH THÁNG ${monthYearSlash}`],
       [],
       [
@@ -266,7 +266,7 @@ export const exportMonthlyAttendanceExcel = async ({
     // ==========================================
     // 3. SHEET 3: NHẬT KÝ CẬP NHẬT TÌNH TRẠNG CMS (AUDIT LOGS)
     // ==========================================
-    const logRows: any[][] = [
+    const logRows: (string | number | null | undefined)[][] = [
       ['NHẬT KÝ CẬP NHẬT TÌNH TRẠNG NHÂN SỰ (CMS AUDIT LOGS)'],
       [],
       [
@@ -360,7 +360,7 @@ export const exportMonthlyAttendanceExcel = async ({
       'Người được thăm',
     ];
 
-    const profileRows: any[][] = [
+    const profileRows: (string | number | null | undefined)[][] = [
       ['DANH SÁCH HỒ SƠ QUẢN LÝ HỌC VIÊN / ĐỐI TƯỢNG'],
       [`Xuất lúc: ${dayjs().format('HH:mm:ss DD/MM/YYYY')}`],
       [],
@@ -440,15 +440,16 @@ export const exportMonthlyAttendanceExcel = async ({
     });
 
     return { success: true };
-  } catch (error: any) {
+  } catch (error: unknown) {
+    const err = error as Error;
     // User dismissal of the share sheet is not a failure
-    if (error?.message?.includes('User did not share')) {
+    if (err?.message?.includes('User did not share')) {
       return { success: true };
     }
     console.log('[exportMonthlyAttendanceExcel] Error:', error);
     return {
       success: false,
-      message: error?.message || 'Không thể tạo file báo cáo Excel.',
+      message: err?.message || 'Không thể tạo file báo cáo Excel.',
     };
   }
 };

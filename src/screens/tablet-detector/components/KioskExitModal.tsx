@@ -31,7 +31,7 @@ export const KioskExitModal: React.FC<KioskExitModalProps> = ({
   visible,
   onClose,
   onSuccess,
-}) => {
+}: KioskExitModalProps) => {
   const { showSuccessToast, showErrorToast } = useAppToast();
   const [pin, setPin] = useState<string>('');
   const [errorMessage, setErrorMessage] = useState<string>('');

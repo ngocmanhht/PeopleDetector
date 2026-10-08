@@ -15,7 +15,7 @@ import { appScreens } from '../const/app-screens';
 import { deviceIdService } from './device-id-service';
 import { setDeviceAuthorized } from '../store/slices/detectorSlice';
 
-const sanitizeForLog = (data: any): any => {
+const sanitizeForLog = (data: unknown): unknown => {
   if (!data || typeof data !== 'object') {
     return data;
   }
@@ -34,8 +34,8 @@ const sanitizeForLog = (data: any): any => {
     'secret',
     'credential',
   ];
-  const copy: Record<string, any> = {};
-  for (const [key, value] of Object.entries(data)) {
+  const copy: Record<string, unknown> = {};
+  for (const [key, value] of Object.entries(data as Record<string, unknown>)) {
     const lowerKey = key.toLowerCase();
     if (sensitiveKeys.some(k => lowerKey.includes(k))) {
       copy[key] = '***REDACTED***';
@@ -66,7 +66,7 @@ class ApiClient {
     };
 
     this.instance = axios.create({
-      baseURL: baseUrl ?? API_URL,
+      baseURL: baseUrl ?? API_URL ?? '192.168.1.4:3000/api',
       headers: defaultHeaders,
       timeout: 90000,
     });

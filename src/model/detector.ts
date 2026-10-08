@@ -136,6 +136,7 @@ export interface DetectionResult {
   additionalVerified?: DetectionResult[];
   isVisitor?: boolean;
   visitedProfileName?: string;
+  qualityWarning?: string;
 }
 
 export interface AlertLog {

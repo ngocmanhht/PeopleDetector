@@ -6,10 +6,17 @@ import {
   ScrollView,
   Alert,
   Switch,
+  Vibration,
 } from 'react-native';
 import { AppText } from '../../components/app-text';
 import { useAppDispatch, useAppSelector } from '../../store/hooks';
 import { logout } from '../../store/slices/appSlice';
+import {
+  setConfidenceThreshold,
+  setTargetFps,
+  setSoundEnabled,
+  setAutoSessionReset,
+} from '../../store/slices/detectorSlice';
 import { useCustomNavigation } from '../../hooks/use-custom-navigation';
 import { appScreens } from '../../const/app-screens';
 import { RootNavigatorParamList } from '../../navigation/types/root';
@@ -40,6 +47,7 @@ export const SettingsScreen: React.FC = () => {
   const dispatch = useAppDispatch();
   const navigation = useCustomNavigation<RootNavigatorParamList>();
   const currentUser = useAppSelector(state => state.app.currentUser);
+  const isSuperAdmin = currentUser?.role === 'SUPER_ADMIN';
   const isAdmin =
     currentUser?.role === 'ADMIN' || currentUser?.role === 'SUPER_ADMIN';
 
@@ -77,11 +85,19 @@ export const SettingsScreen: React.FC = () => {
 
   const roleInfo = getRoleDisplay();
 
-  // Settings states
-  const [confidenceThreshold, setConfidenceThreshold] = useState(85);
-  const [targetFps, setTargetFps] = useState(30);
-  const [soundEnabled, setSoundEnabled] = useState(true);
-  const [autoSessionReset, setAutoSessionReset] = useState(false);
+  // Settings states persisted via Redux MMKV storage
+  const confidenceThreshold = useAppSelector(
+    state => state.detector.confidenceThreshold ?? 85,
+  );
+  const targetFps = useAppSelector(
+    state => state.detector.targetFps ?? 30,
+  );
+  const soundEnabled = useAppSelector(
+    state => state.detector.soundEnabled ?? true,
+  );
+  const autoSessionReset = useAppSelector(
+    state => state.detector.autoSessionReset ?? false,
+  );
 
   // Kiosk Hook & Modals
   const {
@@ -377,7 +393,7 @@ export const SettingsScreen: React.FC = () => {
             <View style={styles.cardHeader}>
               <Sliders size={20} color={appColors.blue600} />
               <AppText style={styles.cardTitle}>Cấu hình nhận diện</AppText>
-              {!isAdmin && (
+              {!isSuperAdmin && (
                 <View
                   style={{
                     flexDirection: 'row',
@@ -398,7 +414,7 @@ export const SettingsScreen: React.FC = () => {
                       fontWeight: '700',
                     }}
                   >
-                    Chỉ xem
+                    Chỉ Super Admin
                   </AppText>
                 </View>
               )}
@@ -421,17 +437,21 @@ export const SettingsScreen: React.FC = () => {
                     style={[
                       styles.thresholdChip,
                       confidenceThreshold === val && styles.thresholdChipActive,
-                      !isAdmin && { opacity: 0.8 },
+                      !isSuperAdmin && { opacity: 0.8 },
                     ]}
                     onPress={() => {
-                      if (!isAdmin) {
+                      if (!isSuperAdmin) {
                         Alert.alert(
                           'Giới hạn quyền',
-                          'Chỉ Quản trị viên (ADMIN) mới có quyền điều chỉnh ngưỡng nhận diện AI.',
+                          'Chỉ Quản trị hệ thống (SUPER_ADMIN) mới có quyền hiệu chỉnh ngưỡng nhận diện AI.',
                         );
                         return;
                       }
-                      setConfidenceThreshold(val);
+                      dispatch(setConfidenceThreshold(val));
+                      showSuccessToast(
+                        'Đã lưu cấu hình AI',
+                        `Ngưỡng tin cậy nhận diện đã chuyển sang ${val}%`,
+                      );
                     }}
                   >
                     <AppText
@@ -475,7 +495,11 @@ export const SettingsScreen: React.FC = () => {
                         );
                         return;
                       }
-                      setTargetFps(val);
+                      dispatch(setTargetFps(val));
+                      showSuccessToast(
+                        'Đã lưu cấu hình Camera',
+                        `Tốc độ quét nhận diện đã chuyển sang ${val} FPS`,
+                      );
                     }}
                   >
                     <AppText
@@ -498,12 +522,30 @@ export const SettingsScreen: React.FC = () => {
                   Âm thanh thông báo
                 </AppText>
                 <AppText style={styles.settingDesc}>
-                  Phát âm thanh bíp khi nhận diện điểm danh thành công
+                  Phát âm thanh & rung khi nhận diện điểm danh thành công
                 </AppText>
               </View>
               <Switch
                 value={soundEnabled}
-                onValueChange={setSoundEnabled}
+                onValueChange={val => {
+                  if (!isAdmin) {
+                    Alert.alert(
+                      'Giới hạn quyền',
+                      'Chỉ Quản trị viên (ADMIN) mới có quyền thay đổi cấu hình âm thanh.',
+                    );
+                    return;
+                  }
+                  dispatch(setSoundEnabled(val));
+                  if (val) {
+                    Vibration.vibrate(50);
+                  }
+                  showSuccessToast(
+                    'Cấu hình âm thanh',
+                    val
+                      ? 'Đã bật âm thanh & rung phản hồi'
+                      : 'Đã tắt âm thanh & rung phản hồi',
+                  );
+                }}
                 trackColor={{
                   false: appColors.slate300,
                   true: appColors.blue300,
@@ -532,7 +574,22 @@ export const SettingsScreen: React.FC = () => {
               </View>
               <Switch
                 value={autoSessionReset}
-                onValueChange={setAutoSessionReset}
+                onValueChange={val => {
+                  if (!isAdmin) {
+                    Alert.alert(
+                      'Giới hạn quyền',
+                      'Chỉ Quản trị viên (ADMIN) mới có quyền thay đổi cấu hình làm mới phòng.',
+                    );
+                    return;
+                  }
+                  dispatch(setAutoSessionReset(val));
+                  showSuccessToast(
+                    'Cấu hình Camera',
+                    val
+                      ? 'Bật tự động làm mới khi đổi phòng'
+                      : 'Tắt tự động làm mới khi đổi phòng',
+                  );
+                }}
                 trackColor={{
                   false: appColors.slate300,
                   true: appColors.blue300,

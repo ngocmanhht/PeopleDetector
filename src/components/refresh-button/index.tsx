@@ -13,7 +13,7 @@ import { useBackendSync } from '../../hooks/use-backend-sync';
 import { useAppToast } from '../../hooks/use-app-toast';
 
 interface RefreshButtonProps {
-  onRefresh?: () => Promise<any> | any;
+  onRefresh?: () => Promise<unknown> | void;
   style?: StyleProp<ViewStyle>;
   size?: number;
   iconSize?: number;
@@ -67,7 +67,7 @@ export const RefreshButton: React.FC<RefreshButtonProps> = ({
         'Đã làm mới dữ liệu',
         'Dữ liệu hệ thống đã được đồng bộ mới nhất!',
       );
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.log('[RefreshButton] Error refreshing:', err);
       showWarnToast('Làm mới thất bại', 'Không thể đồng bộ dữ liệu lúc này.');
     } finally {
