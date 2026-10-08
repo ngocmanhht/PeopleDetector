@@ -1810,29 +1810,54 @@ export class TfliteYoloService {
     }
   }
 
+  private _isWarmingUp: boolean = false;
+
+  public isWarmingUp(): boolean {
+    return this._isWarmingUp;
+  }
+
   /**
    * Warm-up room profile embeddings in advance (e.g. on entering room or login)
    */
   public async warmupRoomEmbeddings(
     roomProfiles: UserProfile[],
+    onProgress?: (
+      current: number,
+      total: number,
+      profileName?: string,
+      isCached?: boolean,
+    ) => void,
   ): Promise<void> {
+    if (!roomProfiles || roomProfiles.length === 0) {
+      onProgress?.(0, 0);
+      return;
+    }
     if (!this.isInitialized) {
       await this.initModels();
     }
+    this._isWarmingUp = true;
+    const total = roomProfiles.length;
     let processedCount = 0;
-    for (const p of roomProfiles) {
-      const sig = this.getProfilePhotoSignature(p);
-      const cached = this.profileEmbeddingsCache.get(p.id);
-      if (!cached || (sig && cached.signature !== sig)) {
-        await this.enrollProfile(p);
-        processedCount++;
-        // Micro-yield every 10 enrollments so main thread / camera frame rendering remains silky smooth
-        if (processedCount % 10 === 0) {
-          await new Promise<void>(resolve => {
-            setTimeout(() => resolve(), 10);
-          });
+    try {
+      for (let i = 0; i < total; i++) {
+        const p = roomProfiles[i];
+        const sig = this.getProfilePhotoSignature(p);
+        const cached = this.profileEmbeddingsCache.get(p.id);
+        const isAlreadyCached = Boolean(
+          cached && (!sig || cached.signature === sig),
+        );
+
+        if (!isAlreadyCached) {
+          await this.enrollProfile(p);
+          processedCount++;
+          // Micro-yield so JS thread and UI animation remain silky smooth
+          await new Promise<void>(resolve => setTimeout(resolve, 8));
         }
+
+        onProgress?.(i + 1, total, p.fullName, isAlreadyCached);
       }
+    } finally {
+      this._isWarmingUp = false;
     }
   }
 
@@ -2009,8 +2034,18 @@ export class TfliteYoloService {
 
   public static async warmupRoomEmbeddings(
     roomProfiles: UserProfile[],
+    onProgress?: (
+      current: number,
+      total: number,
+      profileName?: string,
+      isCached?: boolean,
+    ) => void,
   ): Promise<void> {
-    return this.getInstance().warmupRoomEmbeddings(roomProfiles);
+    return this.getInstance().warmupRoomEmbeddings(roomProfiles, onProgress);
+  }
+
+  public static isWarmingUp(): boolean {
+    return this.getInstance().isWarmingUp();
   }
 
   public static simulateScanDetection(

@@ -32,6 +32,7 @@ import { BottomActions } from './components/BottomActions';
 import { SessionsHistoryModal } from './components/SessionsHistoryModal';
 import { SessionDetailModal } from '../rooms-manager/components/SessionDetailModal';
 import { DeviceInfoModal } from './components/DeviceInfoModal';
+import { FaceSyncModal } from './components/FaceSyncModal';
 import { AttendanceSession } from '../../model/detector';
 import { KioskExitModal } from './components/KioskExitModal';
 import { kioskService } from '../../services/kiosk-service';
@@ -154,6 +155,28 @@ const TabletDetectorScreen: React.FC<TabletDetectorScreenProps> = ({
   const [enrollStrangerFullName, setEnrollStrangerFullName] =
     useState<string>('');
   const [enrollStrangerId, setEnrollStrangerId] = useState<string | null>(null);
+
+  // Face Embeddings Sync Progress Modal States
+  const [faceSyncModalVisible, setFaceSyncModalVisible] = useState(false);
+  const [faceSyncProgress, setFaceSyncProgress] = useState({
+    current: 0,
+    total: 0,
+    profileName: '',
+  });
+  const [isFaceDataReady, setIsFaceDataReady] = useState(false);
+
+  // Role Enforcement: Officer chỉ có quyền điểm danh theo phòng thuộc khu được giao
+  const isOfficer = currentUser?.role === 'OFFICER';
+  useEffect(() => {
+    if (isOfficer) {
+      if (scanMode !== 'room') {
+        dispatch(setScanMode('room'));
+      }
+      if (currentUser?.zoneId && selectedZoneId !== currentUser.zoneId) {
+        dispatch(setSelectedZoneId(currentUser.zoneId));
+      }
+    }
+  }, [isOfficer, scanMode, selectedZoneId, currentUser?.zoneId, dispatch]);
 
   // Kiosk Mode States
   const [kioskExitModalVisible, setKioskExitModalVisible] = useState(false);
@@ -350,12 +373,47 @@ const TabletDetectorScreen: React.FC<TabletDetectorScreenProps> = ({
 
   // Pre-warm embeddings for target profiles when engine is ready or targetProfiles change
   useEffect(() => {
+    let isCancelled = false;
     YoloDetectorService.initialize().then(async ready => {
       console.log('[TabletDetectorScreen] YOLO Engine ready:', ready);
       if (ready && targetProfiles.length > 0) {
-        await YoloDetectorService.warmupRoomEmbeddings(targetProfiles);
+        setIsFaceDataReady(false);
+        setFaceSyncProgress({
+          current: 0,
+          total: targetProfiles.length,
+          profileName: targetProfiles[0]?.fullName || '',
+        });
+        setFaceSyncModalVisible(true);
+
+        await YoloDetectorService.warmupRoomEmbeddings(
+          targetProfiles,
+          (current, total, profileName) => {
+            if (isCancelled) return;
+            setFaceSyncProgress({
+              current,
+              total,
+              profileName: profileName || '',
+            });
+          },
+        );
+
+        if (!isCancelled) {
+          setIsFaceDataReady(true);
+          // Cho phép xem hoàn thành 100% trong 600ms rồi đóng mượt mà
+          setTimeout(() => {
+            if (!isCancelled) {
+              setFaceSyncModalVisible(false);
+            }
+          }, 600);
+        }
+      } else {
+        setIsFaceDataReady(true);
       }
     });
+
+    return () => {
+      isCancelled = true;
+    };
   }, [targetProfiles]);
 
   // Real-time Session Duration Timer: ticks every second when session is running
@@ -410,6 +468,10 @@ const TabletDetectorScreen: React.FC<TabletDetectorScreenProps> = ({
   const handleScanDetection = useCallback(
     async (providedPhotoPath?: string) => {
       if (!isSessionRunningRef.current) return;
+      if (!isFaceDataReady && YoloDetectorService.isWarmingUp()) {
+        scheduleNextScan(400);
+        return;
+      }
       if (isScanningRef.current) return;
       isScanningRef.current = true;
       let photoPath = providedPhotoPath;
@@ -450,15 +512,9 @@ const TabletDetectorScreen: React.FC<TabletDetectorScreenProps> = ({
               u => u.id === realResult.userId,
             );
 
-            // Quy tắc nghiệp vụ: Chế độ Quét All (Xác nhận vào cơ sở) tự động BỎ QUA người thân nhân
-            if (scanMode === 'all' && matchedProfile?.isVisitor) {
-              console.log(
-                '[TabletDetector] Quét All: Bỏ qua người thân nhân:',
-                matchedProfile.fullName,
-              );
-              scheduleNextScan(120);
-              return;
-            }
+            const isVisitor = Boolean(matchedProfile?.isVisitor);
+            const visitedProfileName =
+              matchedProfile?.visitedProfile?.fullName || undefined;
 
             const userRoomId =
               matchedProfile?.roomId ||
@@ -468,7 +524,7 @@ const TabletDetectorScreen: React.FC<TabletDetectorScreenProps> = ({
               (scanMode === 'room' ? selectedZoneId : undefined);
             const userRoom = rooms.find(r => r.id === userRoomId);
             const userZone = zones.find(z => z.id === userZoneId);
-            const deptName = userRoom?.name || 'Phòng ban khác';
+            const deptName = userRoom?.name || (isVisitor ? 'Khách thăm' : 'Toàn cơ sở');
 
             // Record into Redux scanHistory list with IN/OUT timestamps & scan counts
             dispatch(
@@ -477,7 +533,9 @@ const TabletDetectorScreen: React.FC<TabletDetectorScreenProps> = ({
                 fullName: realResult.fullName,
                 code: realResult.code,
                 roomId: userRoom?.id,
-                roomName: userRoom?.name,
+                roomName: isVisitor
+                  ? `Khách thăm (${visitedProfileName ? `gặp ${visitedProfileName}` : 'Thân nhân'})`
+                  : userRoom?.name,
                 zoneId: userZone?.id,
                 zoneName: userZone?.name,
                 avatarUri: realResult.avatarUri,
@@ -486,8 +544,8 @@ const TabletDetectorScreen: React.FC<TabletDetectorScreenProps> = ({
                 timestamp: realResult.timestamp,
                 scanMode,
                 direction: scanDirection,
-                isVisitor: matchedProfile?.isVisitor,
-                visitedProfileName: matchedProfile?.visitedProfile?.fullName,
+                isVisitor,
+                visitedProfileName,
               }),
             );
 
@@ -1326,6 +1384,16 @@ const TabletDetectorScreen: React.FC<TabletDetectorScreenProps> = ({
         onUnlocked={() => {
           setDeviceInfoModalVisible(false);
         }}
+      />
+
+      {/* Face Biometric Embeddings Sync Progress Modal */}
+      <FaceSyncModal
+        visible={faceSyncModalVisible}
+        current={faceSyncProgress.current}
+        total={faceSyncProgress.total}
+        currentProfileName={faceSyncProgress.profileName}
+        scanMode={scanMode}
+        onDismiss={() => setFaceSyncModalVisible(false)}
       />
 
       {/* Kiosk Mode Exit PIN Modal */}

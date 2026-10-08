@@ -43,8 +43,21 @@ export class YoloDetectorService {
    */
   public static async warmupRoomEmbeddings(
     roomProfiles: UserProfile[],
+    onProgress?: (
+      current: number,
+      total: number,
+      profileName?: string,
+      isCached?: boolean,
+    ) => void,
   ): Promise<void> {
-    await TfliteYoloService.warmupRoomEmbeddings(roomProfiles);
+    await TfliteYoloService.warmupRoomEmbeddings(roomProfiles, onProgress);
+  }
+
+  /**
+   * Returns whether biometric warmup is currently in progress
+   */
+  public static isWarmingUp(): boolean {
+    return TfliteYoloService.isWarmingUp();
   }
 
   /**
