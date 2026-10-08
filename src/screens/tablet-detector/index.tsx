@@ -68,6 +68,10 @@ import {
 } from '../../services/api';
 import { deviceIdService } from '../../services/device-id-service';
 import { deleteTempFile } from '../../utils/file-cleaner';
+import {
+  PermissionDeniedModal,
+  PermissionDeniedType,
+} from '../../components/permission-denied-modal';
 
 interface TabletDetectorScreenProps {
   isTabFocused?: boolean;
@@ -163,6 +167,19 @@ const TabletDetectorScreen: React.FC<TabletDetectorScreenProps> = ({
     total: 0,
     profileName: '',
   });
+
+  // Permission Denied Modal State
+  const [deniedModal, setDeniedModal] = useState<{
+    visible: boolean;
+    type: PermissionDeniedType;
+    title: string;
+    message: string;
+  }>({
+    visible: false,
+    type: 'general',
+    title: '',
+    message: '',
+  });
   const [isFaceDataReady, setIsFaceDataReady] = useState(false);
 
   // Role Enforcement: Officer chỉ có quyền điểm danh theo phòng thuộc khu được giao
@@ -172,11 +189,28 @@ const TabletDetectorScreen: React.FC<TabletDetectorScreenProps> = ({
       if (scanMode !== 'room') {
         dispatch(setScanMode('room'));
       }
-      if (currentUser?.zoneId && selectedZoneId !== currentUser.zoneId) {
-        dispatch(setSelectedZoneId(currentUser.zoneId));
+      if (currentUser?.zoneId) {
+        if (selectedZoneId !== currentUser.zoneId) {
+          dispatch(setSelectedZoneId(currentUser.zoneId));
+        }
+        const validRooms = (rooms || []).filter(
+          r => r.zoneId === currentUser.zoneId,
+        );
+        const isRoomValid = validRooms.some(r => r.id === selectedRoomId);
+        if (!isRoomValid && validRooms.length > 0) {
+          dispatch(setSelectedRoomId(validRooms[0].id));
+        }
       }
     }
-  }, [isOfficer, scanMode, selectedZoneId, currentUser?.zoneId, dispatch]);
+  }, [
+    isOfficer,
+    scanMode,
+    selectedZoneId,
+    selectedRoomId,
+    currentUser?.zoneId,
+    rooms,
+    dispatch,
+  ]);
 
   // Kiosk Mode States
   const [kioskExitModalVisible, setKioskExitModalVisible] = useState(false);
@@ -246,12 +280,23 @@ const TabletDetectorScreen: React.FC<TabletDetectorScreenProps> = ({
   // Camera Facing
   const [cameraFacing, setCameraFacing] = useState<'front' | 'back'>('front');
 
-  const selectedZone = zones.find(z => z.id === selectedZoneId) || zones[0];
-  const selectedRoom = rooms.find(r => r.id === selectedRoomId) || rooms[0];
+  const availableZones =
+    isOfficer && currentUser?.zoneId
+      ? (zones || []).filter(z => z.id === currentUser.zoneId)
+      : zones || [];
+  const selectedZone =
+    availableZones.find(z => z.id === selectedZoneId) || availableZones[0];
   const effectiveZoneId =
-    selectedZoneId || selectedZone?.id || zones[0]?.id || '';
+    selectedZoneId || selectedZone?.id || availableZones[0]?.id || '';
+
+  const roomsInSelectedZone = (rooms || []).filter(
+    r => r.zoneId === effectiveZoneId,
+  );
+  const selectedRoom =
+    roomsInSelectedZone.find(r => r.id === selectedRoomId) ||
+    roomsInSelectedZone[0];
   const effectiveRoomId =
-    selectedRoomId || selectedRoom?.id || rooms[0]?.id || '';
+    selectedRoom?.id || selectedRoomId || roomsInSelectedZone[0]?.id || '';
 
   // 1. Lấy tất cả ID phòng thuộc khu vực đang chọn
   const roomIdsInZone = useMemo(
@@ -959,6 +1004,24 @@ const TabletDetectorScreen: React.FC<TabletDetectorScreenProps> = ({
         isRoomMode || isZoneMode
           ? selectedZone?.id || effectiveZoneId
           : undefined;
+
+      // 1. Phân quyền: Cán bộ khu vực chỉ được mở phiên thuộc khu vực mình quản lý
+      if (
+        isOfficer &&
+        currentUser?.zoneId &&
+        actualZoneId &&
+        actualZoneId !== currentUser.zoneId
+      ) {
+        setDeniedModal({
+          visible: true,
+          type: 'zone_restricted',
+          title: 'Khu vực không thuộc thẩm quyền',
+          message:
+            'Tài khoản Cán bộ khu vực chỉ được phép mở phiên điểm danh cho các phòng thuộc khu vực được phân công quản lý.',
+        });
+        return;
+      }
+
       const payload = {
         name: sessionName,
         scanMode,
@@ -988,9 +1051,45 @@ const TabletDetectorScreen: React.FC<TabletDetectorScreenProps> = ({
       );
     } catch (err: unknown) {
       console.log(
-        '[TabletDetectorScreen] BE start session error, running offline session:',
+        '[TabletDetectorScreen] BE start session error:',
         (err as Error)?.message || err,
       );
+      const errMsg = (err as Error)?.message || 'Lỗi khởi tạo phiên điểm danh';
+      const isForbidden =
+        errMsg.includes('403') ||
+        errMsg.includes('Thiết bị') ||
+        errMsg.includes('DEVICE_UNAUTHORIZED') ||
+        errMsg.includes('DEVICE_ID_REQUIRED') ||
+        errMsg.includes('KIOSK_DEVICE_REQUIRED') ||
+        errMsg.includes('quyền') ||
+        errMsg.includes('phân công') ||
+        errMsg.includes('cho phép');
+
+      if (isForbidden) {
+        const isDeviceBlocked =
+          errMsg.includes('Thiết bị') ||
+          errMsg.includes('DEVICE_UNAUTHORIZED') ||
+          errMsg.includes('DEVICE_ID_REQUIRED') ||
+          errMsg.includes('KIOSK');
+        if (isDeviceBlocked) {
+          dispatch(
+            setDeviceAuthorized({
+              authorized: false,
+              message: errMsg,
+            }),
+          );
+        } else {
+          setDeniedModal({
+            visible: true,
+            type: 'role_forbidden',
+            title: 'Tài khoản không được phép',
+            message: errMsg,
+          });
+        }
+        return; // KHÔNG tự ý chạy phiên offline khi bị từ chối quyền!
+      }
+
+      // Chỉ chạy phiên ngoại tuyến khi gặp sự cố mạng thuần túy
       const isRoomMode = scanMode === 'room';
       const actualRoomId = isRoomMode
         ? selectedRoom?.id || effectiveRoomId
@@ -1002,9 +1101,9 @@ const TabletDetectorScreen: React.FC<TabletDetectorScreenProps> = ({
           roomId: actualRoomId,
         }),
       );
-      showSuccessToast(
-        'Bắt đầu (Offline)',
-        `Đang chạy phiên cục bộ: ${sessionName}`,
+      showWarnToast(
+        'Bắt đầu (Mất kết nối)',
+        `Đang chạy phiên cục bộ offline: ${sessionName}`,
       );
     }
   };
@@ -1018,16 +1117,37 @@ const TabletDetectorScreen: React.FC<TabletDetectorScreenProps> = ({
         {
           text: 'Kết thúc',
           style: 'destructive',
-          onPress: () => {
+          onPress: async () => {
             if (activeSessionId) {
-              sessionService
-                .endSession(activeSessionId, new Date().toISOString())
-                .catch(err => {
-                  console.log(
-                    '[TabletDetector] Failed to end session on BE:',
-                    err,
-                  );
-                });
+              try {
+                await sessionService.endSession(
+                  activeSessionId,
+                  new Date().toISOString(),
+                );
+              } catch (err: unknown) {
+                console.log(
+                  '[TabletDetector] Failed to end session on BE:',
+                  err,
+                );
+                const errMsg = (err as Error)?.message || '';
+                const isForbidden =
+                  errMsg.includes('403') ||
+                  errMsg.includes('DEVICE_UNAUTHORIZED') ||
+                  errMsg.includes('KIOSK_DEVICE_REQUIRED') ||
+                  errMsg.includes('quyền') ||
+                  errMsg.includes('cho phép');
+                if (isForbidden) {
+                  setDeniedModal({
+                    visible: true,
+                    type: 'device_unauthorized',
+                    title: 'Không thể kết thúc phiên trên máy chủ',
+                    message:
+                      errMsg ||
+                      'Chỉ thiết bị máy quét điểm danh chuyên dụng (KIOSK) đã được phê duyệt mới được phép kết thúc phiên.',
+                  });
+                  return;
+                }
+              }
             }
             dispatch(endSession());
             showSuccessToast('Kết thúc phiên', 'Phiên quét đã được hoàn tất!');
@@ -1037,30 +1157,30 @@ const TabletDetectorScreen: React.FC<TabletDetectorScreenProps> = ({
     );
   };
 
-  const zonePickerItems = (zones || []).map(z => ({
+  const zonePickerItems = availableZones.map(z => ({
     id: z.id,
     label: z.name,
     subtitle: z.description,
   }));
 
-  const filteredRooms = (rooms || []).filter(
-    r => !selectedZoneId || r.zoneId === selectedZoneId,
-  );
-  // If no rooms match selected zone, show all available rooms so picker isn't empty
-  const availableRooms = filteredRooms.length > 0 ? filteredRooms : rooms || [];
-
-  const roomPickerItems = [
-    {
-      id: 'all_mode_option',
-      label: 'Tất cả phòng ban (Quét All - Vào cơ sở)',
-      subtitle: `Xác nhận vào cơ sở (${(userProfiles || []).length} nhân sự)`,
-    },
-    ...availableRooms.map(r => ({
-      id: r.id,
-      label: r.name,
-      subtitle: `Sức chứa ${r.capacity || 30} người`,
-    })),
-  ];
+  const roomPickerItems = isOfficer
+    ? roomsInSelectedZone.map(r => ({
+        id: r.id,
+        label: r.name,
+        subtitle: `Sức chứa ${r.capacity || 30} người`,
+      }))
+    : [
+        {
+          id: 'all_mode_option',
+          label: 'Tất cả phòng ban (Quét All - Vào cơ sở)',
+          subtitle: `Xác nhận vào cơ sở (${(userProfiles || []).length} nhân sự)`,
+        },
+        ...(roomsInSelectedZone.length > 0 ? roomsInSelectedZone : rooms || []).map(r => ({
+          id: r.id,
+          label: r.name,
+          subtitle: `Sức chứa ${r.capacity || 30} người`,
+        })),
+      ];
 
   return (
     <SafeAreaView style={styles.safeArea}>
@@ -1413,6 +1533,18 @@ const TabletDetectorScreen: React.FC<TabletDetectorScreenProps> = ({
           pointerEvents="auto"
         />
       )}
+
+      {/* Permission Denied Modal */}
+      <PermissionDeniedModal
+        visible={deniedModal.visible}
+        type={deniedModal.type}
+        title={deniedModal.title}
+        message={deniedModal.message}
+        deviceId={deviceIdService.getDeviceId()}
+        userRole={currentUser?.role}
+        onClose={() => setDeniedModal(prev => ({ ...prev, visible: false }))}
+        onOpenDeviceInfo={() => setDeviceInfoModalVisible(true)}
+      />
     </SafeAreaView>
   );
 };

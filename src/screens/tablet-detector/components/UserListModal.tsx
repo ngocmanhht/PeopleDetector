@@ -51,15 +51,27 @@ export const UserListModal: React.FC<UserListModalProps> = ({
     isSessionActive,
   } = useAppSelector(state => state.detector);
   const currentUser = useAppSelector(state => state.app.currentUser);
+  const isOfficer = currentUser?.role === 'OFFICER';
   const isGuard = currentUser?.role === 'GUARD';
 
   const [search, setSearch] = useState('');
 
-  const currentZone = zones.find(z => z.id === selectedZoneId);
-  const currentRoom = rooms.find(r => r.id === selectedRoomId);
+  const availableZones =
+    isOfficer && currentUser?.zoneId
+      ? (zones || []).filter(z => z.id === currentUser.zoneId)
+      : zones || [];
+  const currentZone =
+    availableZones.find(z => z.id === selectedZoneId) || availableZones[0];
+  const roomsInCurrentZone = (rooms || []).filter(
+    r => r.zoneId === currentZone?.id,
+  );
+  const currentRoom =
+    roomsInCurrentZone.find(r => r.id === selectedRoomId) ||
+    roomsInCurrentZone[0];
 
   // Filter users by selected room
-  const usersInRoom = userProfiles.filter(u => u.roomId === selectedRoomId);
+  const targetRoomId = currentRoom?.id || selectedRoomId;
+  const usersInRoom = (userProfiles || []).filter(u => u.roomId === targetRoomId);
 
   const filteredUsers = usersInRoom.filter(
     u =>

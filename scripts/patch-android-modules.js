@@ -194,3 +194,68 @@ if (fs.existsSync(nitroImagePath)) {
     console.log('[Patch] Successfully patched react-native-nitro-image HybridImage.kt');
   }
 }
+
+// 4. Pre-populate NitroModules exported headers for CMake/Prefab sync
+const nitroBuildHeadersDir = path.join(
+  rootDir,
+  'node_modules/react-native-nitro-modules/android/build/headers/nitromodules/NitroModules'
+);
+fs.mkdirSync(nitroBuildHeadersDir, { recursive: true });
+
+function copyHeadersRecursively(srcDir, destDir) {
+  if (!fs.existsSync(srcDir)) return;
+  const entries = fs.readdirSync(srcDir, { withFileTypes: true });
+  for (const entry of entries) {
+    const srcPath = path.join(srcDir, entry.name);
+    const destPath = path.join(destDir, entry.name);
+    if (entry.isDirectory()) {
+      fs.mkdirSync(destPath, { recursive: true });
+      copyHeadersRecursively(srcPath, destPath);
+    } else if (entry.name.endsWith('.hpp') || entry.name.endsWith('.h')) {
+      fs.copyFileSync(srcPath, destPath);
+    }
+  }
+}
+copyHeadersRecursively(
+  path.join(rootDir, 'node_modules/react-native-nitro-modules/cpp'),
+  nitroBuildHeadersDir
+);
+copyHeadersRecursively(
+  path.join(rootDir, 'node_modules/react-native-nitro-modules/android/src/main/cpp'),
+  nitroBuildHeadersDir
+);
+console.log('[Patch] Pre-populated NitroModules prefab headers for CMake');
+
+// 5. Pre-extract LiteRT AAR libraries for react-native-fast-tflite CMake
+const tfliteLibDir = path.join(
+  rootDir,
+  'node_modules/react-native-fast-tflite/android/src/main/cpp/lib/litert'
+);
+const sampleSo = path.join(tfliteLibDir, 'jni/x86/libtensorflowlite_jni.so');
+if (!fs.existsSync(sampleSo)) {
+  fs.mkdirSync(tfliteLibDir, { recursive: true });
+  const homeDir = process.env.HOME || process.env.USERPROFILE || '';
+  const gradleCache = path.join(
+    homeDir,
+    '.gradle/caches/modules-2/files-2.1/com.google.ai.edge.litert'
+  );
+  if (fs.existsSync(gradleCache)) {
+    const { execSync } = require('child_process');
+    try {
+      const aars = execSync(`find "${gradleCache}" -name "*.aar"`, {
+        encoding: 'utf8',
+      })
+        .trim()
+        .split('\n');
+      for (const aar of aars) {
+        if (aar && fs.existsSync(aar)) {
+          execSync(`unzip -o -q "${aar}" "jni/*" "headers/*" -d "${tfliteLibDir}"`);
+        }
+      }
+      console.log('[Patch] Pre-extracted LiteRT AAR binaries and headers for CMake');
+    } catch (e) {
+      console.warn('[Patch] Note: could not pre-extract LiteRT AARs:', e.message);
+    }
+  }
+}
+

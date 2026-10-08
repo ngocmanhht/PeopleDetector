@@ -16,6 +16,7 @@ import {
   setTargetFps,
   setSoundEnabled,
   setAutoSessionReset,
+  resetAllData,
 } from '../../store/slices/detectorSlice';
 import { useCustomNavigation } from '../../hooks/use-custom-navigation';
 import { appScreens } from '../../const/app-screens';
@@ -129,6 +130,7 @@ export const SettingsScreen: React.FC = () => {
                 console.log('[Settings] Logout error on BE:', err);
               });
             }
+            dispatch(resetAllData());
             dispatch(logout());
             navigation.reset({
               index: 0,

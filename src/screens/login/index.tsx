@@ -33,6 +33,10 @@ import { appColors } from '../../const/app-colors';
 import { authService } from '../../services/api';
 import { appImages } from '../../const/app-images';
 import { deviceIdService } from '../../services/device-id-service';
+import {
+  PermissionDeniedModal,
+  PermissionDeniedType,
+} from '../../components/permission-denied-modal';
 
 export const LoginScreen = () => {
   const dispatch = useAppDispatch();
@@ -42,6 +46,17 @@ export const LoginScreen = () => {
   const [email, setEmail] = useState('admin@cscns2.ag');
   const [password, setPassword] = useState('Aa@123456');
   const [showPassword, setShowPassword] = useState(false);
+  const [deniedModal, setDeniedModal] = useState<{
+    visible: boolean;
+    type: PermissionDeniedType;
+    title: string;
+    message: string;
+  }>({
+    visible: false,
+    type: 'general',
+    title: '',
+    message: '',
+  });
 
   // Real Backend API Login with JWT & Refresh Token support
   // Loading and error toast are automatically handled by queryClient default options
@@ -71,6 +86,38 @@ export const LoginScreen = () => {
         index: 0,
         routes: [{ name: appScreens.Authenticated as never }],
       });
+    },
+    onError: (err: unknown) => {
+      const errMsg = (err as Error)?.message || 'Đăng nhập không thành công';
+      const isDeviceBlocked =
+        errMsg.includes('Thiết bị') ||
+        errMsg.includes('DEVICE_UNAUTHORIZED') ||
+        errMsg.includes('DEVICE_ID_REQUIRED') ||
+        errMsg.includes('cấp quyền') ||
+        errMsg.includes('allowed_devices') ||
+        errMsg.includes('403');
+
+      if (isDeviceBlocked) {
+        setDeniedModal({
+          visible: true,
+          type: 'device_unauthorized',
+          title: 'Thiết bị chưa được cấp quyền',
+          message: errMsg,
+        });
+      } else if (
+        errMsg.includes('vô hiệu hóa') ||
+        errMsg.includes('khóa') ||
+        errMsg.includes('không có quyền')
+      ) {
+        setDeniedModal({
+          visible: true,
+          type: 'role_forbidden',
+          title: 'Tài khoản không được phép',
+          message: errMsg,
+        });
+      } else {
+        showErrorToast(errMsg);
+      }
     },
   });
 
@@ -263,6 +310,15 @@ export const LoginScreen = () => {
           </View>
         )}
       </KeyboardAvoidingView>
+
+      <PermissionDeniedModal
+        visible={deniedModal.visible}
+        type={deniedModal.type}
+        title={deniedModal.title}
+        message={deniedModal.message}
+        deviceId={deviceId}
+        onClose={() => setDeniedModal(prev => ({ ...prev, visible: false }))}
+      />
     </SafeAreaView>
   );
 };

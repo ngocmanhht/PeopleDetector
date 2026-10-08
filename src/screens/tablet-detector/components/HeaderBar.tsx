@@ -23,6 +23,11 @@ import { useResponsive } from '../../../hooks/use-responsive';
 import { StartSessionModal } from './StartSessionModal';
 import { YoloDetectorService } from '../../../services/yolo-detector';
 import { RefreshButton } from '../../../components/refresh-button';
+import {
+  PermissionDeniedModal,
+  PermissionDeniedType,
+} from '../../../components/permission-denied-modal';
+import { deviceIdService } from '../../../services/device-id-service';
 
 interface HeaderBarProps {
   onOpenManageRooms: () => void;
@@ -69,6 +74,17 @@ export const HeaderBar: React.FC<HeaderBarProps> = ({
 
   const { showWarnToast, showSuccessToast } = useAppToast();
   const [showStartSessionModal, setShowStartSessionModal] = useState(false);
+  const [deniedModal, setDeniedModal] = useState<{
+    visible: boolean;
+    type: PermissionDeniedType;
+    title: string;
+    message: string;
+  }>({
+    visible: false,
+    type: 'general',
+    title: '',
+    message: '',
+  });
 
   const [activeModel, setActiveModel] = useState<
     'mobilefacenet' | 'ghostfacenet'
@@ -106,10 +122,21 @@ export const HeaderBar: React.FC<HeaderBarProps> = ({
     return () => clearInterval(timer);
   }, []);
 
-  const selectedZone = zones.find(z => z.id === selectedZoneId) || zones[0];
-  const selectedRoom = rooms.find(r => r.id === selectedRoomId) || rooms[0];
+  const availableZones =
+    isOfficer && currentUser?.zoneId
+      ? (zones || []).filter(z => z.id === currentUser.zoneId)
+      : zones || [];
+  const selectedZone =
+    availableZones.find(z => z.id === selectedZoneId) || availableZones[0];
   const effectiveZoneId =
-    selectedZoneId || selectedZone?.id || zones[0]?.id || '';
+    selectedZoneId || selectedZone?.id || availableZones[0]?.id || '';
+
+  const roomsInSelectedZone = (rooms || []).filter(
+    r => r.zoneId === effectiveZoneId,
+  );
+  const selectedRoom =
+    roomsInSelectedZone.find(r => r.id === selectedRoomId) ||
+    roomsInSelectedZone[0];
 
   const zoneRoomIds = useMemo(
     () =>
@@ -163,6 +190,24 @@ export const HeaderBar: React.FC<HeaderBarProps> = ({
         isRoomMode || isZoneMode
           ? selectedZone?.id || effectiveZoneId
           : undefined;
+
+      // 1. Phân quyền: Cán bộ khu vực chỉ được mở phiên thuộc khu vực mình quản lý
+      if (
+        isOfficer &&
+        currentUser?.zoneId &&
+        actualZoneId &&
+        actualZoneId !== currentUser.zoneId
+      ) {
+        setDeniedModal({
+          visible: true,
+          type: 'zone_restricted',
+          title: 'Khu vực không thuộc thẩm quyền',
+          message:
+            'Tài khoản Cán bộ khu vực chỉ được phép mở phiên điểm danh cho các phòng thuộc khu vực được phân công quản lý.',
+        });
+        return;
+      }
+
       const payload = {
         name: sessionName,
         scanMode,
@@ -192,9 +237,38 @@ export const HeaderBar: React.FC<HeaderBarProps> = ({
       );
     } catch (err: unknown) {
       console.log(
-        '[HeaderBar] BE start session error, running offline session:',
+        '[HeaderBar] BE start session error:',
         (err as Error)?.message || err,
       );
+      const errMsg = (err as Error)?.message || 'Lỗi khởi tạo phiên điểm danh';
+      const isForbidden =
+        errMsg.includes('403') ||
+        errMsg.includes('Thiết bị') ||
+        errMsg.includes('DEVICE_UNAUTHORIZED') ||
+        errMsg.includes('DEVICE_ID_REQUIRED') ||
+        errMsg.includes('KIOSK_DEVICE_REQUIRED') ||
+        errMsg.includes('quyền') ||
+        errMsg.includes('phân công') ||
+        errMsg.includes('cho phép');
+
+      if (isForbidden) {
+        const isDeviceBlocked =
+          errMsg.includes('Thiết bị') ||
+          errMsg.includes('DEVICE_UNAUTHORIZED') ||
+          errMsg.includes('DEVICE_ID_REQUIRED') ||
+          errMsg.includes('KIOSK');
+        setDeniedModal({
+          visible: true,
+          type: isDeviceBlocked ? 'device_unauthorized' : 'role_forbidden',
+          title: isDeviceBlocked
+            ? 'Thiết bị chưa được cấp quyền'
+            : 'Tài khoản không được phép',
+          message: errMsg,
+        });
+        return; // KHÔNG tự ý chạy phiên offline khi bị từ chối quyền!
+      }
+
+      // Chỉ chạy phiên ngoại tuyến khi gặp sự cố mạng thuần túy
       const isRoomMode = scanMode === 'room';
       const actualRoomId = isRoomMode ? selectedRoom?.id : undefined;
       dispatch(
@@ -204,9 +278,9 @@ export const HeaderBar: React.FC<HeaderBarProps> = ({
           roomId: actualRoomId,
         }),
       );
-      showSuccessToast(
-        'Bắt đầu (Offline)',
-        `Đang chạy phiên cục bộ: ${sessionName}`,
+      showWarnToast(
+        'Bắt đầu (Mất kết nối)',
+        `Đang chạy phiên cục bộ offline: ${sessionName}`,
       );
     }
   };
@@ -529,6 +603,17 @@ export const HeaderBar: React.FC<HeaderBarProps> = ({
           memberCount={targetMemberCount}
           onClose={() => setShowStartSessionModal(false)}
           onStart={handleStartSessionConfirm}
+        />
+
+        <PermissionDeniedModal
+          visible={deniedModal.visible}
+          type={deniedModal.type}
+          title={deniedModal.title}
+          message={deniedModal.message}
+          deviceId={deviceIdService.getDeviceId()}
+          userRole={currentUser?.role}
+          onClose={() => setDeniedModal(prev => ({ ...prev, visible: false }))}
+          onOpenDeviceInfo={onOpenDeviceInfo}
         />
       </View>
     );
@@ -863,6 +948,17 @@ export const HeaderBar: React.FC<HeaderBarProps> = ({
         memberCount={targetMemberCount}
         onClose={() => setShowStartSessionModal(false)}
         onStart={handleStartSessionConfirm}
+      />
+
+      <PermissionDeniedModal
+        visible={deniedModal.visible}
+        type={deniedModal.type}
+        title={deniedModal.title}
+        message={deniedModal.message}
+        deviceId={deviceIdService.getDeviceId()}
+        userRole={currentUser?.role}
+        onClose={() => setDeniedModal(prev => ({ ...prev, visible: false }))}
+        onOpenDeviceInfo={onOpenDeviceInfo}
       />
     </View>
   );

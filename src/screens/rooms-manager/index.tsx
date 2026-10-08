@@ -109,30 +109,64 @@ export const RoomsManagerScreen: React.FC = () => {
 
   const currentZone =
     availableZones.find(z => z.id === selectedZoneId) || availableZones[0];
-  const currentRoom = rooms.find(r => r.id === selectedRoomId) || rooms[0];
-
-  // Auto set zone for officer if needed
-  React.useEffect(() => {
-    if (isOfficer && currentUser?.zoneId && selectedZoneId !== currentUser.zoneId) {
-      dispatch(setSelectedZoneId(currentUser.zoneId));
-    }
-  }, [isOfficer, currentUser?.zoneId, selectedZoneId, dispatch]);
 
   // Rooms in currently selected zone
-  const roomsInCurrentZone = rooms.filter(r => r.zoneId === currentZone?.id);
+  const roomsInCurrentZone = (rooms || []).filter(
+    r => r.zoneId === currentZone?.id,
+  );
+
+  const currentRoom =
+    roomsInCurrentZone.find(r => r.id === selectedRoomId) ||
+    roomsInCurrentZone[0];
+
+  // Auto set zone & room for officer or when zone changes
+  React.useEffect(() => {
+    if (isOfficer && currentUser?.zoneId) {
+      if (selectedZoneId !== currentUser.zoneId) {
+        dispatch(setSelectedZoneId(currentUser.zoneId));
+      }
+      const validRooms = (rooms || []).filter(
+        r => r.zoneId === currentUser.zoneId,
+      );
+      const isRoomValid = validRooms.some(r => r.id === selectedRoomId);
+      if (!isRoomValid && validRooms.length > 0) {
+        dispatch(setSelectedRoomId(validRooms[0].id));
+      }
+    } else if (currentZone?.id) {
+      const validRooms = (rooms || []).filter(
+        r => r.zoneId === currentZone.id,
+      );
+      const isRoomValid = validRooms.some(r => r.id === selectedRoomId);
+      if (!isRoomValid && validRooms.length > 0) {
+        dispatch(setSelectedRoomId(validRooms[0].id));
+      }
+    }
+  }, [
+    isOfficer,
+    currentUser?.zoneId,
+    selectedZoneId,
+    selectedRoomId,
+    currentZone?.id,
+    rooms,
+    dispatch,
+  ]);
 
   // Users in currently selected room
-  const usersInRoom = userProfiles.filter(u => u.roomId === currentRoom?.id);
-
-  // Sessions in currently selected room (plus all-mode campus sessions and zone-mode sessions)
-  const currentRoomSessions = (sessions || []).filter(
-    s =>
-      s.roomId === currentRoom?.id ||
-      s.scanMode === 'all' ||
-      s.roomId === 'all' ||
-      (s.scanMode === 'zone' &&
-        (s.zoneId === currentZone?.id || s.zoneId === currentRoom?.zoneId)),
+  const usersInRoom = (userProfiles || []).filter(
+    u => u.roomId === currentRoom?.id,
   );
+
+  // Sessions in currently selected room (plus zone-mode sessions)
+  const currentRoomSessions = (sessions || []).filter(s => {
+    if (isOfficer && currentUser?.zoneId && s.zoneId && s.zoneId !== currentUser.zoneId) {
+      return false;
+    }
+    return (
+      s.roomId === currentRoom?.id ||
+      (s.scanMode === 'zone' &&
+        (s.zoneId === currentZone?.id || s.zoneId === currentRoom?.zoneId))
+    );
+  });
 
   const filteredUsers = usersInRoom.filter(
     u =>
@@ -152,13 +186,11 @@ export const RoomsManagerScreen: React.FC = () => {
     subtitle: z.description,
   }));
 
-  const roomPickerItems = rooms
-    .filter(r => r.zoneId === (currentZone?.id || selectedZoneId))
-    .map(r => ({
-      id: r.id,
-      label: r.name,
-      subtitle: `Sức chứa ${r.capacity || 30} người`,
-    }));
+  const roomPickerItems = roomsInCurrentZone.map(r => ({
+    id: r.id,
+    label: r.name,
+    subtitle: `Sức chứa ${r.capacity || 30} người`,
+  }));
 
   const handleDeleteSession = (sessionId: string, sessionName: string) => {
     Alert.alert(

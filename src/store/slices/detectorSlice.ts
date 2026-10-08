@@ -84,6 +84,10 @@ const detectorSlice = createSlice({
       const isValid = state.zones.some(z => z.id === state.selectedZoneId);
       if (!isValid && state.zones.length > 0) {
         state.selectedZoneId = state.zones[0].id;
+        const roomsInZone = state.rooms.filter(r => r.zoneId === state.zones[0].id);
+        if (roomsInZone.length > 0) {
+          state.selectedRoomId = roomsInZone[0].id;
+        }
       }
     },
     setRooms: (state, action: PayloadAction<Room[]>) => {
@@ -92,12 +96,12 @@ const detectorSlice = createSlice({
         r => !remoteIds.has(r.id) && r.id.startsWith('room-'),
       );
       state.rooms = [...action.payload, ...localOnly];
-      const isValid = state.rooms.some(r => r.id === state.selectedRoomId);
-      if (!isValid && state.rooms.length > 0) {
-        const inZone = state.selectedZoneId
-          ? state.rooms.find(r => r.zoneId === state.selectedZoneId)
-          : null;
-        state.selectedRoomId = inZone?.id || state.rooms[0].id;
+      const roomsInCurrentZone = state.selectedZoneId
+        ? state.rooms.filter(r => r.zoneId === state.selectedZoneId)
+        : state.rooms;
+      const isValid = roomsInCurrentZone.some(r => r.id === state.selectedRoomId);
+      if (!isValid && roomsInCurrentZone.length > 0) {
+        state.selectedRoomId = roomsInCurrentZone[0].id;
       }
     },
     setUserProfiles: (state, action: PayloadAction<UserProfile[]>) => {
