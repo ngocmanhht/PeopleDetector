@@ -9,7 +9,7 @@ import { appUtils } from '../utils';
 import { Platform } from 'react-native';
 
 // Persistent MMKV storage for pre-computed 512-d biometric embeddings
-const faceEmbeddingStorage = createMMKV({ id: 'face-embeddings-cache-v8' });
+const faceEmbeddingStorage = createMMKV({ id: 'face-embeddings-cache-v9' });
 
 export interface CachedProfileEmbedding {
   userId: string;
@@ -812,6 +812,7 @@ export class TfliteYoloService {
     outputBuffer: ArrayBuffer,
     origWidth: number,
     origHeight: number,
+    minConfidence: number = 0.4,
   ): YoloFaceDetection[] {
     try {
       const data = new Float32Array(outputBuffer);
@@ -820,7 +821,7 @@ export class TfliteYoloService {
 
       const NUM_ANCHORS = 8400;
       const CONF_CHANNEL_OFFSET = 4 * NUM_ANCHORS;
-      const CONFIDENCE_THRESHOLD = 0.4; // Filter out low-confidence blurry artifacts and edge noise
+      const CONFIDENCE_THRESHOLD = minConfidence; // Filter out low-confidence blurry artifacts and edge noise
 
       interface RawFaceCandidate {
         anchor: number;
@@ -934,8 +935,14 @@ export class TfliteYoloService {
     outputBuffer: ArrayBuffer,
     origWidth: number,
     origHeight: number,
+    minConfidence: number = 0.4,
   ): YoloFaceDetection | null {
-    const all = this.parseAllYoloFaces(outputBuffer, origWidth, origHeight);
+    const all = this.parseAllYoloFaces(
+      outputBuffer,
+      origWidth,
+      origHeight,
+      minConfidence,
+    );
     return all.length > 0 ? all[0] : null;
   }
 
@@ -1264,6 +1271,7 @@ export class TfliteYoloService {
                   yoloOutputs[0],
                   image.width,
                   image.height,
+                  0.22, // Lower threshold for static profile photos to catch subtle faces
                 );
                 if (detectedFace) {
                   cropBox = detectedFace.cropBox;
@@ -1282,8 +1290,16 @@ export class TfliteYoloService {
           if (!cropBox) {
             const side = Math.min(image.width, image.height);
             const x1 = Math.max(0, Math.round((image.width - side) / 2));
-            const y1 = Math.max(0, Math.round((image.height - side) / 2));
-            cropBox = { x1, y1, x2: x1 + side, y2: y1 + side };
+            const y1 =
+              image.height > image.width
+                ? Math.max(0, Math.round(image.height * 0.05))
+                : Math.max(0, Math.round((image.height - side) / 2));
+            cropBox = {
+              x1,
+              y1,
+              x2: x1 + side,
+              y2: Math.min(image.height, y1 + side),
+            };
           }
 
           // 1. Normal orientation embedding with landmark roll alignment
@@ -1318,6 +1334,30 @@ export class TfliteYoloService {
                 mirrorErr,
               );
             }
+
+            // 3. Multi-scale context crop (+15% padding) for distance invariance
+            try {
+              const boxW = cropBox.x2 - cropBox.x1;
+              const boxH = cropBox.y2 - cropBox.y1;
+              const padW = Math.round(boxW * 0.15);
+              const padH = Math.round(boxH * 0.15);
+              const expandedCropBox = {
+                x1: Math.max(0, cropBox.x1 - padW),
+                y1: Math.max(0, cropBox.y1 - padH),
+                x2: Math.min(image.width, cropBox.x2 + padW),
+                y2: Math.min(image.height, cropBox.y2 + padH),
+              };
+              const expandedEmb = await this.extractFaceEmbedding(
+                image,
+                expandedCropBox,
+                rollDegrees,
+              );
+              if (expandedEmb) {
+                embeddings.push(expandedEmb);
+              }
+            } catch (expandErr) {
+              // ignore
+            }
           }
         } catch (e) {
           console.warn(
@@ -1330,19 +1370,9 @@ export class TfliteYoloService {
 
     if (embeddings.length === 0) {
       console.warn(
-        `[TFLite YOLO] No valid biometric embeddings extracted for ${profile.fullName} (${profile.id}).`,
+        `[TFLite YOLO] No valid biometric embeddings extracted for ${profile.fullName} (${profile.id}). Will retry when photo is reachable.`,
       );
-      // Cache empty entry in-memory to prevent repeated photo fetching on every 80ms camera frame
-      this.profileEmbeddingsCache.set(profile.id, {
-        userId: profile.id,
-        fullName: profile.fullName,
-        code: profile.code,
-        avatarUri: profile.avatarUri,
-        zoneId: profile.zoneId,
-        roomId: profile.roomId,
-        embeddings: [],
-        signature: currentSignature,
-      });
+      // DO NOT permanently cache empty embeddings so retry is allowed
       return;
     }
 
@@ -1379,6 +1409,7 @@ export class TfliteYoloService {
     roomProfiles: UserProfile[],
     isFrontCamera?: boolean,
     minConfidenceThreshold: number = 75,
+    allProfiles?: UserProfile[],
   ): Promise<DetectionResult | null> {
     if (!photoPath) return null;
 
@@ -1548,7 +1579,7 @@ export class TfliteYoloService {
 
       // 6. Greedy 1-to-1 Assignment against enrolled profiles:
       // Prevents 2 different faces from claiming the same enrolled profile!
-      const MATCH_THRESHOLD = 0.65;
+      const MATCH_THRESHOLD = 0.58;
 
       interface MatchCandidate {
         faceIdx: number;
@@ -1601,6 +1632,62 @@ export class TfliteYoloService {
           assignedProfiles.add(cand.profile.id);
           faceAssignedProfile.set(cand.faceIdx, cand.profile);
           faceAssignedSim.set(cand.faceIdx, cand.similarity);
+        }
+      }
+
+      // 6b. Cross-room fallback matching: check remaining unassigned faces against allProfiles (if provided)
+      if (allProfiles && allProfiles.length > 0) {
+        const unassignedFaceIndices = extractedFaces
+          .map((_, idx) => idx)
+          .filter(idx => !assignedFaces.has(idx));
+
+        if (unassignedFaceIndices.length > 0) {
+          const roomProfileIds = new Set(roomProfiles.map(p => p.id));
+          const otherProfiles = allProfiles.filter(
+            p => !roomProfileIds.has(p.id),
+          );
+
+          const fallbackCandidates: MatchCandidate[] = [];
+          for (const fIdx of unassignedFaceIndices) {
+            const liveEmb = extractedFaces[fIdx].embedding;
+            if (!liveEmb) continue;
+
+            for (const p of otherProfiles) {
+              const cached = this.profileEmbeddingsCache.get(p.id);
+              if (
+                !cached ||
+                !cached.embeddings ||
+                cached.embeddings.length === 0
+              )
+                continue;
+              for (const emb of cached.embeddings) {
+                const sim = this.calculateCosineSimilarity(liveEmb, emb);
+                if (sim > faceMaxSim[fIdx]) {
+                  faceMaxSim[fIdx] = sim;
+                }
+                if (sim >= MATCH_THRESHOLD) {
+                  fallbackCandidates.push({
+                    faceIdx: fIdx,
+                    profile: p,
+                    similarity: sim,
+                  });
+                }
+              }
+            }
+          }
+
+          fallbackCandidates.sort((a, b) => b.similarity - a.similarity);
+          for (const cand of fallbackCandidates) {
+            if (
+              !assignedFaces.has(cand.faceIdx) &&
+              !assignedProfiles.has(cand.profile.id)
+            ) {
+              assignedFaces.add(cand.faceIdx);
+              assignedProfiles.add(cand.profile.id);
+              faceAssignedProfile.set(cand.faceIdx, cand.profile);
+              faceAssignedSim.set(cand.faceIdx, cand.similarity);
+            }
+          }
         }
       }
 
@@ -1660,7 +1747,7 @@ export class TfliteYoloService {
             Math.round(
               75 +
                 ((f.similarity - MATCH_THRESHOLD) /
-                  (0.88 - MATCH_THRESHOLD)) *
+                  (0.85 - MATCH_THRESHOLD)) *
                   24,
             ),
           ),
@@ -1705,7 +1792,7 @@ export class TfliteYoloService {
             Math.round(
               75 +
                 ((primary.similarity - MATCH_THRESHOLD) /
-                  (0.88 - MATCH_THRESHOLD)) *
+                  (0.85 - MATCH_THRESHOLD)) *
                   24,
             ),
           ),
@@ -2023,12 +2110,14 @@ export class TfliteYoloService {
     roomProfiles: UserProfile[],
     isFrontCamera?: boolean,
     minConfidenceThreshold?: number,
+    allProfiles?: UserProfile[],
   ): Promise<DetectionResult | null> {
     return this.getInstance().processCapturedFrame(
       photoPath,
       roomProfiles,
       isFrontCamera,
       minConfidenceThreshold,
+      allProfiles,
     );
   }
 

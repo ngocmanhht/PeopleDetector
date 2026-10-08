@@ -460,6 +460,16 @@ const TabletDetectorScreen: React.FC<TabletDetectorScreenProps> = ({
               setFaceSyncModalVisible(false);
             }
           }, 600);
+
+          // Background warmup for remaining user profiles in facility
+          const remainingProfiles = (userProfiles || []).filter(
+            u => !targetProfiles.some(tp => tp.id === u.id),
+          );
+          if (remainingProfiles.length > 0) {
+            YoloDetectorService.warmupRoomEmbeddings(remainingProfiles).catch(
+              () => {},
+            );
+          }
         }
       } else {
         setIsFaceDataReady(true);
@@ -545,6 +555,7 @@ const TabletDetectorScreen: React.FC<TabletDetectorScreenProps> = ({
             targetProfiles,
             isFront,
             confidenceThreshold,
+            userProfiles,
           );
 
           if (realResult) {
@@ -562,14 +573,21 @@ const TabletDetectorScreen: React.FC<TabletDetectorScreenProps> = ({
               return;
             }
 
-            // Lookup room and zone details for the detected user
-            const matchedProfile = targetProfiles.find(
-              u => u.id === realResult.userId,
-            );
+            // Lookup room and zone details for the detected user (search across all userProfiles!)
+            const matchedProfile =
+              (userProfiles || []).find(u => u.id === realResult.userId) ||
+              targetProfiles.find(u => u.id === realResult.userId);
 
             const isVisitor = Boolean(matchedProfile?.isVisitor);
             const visitedProfileName =
               matchedProfile?.visitedProfile?.fullName || undefined;
+
+            const isOtherRoom =
+              scanMode === 'room' &&
+              Boolean(
+                matchedProfile?.roomId &&
+                  matchedProfile.roomId !== selectedRoomId,
+              );
 
             const userRoomId =
               matchedProfile?.roomId ||
@@ -579,7 +597,14 @@ const TabletDetectorScreen: React.FC<TabletDetectorScreenProps> = ({
               (scanMode === 'room' ? selectedZoneId : undefined);
             const userRoom = rooms.find(r => r.id === userRoomId);
             const userZone = zones.find(z => z.id === userZoneId);
-            const deptName = userRoom?.name || (isVisitor ? 'Khách thăm' : 'Toàn cơ sở');
+            const roomDisplayName = isOtherRoom
+              ? `${userRoom?.name || 'Phòng khác'} (Khác phòng)`
+              : isVisitor
+              ? `Khách thăm (${visitedProfileName ? `gặp ${visitedProfileName}` : 'Thân nhân'})`
+              : userRoom?.name;
+            const deptName = isOtherRoom
+              ? `${userRoom?.name || 'Phòng khác'} (Khác phòng)`
+              : userRoom?.name || (isVisitor ? 'Khách thăm' : 'Toàn cơ sở');
 
             // Record into Redux scanHistory list with IN/OUT timestamps & scan counts
             dispatch(
@@ -588,9 +613,7 @@ const TabletDetectorScreen: React.FC<TabletDetectorScreenProps> = ({
                 fullName: realResult.fullName,
                 code: realResult.code,
                 roomId: userRoom?.id,
-                roomName: isVisitor
-                  ? `Khách thăm (${visitedProfileName ? `gặp ${visitedProfileName}` : 'Thân nhân'})`
-                  : userRoom?.name,
+                roomName: roomDisplayName,
                 zoneId: userZone?.id,
                 zoneName: userZone?.name,
                 avatarUri: realResult.avatarUri,
@@ -657,32 +680,34 @@ const TabletDetectorScreen: React.FC<TabletDetectorScreenProps> = ({
                     : '';
                 const isOut = scanDirection === 'out';
                 const alertPayload = {
-                  title:
-                    scanMode === 'all'
-                      ? isOut
-                        ? 'Xác nhận ra cơ sở'
-                        : 'Xác nhận vào cơ sở'
-                      : isVisitorUser
-                      ? 'Thân nhân'
-                      : isOut
-                      ? 'Điểm danh RA thành công'
-                      : 'Điểm danh VÀO thành công',
-                  message:
-                    scanMode === 'all'
-                      ? `${realResult.fullName} (${
-                          realResult.code
-                        }) đã xác nhận ${
-                          isOut ? 'ra khỏi' : 'vào'
-                        } cơ sở [${deptName}] với độ tin cậy ${
-                          realResult.confidence
-                        }%`
-                      : `${realResult.fullName} (${
-                          realResult.code
-                        })${visitorTag} đã điểm danh ${
-                          isOut ? 'RA' : 'VÀO'
-                        } với độ tin cậy ${realResult.confidence}%`,
+                  title: isOtherRoom
+                    ? 'Điểm danh: Khác phòng'
+                    : scanMode === 'all'
+                    ? isOut
+                      ? 'Xác nhận ra cơ sở'
+                      : 'Xác nhận vào cơ sở'
+                    : isVisitorUser
+                    ? 'Thân nhân'
+                    : isOut
+                    ? 'Điểm danh RA thành công'
+                    : 'Điểm danh VÀO thành công',
+                  message: isOtherRoom
+                    ? `${realResult.fullName} (${realResult.code}) thuộc [${userRoom?.name || 'Phòng khác'}] (không thuộc phòng đang quét) với độ tin cậy ${realResult.confidence}%`
+                    : scanMode === 'all'
+                    ? `${realResult.fullName} (${
+                        realResult.code
+                      }) đã xác nhận ${
+                        isOut ? 'ra khỏi' : 'vào'
+                      } cơ sở [${deptName}] với độ tin cậy ${
+                        realResult.confidence
+                      }%`
+                    : `${realResult.fullName} (${
+                        realResult.code
+                      })${visitorTag} đã điểm danh ${
+                        isOut ? 'RA' : 'VÀO'
+                      } với độ tin cậy ${realResult.confidence}%`,
                   timestamp: realResult.timestamp,
-                  type: 'info' as const,
+                  type: isOtherRoom ? ('warning' as const) : ('info' as const),
                 };
                 dispatch(addAlert(alertPayload));
                 alertService.createAlert(alertPayload).catch(err => {
@@ -699,9 +724,9 @@ const TabletDetectorScreen: React.FC<TabletDetectorScreenProps> = ({
                 realResult.additionalVerified.length > 0
               ) {
                 for (const addResult of realResult.additionalVerified) {
-                  const addMatched = targetProfiles.find(
-                    u => u.id === addResult.userId,
-                  );
+                  const addMatched =
+                    (userProfiles || []).find(u => u.id === addResult.userId) ||
+                    targetProfiles.find(u => u.id === addResult.userId);
                   // Quét All: bỏ qua người thân nhân
                   if (scanMode === 'all' && addMatched?.isVisitor) {
                     continue;
