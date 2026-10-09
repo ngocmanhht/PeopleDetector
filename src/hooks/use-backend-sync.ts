@@ -1,4 +1,4 @@
-import { useEffect, useCallback } from 'react';
+import { useQuery } from '@tanstack/react-query';
 import { useAppDispatch, useAppSelector } from '../store/hooks';
 import {
   setZones,
@@ -15,15 +15,21 @@ import {
   alertService,
 } from '../services/api';
 
-export const useBackendSync = () => {
+/**
+ * Hook tự động đồng bộ toàn bộ dữ liệu hệ thống từ Backend sử dụng TanStack Query
+ * - Tự động Polling định kỳ mỗi 60 giây (refetchInterval)
+ * - Tự động kết nối lại khi có mạng LAN (refetchOnReconnect)
+ * - Chống trùng lặp request (Request Deduplication) & Stale-while-revalidate
+ * - Nạp trực tiếp vào Redux Store cho Engine AI / Offline Kiosk Mode
+ */
+export const useBackendSync = (intervalMs: number = 60000) => {
   const dispatch = useAppDispatch();
   const isAuthenticated = useAppSelector(state => state.app.isAuthenticated);
 
-  const syncAllData = useCallback(async () => {
-    if (!isAuthenticated) return;
-
-    try {
-      // Parallelize all 5 sync requests concurrently for 3x-5x faster startup time
+  const query = useQuery({
+    queryKey: ['backend-sync-all'],
+    queryFn: async () => {
+      // Parallelize all 5 sync requests concurrently for 3x-5x faster response time
       const [zonesRes, roomsRes, profilesRes, sessionsRes, alertsRes] =
         await Promise.allSettled([
           zoneService.getZones(),
@@ -35,43 +41,39 @@ export const useBackendSync = () => {
 
       if (zonesRes.status === 'fulfilled' && zonesRes.value?.data) {
         dispatch(setZones(zonesRes.value.data));
-      } else if (zonesRes.status === 'rejected') {
-        console.log('[BackendSync] Failed to sync zones:', zonesRes.reason);
       }
 
       if (roomsRes.status === 'fulfilled' && roomsRes.value?.data) {
         dispatch(setRooms(roomsRes.value.data));
-      } else if (roomsRes.status === 'rejected') {
-        console.log('[BackendSync] Failed to sync rooms:', roomsRes.reason);
       }
 
       if (profilesRes.status === 'fulfilled' && profilesRes.value?.data) {
         dispatch(setUserProfiles(profilesRes.value.data));
-      } else if (profilesRes.status === 'rejected') {
-        console.log('[BackendSync] Failed to sync profiles:', profilesRes.reason);
       }
 
       if (sessionsRes.status === 'fulfilled' && sessionsRes.value?.data) {
         dispatch(setSessions(sessionsRes.value.data));
-      } else if (sessionsRes.status === 'rejected') {
-        console.log('[BackendSync] Failed to sync sessions:', sessionsRes.reason);
       }
 
       if (alertsRes.status === 'fulfilled' && alertsRes.value?.data) {
         dispatch(setAlerts(alertsRes.value.data));
-      } else if (alertsRes.status === 'rejected') {
-        console.log('[BackendSync] Failed to sync alerts:', alertsRes.reason);
       }
-    } catch (err) {
-      console.log('[BackendSync] Error syncing data from backend:', err);
-    }
-  }, [dispatch, isAuthenticated]);
 
-  useEffect(() => {
-    if (isAuthenticated) {
-      syncAllData();
-    }
-  }, [isAuthenticated, syncAllData]);
+      return { syncedAt: new Date() };
+    },
+    enabled: isAuthenticated,
+    refetchInterval: intervalMs > 0 ? intervalMs : false,
+    refetchIntervalInBackground: false,
+    staleTime: 30000,
+    retry: 2,
+  });
 
-  return { syncAllData };
+  return {
+    syncAllData: async () => {
+      const res = await query.refetch();
+      return res.data;
+    },
+    isSyncing: query.isFetching,
+    lastSyncedAt: query.data?.syncedAt || null,
+  };
 };
