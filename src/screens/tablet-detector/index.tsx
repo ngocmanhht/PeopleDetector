@@ -603,6 +603,7 @@ const TabletDetectorScreen: React.FC<TabletDetectorScreenProps> = ({
       }
       if (isScanningRef.current) return;
       isScanningRef.current = true;
+      const COOLDOWN_SYNC_MS = 5000;
       let photoPath = providedPhotoPath;
       try {
         // 1. Capture real frame from Camera hardware if available
@@ -673,44 +674,6 @@ const TabletDetectorScreen: React.FC<TabletDetectorScreenProps> = ({
 
             const profileAvatar = matchedProfile?.avatarUri;
 
-            // Record into Redux scanHistory list with IN/OUT timestamps & scan counts
-            dispatch(
-              recordScanEvent({
-                userId: realResult.userId,
-                fullName: realResult.fullName,
-                code: realResult.code,
-                roomId: userRoom?.id,
-                roomName: roomDisplayName,
-                zoneId: userZone?.id,
-                zoneName: userZone?.name,
-                avatarUri: profileAvatar || realResult.avatarUri,
-                capturedAvatarUri: realResult.avatarUri,
-                confidence: realResult.confidence,
-                status: realResult.status,
-                timestamp: realResult.timestamp,
-                scanMode,
-                direction: scanDirection,
-                isVisitor,
-                visitedProfileName,
-              }),
-            );
-
-            const attPayload = {
-              sessionId: activeSessionId || undefined,
-              userId: realResult.userId,
-              status: realResult.status,
-              confidence: realResult.confidence,
-              timestamp: realResult.timestamp,
-              avatarUri: realResult.avatarUri,
-              direction: scanDirection,
-            };
-
-            dispatch(
-              recordAttendance({
-                ...attPayload,
-                boundingBox: realResult.boundingBox,
-              }),
-            );
             dispatch(
               setActiveDetection({
                 ...realResult,
@@ -718,24 +681,66 @@ const TabletDetectorScreen: React.FC<TabletDetectorScreenProps> = ({
               }),
             );
 
-            // Cooldown 5s per user to prevent high-frequency request flooding
-            const now = Date.now();
-            const lastSyncTime =
-              lastAttendanceSyncedTimeRef.current[realResult.userId] || 0;
-            const COOLDOWN_SYNC_MS = 5000;
+            // Chỉ ghi nhận điểm danh chính thức và đồng bộ lên BE khi trạng thái là 'present' (đạt chuẩn 3/5 votes)
+            // Các frame trung gian ('verify' 1/3, 2/3) chỉ cập nhật UI, không bắn API và không chiếm cooldown!
+            if (realResult.status === 'present') {
+              // Record into Redux scanHistory list with IN/OUT timestamps & scan counts
+              dispatch(
+                recordScanEvent({
+                  userId: realResult.userId,
+                  fullName: realResult.fullName,
+                  code: realResult.code,
+                  roomId: userRoom?.id,
+                  roomName: roomDisplayName,
+                  zoneId: userZone?.id,
+                  zoneName: userZone?.name,
+                  avatarUri: profileAvatar || realResult.avatarUri,
+                  capturedAvatarUri: realResult.avatarUri,
+                  confidence: realResult.confidence,
+                  status: realResult.status,
+                  timestamp: realResult.timestamp,
+                  scanMode,
+                  direction: scanDirection,
+                  isVisitor,
+                  visitedProfileName,
+                }),
+              );
 
-            if (
-              realResult.userId &&
-              realResult.userId !== 'unverified-unknown' &&
-              now - lastSyncTime > COOLDOWN_SYNC_MS
-            ) {
-              lastAttendanceSyncedTimeRef.current[realResult.userId] = now;
-              attendanceService.recordAttendance(attPayload).catch(err => {
-                console.log(
-                  '[TabletDetector] Failed to sync attendance to BE:',
-                  err,
-                );
-              });
+              const attPayload = {
+                sessionId: activeSessionId || undefined,
+                userId: realResult.userId,
+                status: realResult.status,
+                confidence: realResult.confidence,
+                timestamp: realResult.timestamp,
+                avatarUri: realResult.avatarUri,
+                direction: scanDirection,
+              };
+
+              dispatch(
+                recordAttendance({
+                  ...attPayload,
+                  boundingBox: realResult.boundingBox,
+                }),
+              );
+
+              // Cooldown 5s per user to prevent high-frequency request flooding
+              const now = Date.now();
+              const lastSyncTime =
+                lastAttendanceSyncedTimeRef.current[realResult.userId] || 0;
+
+              if (
+                realResult.userId &&
+                realResult.userId !== 'unverified-unknown' &&
+                now - lastSyncTime > COOLDOWN_SYNC_MS
+              ) {
+                lastAttendanceSyncedTimeRef.current[realResult.userId] = now;
+                attendanceService.recordAttendance(attPayload).catch(err => {
+                  console.log(
+                    '[TabletDetector] Failed to sync attendance to BE:',
+                    err,
+                  );
+                });
+              }
             }
 
             if (realResult.status === 'present') {
