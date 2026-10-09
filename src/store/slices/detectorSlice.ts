@@ -678,6 +678,7 @@ const detectorSlice = createSlice({
         fullName?: string;
         code?: string;
         avatarUri?: string;
+        capturedAvatarUri?: string;
         roomId?: string;
         roomName?: string;
         zoneId?: string;
@@ -696,6 +697,7 @@ const detectorSlice = createSlice({
         fullName,
         code,
         avatarUri,
+        capturedAvatarUri,
         roomId,
         roomName,
         zoneId,
@@ -721,7 +723,8 @@ const detectorSlice = createSlice({
         timestamp,
         epochTime: nowEpoch,
         confidence,
-        avatarUri,
+        avatarUri: capturedAvatarUri || avatarUri,
+        capturedAvatarUri: capturedAvatarUri || avatarUri,
         scanMode,
         direction,
         isVisitor,
@@ -739,6 +742,7 @@ const detectorSlice = createSlice({
           existing.lastScanTime = timestamp;
           existing.confidence = Math.max(existing.confidence, confidence);
           if (avatarUri) existing.avatarUri = avatarUri;
+          if (capturedAvatarUri) existing.capturedAvatarUri = capturedAvatarUri;
           if (isVisitor !== undefined) existing.isVisitor = isVisitor;
           if (visitedProfileName !== undefined)
             existing.visitedProfileName = visitedProfileName;
@@ -770,6 +774,7 @@ const detectorSlice = createSlice({
             fullName: fullName || 'Nhân sự',
             code: code || '',
             avatarUri,
+            capturedAvatarUri: capturedAvatarUri || avatarUri,
             roomId,
             roomName,
             zoneId,

@@ -38,6 +38,7 @@ export interface UserProfile {
   age?: number;
   avatarUri: string;
   photos?: string[]; // Array of up to PHOTO_CONFIG.MAX_PHOTOS_PER_USER photos
+  embeddings?: number[][]; // Server pre-computed 512-dim biometric vectors
   zoneId: string;
   roomId: string;
   enrolledAt: string;
@@ -156,6 +157,7 @@ export interface ScanEvent {
   epochTime: number; // Date.now()
   confidence: number;
   avatarUri?: string;
+  capturedAvatarUri?: string;
   scanMode: ScanMode;
   direction?: ScanDirection; // thiếu = 'in' (dữ liệu cũ)
   isVisitor?: boolean;
@@ -168,6 +170,7 @@ export interface ScanHistoryItem {
   fullName: string;
   code?: string;
   avatarUri?: string;
+  capturedAvatarUri?: string;
   roomId?: string;
   roomName?: string;
   zoneId?: string;

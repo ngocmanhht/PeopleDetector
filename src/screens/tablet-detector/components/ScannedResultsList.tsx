@@ -574,20 +574,47 @@ export const ScannedResultsList: React.FC<ScannedResultsListProps> = ({
               <>
                 {/* Person Profile Overview */}
                 <View style={styles.modalProfileCard}>
-                  {selectedDetailItem.avatarUri ? (
-                    <Image
-                      source={{
-                        uri: appUtils.getUrlImage(selectedDetailItem.avatarUri),
-                      }}
-                      style={styles.modalAvatar}
-                    />
-                  ) : (
-                    <View style={styles.modalAvatarPlaceholder}>
-                      <AppText style={styles.modalAvatarPlaceholderText}>
-                        {(selectedDetailItem.fullName || 'N')[0]}
+                  <View style={styles.modalAvatarRow}>
+                    <View style={styles.modalAvatarCol}>
+                      {selectedDetailItem.avatarUri ? (
+                        <Image
+                          source={{
+                            uri: appUtils.getUrlImage(selectedDetailItem.avatarUri),
+                          }}
+                          style={styles.modalAvatar}
+                        />
+                      ) : (
+                        <View style={styles.modalAvatarPlaceholder}>
+                          <AppText style={styles.modalAvatarPlaceholderText}>
+                            {(selectedDetailItem.fullName || 'N')[0]}
+                          </AppText>
+                        </View>
+                      )}
+                      <AppText style={styles.modalAvatarBadgeLabel}>
+                        Hồ sơ
                       </AppText>
                     </View>
-                  )}
+
+                    {Boolean(
+                      selectedDetailItem.capturedAvatarUri &&
+                        selectedDetailItem.capturedAvatarUri !==
+                          selectedDetailItem.avatarUri,
+                    ) && (
+                      <View style={styles.modalAvatarCol}>
+                        <Image
+                          source={{
+                            uri: appUtils.getUrlImage(
+                              selectedDetailItem.capturedAvatarUri,
+                            ),
+                          }}
+                          style={[styles.modalAvatar, styles.modalAvatarCaptured]}
+                        />
+                        <AppText style={styles.modalAvatarBadgeLabelCaptured}>
+                          Lúc quét
+                        </AppText>
+                      </View>
+                    )}
+                  </View>
 
                   <View style={styles.modalProfileInfo}>
                     <AppText style={styles.modalFullName}>
@@ -661,6 +688,14 @@ export const ScannedResultsList: React.FC<ScannedResultsListProps> = ({
                           #{selectedDetailItem.history.length - index}
                         </AppText>
                       </View>
+                      {Boolean(ev.avatarUri) && (
+                        <Image
+                          source={{
+                            uri: appUtils.getUrlImage(ev.avatarUri),
+                          }}
+                          style={styles.logEventThumbnail}
+                        />
+                      )}
                       <View style={styles.logTimeCol}>
                         <View
                           style={{
@@ -1269,12 +1304,44 @@ const styles = StyleSheet.create({
     padding: 12,
     marginTop: 14,
   },
+  modalAvatarRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  modalAvatarCol: {
+    alignItems: 'center',
+    gap: 4,
+  },
   modalAvatar: {
     width: 60,
     height: 60,
     borderRadius: 14,
     borderWidth: 1,
     borderColor: appColors.slate200,
+  },
+  modalAvatarCaptured: {
+    borderColor: appColors.blue300,
+  },
+  modalAvatarBadgeLabel: {
+    fontSize: 9,
+    fontWeight: '700',
+    color: appColors.slate600,
+    backgroundColor: appColors.slate200,
+    paddingHorizontal: 5,
+    paddingVertical: 1,
+    borderRadius: 4,
+  },
+  modalAvatarBadgeLabelCaptured: {
+    fontSize: 9,
+    fontWeight: '700',
+    color: appColors.blue700,
+    backgroundColor: '#EFF6FF',
+    paddingHorizontal: 5,
+    paddingVertical: 1,
+    borderRadius: 4,
+    borderWidth: 1,
+    borderColor: '#BFDBFE',
   },
   modalAvatarPlaceholder: {
     width: 60,
@@ -1408,6 +1475,14 @@ const styles = StyleSheet.create({
     fontSize: 10,
     fontWeight: '700',
     color: appColors.slate600,
+  },
+  logEventThumbnail: {
+    width: 36,
+    height: 36,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: appColors.slate200,
+    backgroundColor: appColors.slate100,
   },
   logTimeCol: {
     flex: 1,

@@ -618,6 +618,10 @@ export class TfliteYoloService {
     const eyeRightY = (data[9 * NUM_ANCHORS + anchor] || 0) * lmScale;
     const noseX = (data[11 * NUM_ANCHORS + anchor] || 0) * lmScale;
     const noseY = (data[12 * NUM_ANCHORS + anchor] || 0) * lmScale;
+    const mouthLeftX = (data[14 * NUM_ANCHORS + anchor] || 0) * lmScale;
+    const mouthLeftY = (data[15 * NUM_ANCHORS + anchor] || 0) * lmScale;
+    const mouthRightX = (data[17 * NUM_ANCHORS + anchor] || 0) * lmScale;
+    const mouthRightY = (data[18 * NUM_ANCHORS + anchor] || 0) * lmScale;
 
     let tiltBoostW = 0;
     let tiltBoostH = 0;
@@ -628,7 +632,7 @@ export class TfliteYoloService {
     const hasValidLandmarks =
       eyeLeftX > 0 &&
       eyeRightX > 0 &&
-      Math.abs(eyeLeftX - eyeRightX) > 0.002 &&
+      Math.abs(eyeLeftX - eyeRightX) > 0.005 &&
       noseX > 0 &&
       noseY > 0;
 
@@ -685,13 +689,27 @@ export class TfliteYoloService {
     const maxSide = Math.min(origWidth, origHeight);
     const faceSize = Math.max(origBoxW, origBoxH);
 
+    // Anatomical face center: anchored between eyes and mouth when landmarks are present,
+    // avoiding bias from hair volume, bald heads, or tall headwear
+    let faceCenterX = faceCx;
+    let faceCenterY = faceCy;
+    if (hasValidLandmarks) {
+      const avgEyeY = (eyeLeftY + eyeRightY) / 2;
+      const mouthY =
+        mouthLeftX > 0 && mouthRightX > 0
+          ? (mouthLeftY + mouthRightY) / 2
+          : noseY + (noseY - avgEyeY) * 0.8;
+      faceCenterY = Math.round(((avgEyeY + mouthY) / 2) * origHeight);
+      faceCenterX = Math.round(((eyeLeftX + eyeRightX) / 2) * origWidth);
+    }
+
     // 1. MobileFaceNet crop box: tight 1.15x square box for canonical InsightFace feature extraction.
     // InsightFace MobileFaceNet is trained on tightly aligned faces (face occupying ~80% of 112x112).
-    // Keeping this tight eliminates background/hair interference, lowering stranger cross-similarity from ~0.65 to <0.45.
+    // Anchoring on faceCenter eliminates hair/background bias!
     const cropMultiplier = 1.15;
     const cropSide = Math.min(Math.round(faceSize * cropMultiplier), maxSide);
-    let cropX1 = Math.round(faceCx - cropSide / 2);
-    let cropY1 = Math.round(faceCy - cropSide / 2);
+    let cropX1 = Math.round(faceCenterX - cropSide / 2);
+    let cropY1 = Math.round(faceCenterY - cropSide / 2);
 
     if (cropX1 < 0) {
       cropX1 = 0;
@@ -706,16 +724,14 @@ export class TfliteYoloService {
     }
 
     // 2. Avatar portrait crop box (used for UI display in AttendanceCard, Session history, etc.):
-    // Scaled to 1.28x face size, centered slightly higher on the head (lifted by 6% face height)
-    // so hair, forehead, eyes, nose, and chin are perfectly framed like a portrait ID photo
-    const avatarMultiplier = 1.28;
+    // Scaled to 1.30x face size, centered right on the face so eyes, nose, mouth and forehead are framed perfectly
+    const avatarMultiplier = 1.30;
     const avatarSide = Math.min(
       Math.round(faceSize * avatarMultiplier),
       maxSide,
     );
-    const avatarCenterY = Math.round(faceCy - origBoxH * 0.06);
-    let avatarX1 = Math.round(faceCx - avatarSide / 2);
-    let avatarY1 = Math.round(avatarCenterY - avatarSide / 2);
+    let avatarX1 = Math.round(faceCenterX - avatarSide / 2);
+    let avatarY1 = Math.round(faceCenterY - avatarSide / 2);
 
     if (avatarX1 < 0) {
       avatarX1 = 0;
@@ -730,8 +746,13 @@ export class TfliteYoloService {
     }
 
     // --- FACE QUALITY ASSESSMENT (FQA) ---
-    // Prevent partial edge faces, extreme yaw poses, and abnormal aspect ratios
+    // Prevent partial edge faces, bowing heads showing only hair, extreme yaw poses, and abnormal aspect ratios
     let qualityWarning: string | undefined;
+
+    // 0. Landmark Check: Reject if eyes or nose are not detectable (e.g. hair, top of head, back of head)
+    if (!hasValidLandmarks) {
+      qualityWarning = 'Vui lòng nhìn thẳng vào camera';
+    }
 
     // 1. Edge Boundary Cutoff (face entering/leaving or cut off by screen border)
     const isEdgeCutoff =
@@ -739,11 +760,11 @@ export class TfliteYoloService {
       normCy - normH / 2 < 0.015 ||
       normCx + normW / 2 > 0.985 ||
       normCy + normH / 2 > 0.985;
-    if (isEdgeCutoff) {
+    if (!qualityWarning && isEdgeCutoff) {
       qualityWarning = 'Vui lòng vào giữa khung hình';
     }
 
-    // 2. Aspect Ratio Check (standard frontal face is ~0.65 to 1.15)
+    // 2. Aspect Ratio Check (standard frontal face is ~0.55 to 1.25)
     const aspectRatio = normW / normH;
     if (!qualityWarning && (aspectRatio < 0.55 || aspectRatio > 1.25)) {
       qualityWarning = 'Vui lòng nhìn thẳng vào camera';
@@ -754,20 +775,42 @@ export class TfliteYoloService {
       qualityWarning = 'Vui lòng lại gần camera hơn';
     }
 
-    // 4. Pose Yaw & Roll Angle Check via 5 facial landmarks
+    // 4. Pose Yaw, Pitch & Roll Angle Check via facial landmarks
     if (!qualityWarning && hasValidLandmarks) {
+      const avgEyeY = (eyeLeftY + eyeRightY) / 2;
       const eyeDx = Math.abs(eyeRightX - eyeLeftX);
+
+      // Distance between eyes relative to face width
       if (eyeDx / normW < 0.18) {
-        // Distance between eyes too small relative to face width -> side profile face
         qualityWarning = 'Vui lòng nhìn thẳng vào camera';
-      } else {
+      }
+
+      // Vertical landmark check (Pitch down / bowing head showing hair)
+      const eyeToNoseDistY = noseY - avgEyeY;
+      if (
+        !qualityWarning &&
+        (eyeToNoseDistY <= 0.005 || eyeToNoseDistY / normH < 0.07)
+      ) {
+        qualityWarning = 'Vui lòng ngẩng cao đầu và nhìn thẳng';
+      }
+
+      // Mouth position check (if mouth detected, mouth must be below nose)
+      if (!qualityWarning && mouthLeftX > 0 && mouthRightX > 0) {
+        const avgMouthY = (mouthLeftY + mouthRightY) / 2;
+        const noseToMouthDistY = avgMouthY - noseY;
+        if (noseToMouthDistY <= 0.005 || noseToMouthDistY / normH < 0.05) {
+          qualityWarning = 'Vui lòng ngẩng cao đầu và nhìn thẳng';
+        }
+      }
+
+      // Yaw asymmetry check (turned sideways > 35 degrees)
+      if (!qualityWarning) {
         const dNoseLeft = Math.hypot(noseX - eyeLeftX, noseY - eyeLeftY);
         const dNoseRight = Math.hypot(noseX - eyeRightX, noseY - eyeRightY);
         const minEyeDist = Math.min(dNoseLeft, dNoseRight);
         const maxEyeDist = Math.max(dNoseLeft, dNoseRight);
         const yawAsymmetry = minEyeDist > 0.005 ? maxEyeDist / minEyeDist : 1.0;
         if (yawAsymmetry > 2.0) {
-          // Nose heavily displaced to one side -> face turned > 35-40 degrees
           qualityWarning = 'Vui lòng nhìn thẳng vào camera';
         } else if (Math.abs(signedRollDegrees) > 35) {
           qualityWarning = 'Vui lòng giữ thẳng đầu';
@@ -1227,6 +1270,32 @@ export class TfliteYoloService {
       return;
     }
 
+    // 2b. Check Server pre-computed embeddings (Sync from NestJS ONNX model)
+    if (
+      profile.embeddings &&
+      Array.isArray(profile.embeddings) &&
+      profile.embeddings.length > 0
+    ) {
+      const serverVectors = profile.embeddings.map(
+        arr => new Float32Array(arr),
+      );
+      this.saveEmbeddingsToStorage(profile.id, serverVectors, currentSignature);
+      this.profileEmbeddingsCache.set(profile.id, {
+        userId: profile.id,
+        fullName: profile.fullName,
+        code: profile.code,
+        avatarUri: profile.avatarUri,
+        zoneId: profile.zoneId,
+        roomId: profile.roomId,
+        embeddings: serverVectors,
+        signature: currentSignature,
+      });
+      console.log(
+        `[TFLite YOLO] Fast-enrolled ${profile.fullName} from Server pre-computed vectors (${serverVectors.length} vectors).`,
+      );
+      return;
+    }
+
     const embeddings: Float32Array[] = [];
     const photoSources: string[] = [];
 
@@ -1292,7 +1361,7 @@ export class TfliteYoloService {
             const x1 = Math.max(0, Math.round((image.width - side) / 2));
             const y1 =
               image.height > image.width
-                ? Math.max(0, Math.round(image.height * 0.05))
+                ? Math.max(0, Math.round((image.height - side) * 0.35))
                 : Math.max(0, Math.round((image.height - side) / 2));
             cropBox = {
               x1,
@@ -1579,7 +1648,8 @@ export class TfliteYoloService {
 
       // 6. Greedy 1-to-1 Assignment against enrolled profiles:
       // Prevents 2 different faces from claiming the same enrolled profile!
-      const MATCH_THRESHOLD = 0.58;
+      // Threshold 0.68 ensures high precision for MobileFaceNet 512-d embeddings
+      const MATCH_THRESHOLD = 0.68;
 
       interface MatchCandidate {
         faceIdx: number;
@@ -1740,17 +1810,14 @@ export class TfliteYoloService {
       );
       const additionalVerified: DetectionResult[] = [];
       for (const f of otherVerifiedFaces) {
+        const simRange = Math.max(0.01, 0.9 - MATCH_THRESHOLD);
+        const simRatio = Math.max(
+          0,
+          Math.min(1, (f.similarity - MATCH_THRESHOLD) / simRange),
+        );
         const confPct = Math.min(
           99,
-          Math.max(
-            75,
-            Math.round(
-              75 +
-                ((f.similarity - MATCH_THRESHOLD) /
-                  (0.85 - MATCH_THRESHOLD)) *
-                  24,
-            ),
-          ),
+          Math.max(75, Math.round(75 + simRatio * 24)),
         );
         // Only accept additional matches that meet the configured minConfidenceThreshold
         if (confPct >= minConfidenceThreshold) {
@@ -1785,17 +1852,14 @@ export class TfliteYoloService {
 
       if (primary.status === 'present' && primary.profile) {
         // Enrolled person recognized!
+        const simRange = Math.max(0.01, 0.9 - MATCH_THRESHOLD);
+        const simRatio = Math.max(
+          0,
+          Math.min(1, (primary.similarity - MATCH_THRESHOLD) / simRange),
+        );
         const confidencePct = Math.min(
           99,
-          Math.max(
-            75,
-            Math.round(
-              75 +
-                ((primary.similarity - MATCH_THRESHOLD) /
-                  (0.85 - MATCH_THRESHOLD)) *
-                  24,
-            ),
-          ),
+          Math.max(75, Math.round(75 + simRatio * 24)),
         );
 
         // Check if confidence meets the user-configured threshold
@@ -2133,8 +2197,27 @@ export class TfliteYoloService {
     return this.getInstance().warmupRoomEmbeddings(roomProfiles, onProgress);
   }
 
+  public hasCachedEmbeddings(profile: UserProfile): boolean {
+    const cached = this.profileEmbeddingsCache.get(profile.id);
+    if (cached && cached.embeddings && cached.embeddings.length > 0) return true;
+    if (
+      profile.embeddings &&
+      Array.isArray(profile.embeddings) &&
+      profile.embeddings.length > 0
+    ) {
+      return true;
+    }
+    const sig = this.getProfilePhotoSignature(profile);
+    const stored = this.loadEmbeddingsFromStorage(profile.id, sig);
+    return Boolean(stored && stored.length > 0);
+  }
+
   public static isWarmingUp(): boolean {
     return this.getInstance().isWarmingUp();
+  }
+
+  public static hasCachedEmbeddings(profile: UserProfile): boolean {
+    return this.getInstance().hasCachedEmbeddings(profile);
   }
 
   public static simulateScanDetection(

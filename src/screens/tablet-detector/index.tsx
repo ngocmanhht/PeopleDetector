@@ -432,11 +432,26 @@ const TabletDetectorScreen: React.FC<TabletDetectorScreenProps> = ({
     YoloDetectorService.initialize().then(async ready => {
       console.log('[TabletDetectorScreen] YOLO Engine ready:', ready);
       if (ready && targetProfiles.length > 0) {
+        // Kiểm tra xem có học viên nào chưa có vector (cần nạp cục bộ) không
+        const unreadyProfiles = targetProfiles.filter(
+          p => !YoloDetectorService.hasCachedEmbeddings(p),
+        );
+
+        if (unreadyProfiles.length === 0) {
+          // 100% hồ sơ đã có vector sẵn sàng từ Server hoặc MMKV!
+          // Sẵn sàng quét ngay lập tức, bỏ hoàn toàn modal chờ!
+          setIsFaceDataReady(true);
+          setFaceSyncModalVisible(false);
+          YoloDetectorService.warmupRoomEmbeddings(targetProfiles).catch(() => {});
+          return;
+        }
+
+        // Chỉ hiện modal nếu có hồ sơ chưa có vector cần trích xuất cục bộ
         setIsFaceDataReady(false);
         setFaceSyncProgress({
           current: 0,
-          total: targetProfiles.length,
-          profileName: targetProfiles[0]?.fullName || '',
+          total: unreadyProfiles.length,
+          profileName: unreadyProfiles[0]?.fullName || '',
         });
         setFaceSyncModalVisible(true);
 
@@ -479,7 +494,7 @@ const TabletDetectorScreen: React.FC<TabletDetectorScreenProps> = ({
     return () => {
       isCancelled = true;
     };
-  }, [targetProfiles]);
+  }, [targetProfiles, userProfiles]);
 
   // Real-time Session Duration Timer: ticks every second when session is running
   useEffect(() => {
@@ -606,6 +621,8 @@ const TabletDetectorScreen: React.FC<TabletDetectorScreenProps> = ({
               ? `${userRoom?.name || 'Phòng khác'} (Khác phòng)`
               : userRoom?.name || (isVisitor ? 'Khách thăm' : 'Toàn cơ sở');
 
+            const profileAvatar = matchedProfile?.avatarUri;
+
             // Record into Redux scanHistory list with IN/OUT timestamps & scan counts
             dispatch(
               recordScanEvent({
@@ -616,7 +633,8 @@ const TabletDetectorScreen: React.FC<TabletDetectorScreenProps> = ({
                 roomName: roomDisplayName,
                 zoneId: userZone?.id,
                 zoneName: userZone?.name,
-                avatarUri: realResult.avatarUri,
+                avatarUri: profileAvatar || realResult.avatarUri,
+                capturedAvatarUri: realResult.avatarUri,
                 confidence: realResult.confidence,
                 status: realResult.status,
                 timestamp: realResult.timestamp,
@@ -643,7 +661,12 @@ const TabletDetectorScreen: React.FC<TabletDetectorScreenProps> = ({
                 boundingBox: realResult.boundingBox,
               }),
             );
-            dispatch(setActiveDetection(realResult));
+            dispatch(
+              setActiveDetection({
+                ...realResult,
+                avatarUri: profileAvatar || realResult.avatarUri,
+              }),
+            );
 
             // Cooldown 5s per user to prevent high-frequency request flooding
             const now = Date.now();
@@ -742,6 +765,8 @@ const TabletDetectorScreen: React.FC<TabletDetectorScreenProps> = ({
                   const addZone = zones.find(z => z.id === addZoneId);
                   const addDept = addRoom?.name || 'Phòng ban khác';
 
+                  const addProfileAvatar = addMatched?.avatarUri;
+
                   dispatch(
                     recordScanEvent({
                       userId: addResult.userId,
@@ -751,7 +776,8 @@ const TabletDetectorScreen: React.FC<TabletDetectorScreenProps> = ({
                       roomName: addRoom?.name,
                       zoneId: addZone?.id,
                       zoneName: addZone?.name,
-                      avatarUri: addResult.avatarUri,
+                      avatarUri: addProfileAvatar || addResult.avatarUri,
+                      capturedAvatarUri: addResult.avatarUri,
                       confidence: addResult.confidence,
                       status: addResult.status,
                       timestamp: addResult.timestamp,
@@ -890,6 +916,7 @@ const TabletDetectorScreen: React.FC<TabletDetectorScreenProps> = ({
                   fullName: realResult.fullName,
                   code: realResult.code,
                   avatarUri: realResult.avatarUri,
+                  capturedAvatarUri: realResult.avatarUri,
                   confidence: realResult.confidence,
                   status: 'verify',
                   timestamp: realResult.timestamp,

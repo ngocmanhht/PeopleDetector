@@ -63,6 +63,13 @@ export class YoloDetectorService {
   }
 
   /**
+   * Returns whether a profile already has pre-computed embeddings (from server or cache)
+   */
+  public static hasCachedEmbeddings(profile: UserProfile): boolean {
+    return TfliteYoloService.hasCachedEmbeddings(profile);
+  }
+
+  /**
    * Fallback simulator scan when no hardware camera device exists (debug only)
    */
   public static simulateScanDetection(
