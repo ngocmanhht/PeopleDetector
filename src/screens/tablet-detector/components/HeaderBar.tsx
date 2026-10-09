@@ -15,7 +15,11 @@ import {
   Unlock,
 } from 'lucide-react-native';
 import { useAppDispatch, useAppSelector } from '../../../store/hooks';
-import { startSession, setScanMode } from '../../../store/slices/detectorSlice';
+import {
+  startSession,
+  setScanMode,
+  setSelectedZoneId,
+} from '../../../store/slices/detectorSlice';
 import { sessionService } from '../../../services/api';
 import { appColors } from '../../../const/app-colors';
 import { useAppToast } from '../../../hooks/use-app-toast';
@@ -128,29 +132,34 @@ export const HeaderBar: React.FC<HeaderBarProps> = ({
 
   const availableZones =
     isOfficer && currentUser?.zoneId
-      ? (zones || []).filter(z => z.id === currentUser.zoneId)
+      ? (zones || []).filter(z => z && z.id === currentUser.zoneId)
       : zones || [];
   const selectedZone =
-    availableZones.find(z => z.id === selectedZoneId) || availableZones[0];
+    availableZones.find(z => z && z.id === selectedZoneId) || availableZones[0];
   const effectiveZoneId =
     selectedZoneId || selectedZone?.id || availableZones[0]?.id || '';
 
   const roomsInSelectedZone = (rooms || []).filter(
-    r => r.zoneId === effectiveZoneId,
+    r => r && r.zoneId === effectiveZoneId,
   );
   const selectedRoom =
-    roomsInSelectedZone.find(r => r.id === selectedRoomId) ||
+    roomsInSelectedZone.find(r => r && r.id === selectedRoomId) ||
     roomsInSelectedZone[0];
 
   const zoneRoomIds = useMemo(
     () =>
-      new Set(rooms.filter(r => r.zoneId === effectiveZoneId).map(r => r.id)),
+      new Set(
+        (rooms || [])
+          .filter(r => r && r.zoneId === effectiveZoneId)
+          .map(r => r.id),
+      ),
     [rooms, effectiveZoneId],
   );
   const zoneMembersCount = useMemo(
     () =>
       (userProfiles || []).filter(
         u =>
+          u &&
           !u.isVisitor &&
           (u.zoneId === effectiveZoneId ||
             (u.roomId && zoneRoomIds.has(u.roomId))),
@@ -160,7 +169,7 @@ export const HeaderBar: React.FC<HeaderBarProps> = ({
   const targetMemberCount = useMemo(() => {
     if (scanMode === 'all') return (userProfiles || []).length;
     if (scanMode === 'zone') return zoneMembersCount;
-    return (userProfiles || []).filter(u => u.roomId === selectedRoom?.id)
+    return (userProfiles || []).filter(u => u && u.roomId === selectedRoom?.id)
       .length;
   }, [scanMode, userProfiles, zoneMembersCount, selectedRoom]);
 
@@ -430,6 +439,9 @@ export const HeaderBar: React.FC<HeaderBarProps> = ({
                   ]}
                   onPress={() => {
                     dispatch(setScanMode('zone'));
+                    if (!selectedZoneId && selectedZone?.id) {
+                      dispatch(setSelectedZoneId(selectedZone.id));
+                    }
                     showSuccessToast(
                       'Chế độ Theo khu',
                       'Quét nhân sự các phòng thuộc khu đã chọn!',
@@ -621,7 +633,7 @@ export const HeaderBar: React.FC<HeaderBarProps> = ({
                   { color: appColors.warningText, fontSize: 11 },
                 ]}
               >
-                {rooms.filter(r => r.zoneId === effectiveZoneId).length} phòng •{' '}
+                {(rooms || []).filter(r => r && r.zoneId === effectiveZoneId).length} phòng •{' '}
                 {zoneMembersCount} người
               </AppText>
             </View>
@@ -739,6 +751,9 @@ export const HeaderBar: React.FC<HeaderBarProps> = ({
                     ]}
                     onPress={() => {
                       dispatch(setScanMode('zone'));
+                      if (!selectedZoneId && selectedZone?.id) {
+                        dispatch(setSelectedZoneId(selectedZone.id));
+                      }
                       showSuccessToast(
                         'Chế độ Theo khu vực',
                         'Quét nhân sự các phòng thuộc khu đã chọn!',
@@ -932,7 +947,7 @@ export const HeaderBar: React.FC<HeaderBarProps> = ({
                   { color: appColors.warningText },
                 ]}
               >
-                Toàn bộ {rooms.filter(r => r.zoneId === effectiveZoneId).length}{' '}
+                Toàn bộ {(rooms || []).filter(r => r && r.zoneId === effectiveZoneId).length}{' '}
                 phòng trong khu • {zoneMembersCount} nhân sự
               </AppText>
             </View>

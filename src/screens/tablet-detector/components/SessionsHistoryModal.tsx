@@ -186,8 +186,8 @@ export const SessionsHistoryModal: React.FC<SessionsHistoryModalProps> = ({
                 >
                   Quét All (
                   {
-                    sessions.filter(
-                      s => s.scanMode === 'all' || s.roomId === 'all',
+                    (sessions || []).filter(
+                      s => s && (s.scanMode === 'all' || s.roomId === 'all'),
                     ).length
                   }
                   )
@@ -209,8 +209,8 @@ export const SessionsHistoryModal: React.FC<SessionsHistoryModalProps> = ({
                 >
                   Theo khu (
                   {
-                    sessions.filter(
-                      s => s.scanMode === 'zone',
+                    (sessions || []).filter(
+                      s => s && s.scanMode === 'zone',
                     ).length
                   }
                   )
@@ -232,10 +232,11 @@ export const SessionsHistoryModal: React.FC<SessionsHistoryModalProps> = ({
                 >
                   Theo phòng (
                   {
-                    sessions.filter(
+                    (sessions || []).filter(
                       s =>
-                        s.scanMode === 'room' ||
-                        (!s.scanMode && s.roomId && s.roomId !== 'all'),
+                        s &&
+                        (s.scanMode === 'room' ||
+                          (!s.scanMode && s.roomId && s.roomId !== 'all')),
                     ).length
                   }
                   )

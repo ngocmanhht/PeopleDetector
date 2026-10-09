@@ -137,7 +137,9 @@ const detectorSlice = createSlice({
     setSelectedZoneId: (state, action: PayloadAction<string>) => {
       state.selectedZoneId = action.payload;
       // Auto pick first room in this zone if current room is not in zone
-      const roomsInZone = state.rooms.filter(r => r.zoneId === action.payload);
+      const roomsInZone = (state.rooms || []).filter(
+        r => r && r.zoneId === action.payload,
+      );
       if (roomsInZone.length > 0) {
         state.selectedRoomId = roomsInZone[0].id;
       }
@@ -147,11 +149,20 @@ const detectorSlice = createSlice({
     },
     setScanMode: (state, action: PayloadAction<ScanMode>) => {
       state.scanMode = action.payload;
-      if (action.payload === 'room') {
-        const isValid = state.rooms.some(r => r.id === state.selectedRoomId);
-        if (!isValid && state.rooms.length > 0) {
+      if (action.payload === 'zone') {
+        const isValidZone = (state.zones || []).some(
+          z => z && z.id === state.selectedZoneId,
+        );
+        if (!isValidZone && (state.zones || []).length > 0) {
+          state.selectedZoneId = state.zones[0].id;
+        }
+      } else if (action.payload === 'room') {
+        const isValid = (state.rooms || []).some(
+          r => r && r.id === state.selectedRoomId,
+        );
+        if (!isValid && (state.rooms || []).length > 0) {
           const inZone = state.selectedZoneId
-            ? state.rooms.find(r => r.zoneId === state.selectedZoneId)
+            ? (state.rooms || []).find(r => r && r.zoneId === state.selectedZoneId)
             : null;
           state.selectedRoomId = inZone?.id || state.rooms[0].id;
         }
@@ -528,20 +539,23 @@ const detectorSlice = createSlice({
 
       let targetUsers: UserProfile[] = [];
       if (isAll) {
-        targetUsers = state.userProfiles.filter(u => !u.isVisitor);
+        targetUsers = (state.userProfiles || []).filter(u => u && !u.isVisitor);
       } else if (isZone) {
         const roomIdsInZone = new Set(
-          state.rooms.filter(r => r.zoneId === zone?.id).map(r => r.id),
+          (state.rooms || [])
+            .filter(r => r && r.zoneId === zone?.id)
+            .map(r => r.id),
         );
-        targetUsers = state.userProfiles.filter(
+        targetUsers = (state.userProfiles || []).filter(
           u =>
+            u &&
             !u.isVisitor &&
             (u.zoneId === zone?.id ||
               (u.roomId && roomIdsInZone.has(u.roomId))),
         );
       } else {
-        targetUsers = state.userProfiles.filter(
-          u => u.roomId === (room?.id || targetRoomId),
+        targetUsers = (state.userProfiles || []).filter(
+          u => u && u.roomId === (room?.id || targetRoomId),
         );
       }
 
@@ -620,7 +634,9 @@ const detectorSlice = createSlice({
           activeSess.totalScansCount = totalScans;
 
           if (activeSess.scanMode === 'all') {
-            const officialUsers = state.userProfiles.filter(u => !u.isVisitor);
+            const officialUsers = (state.userProfiles || []).filter(
+              u => u && !u.isVisitor,
+            );
             activeSess.totalCount = officialUsers.length;
             activeSess.missingCount = Math.max(
               0,
@@ -628,12 +644,13 @@ const detectorSlice = createSlice({
             );
           } else if (activeSess.scanMode === 'zone') {
             const roomIds = new Set(
-              state.rooms
-                .filter(r => r.zoneId === activeSess.zoneId)
+              (state.rooms || [])
+                .filter(r => r && r.zoneId === activeSess.zoneId)
                 .map(r => r.id),
             );
-            const zoneMembers = state.userProfiles.filter(
+            const zoneMembers = (state.userProfiles || []).filter(
               u =>
+                u &&
                 !u.isVisitor &&
                 (u.zoneId === activeSess.zoneId ||
                   (u.roomId && roomIds.has(u.roomId))),
@@ -644,8 +661,8 @@ const detectorSlice = createSlice({
               zoneMembers.length - verifiedItems.length,
             );
           } else {
-            const roomMembers = state.userProfiles.filter(
-              u => u.roomId === activeSess.roomId,
+            const roomMembers = (state.userProfiles || []).filter(
+              u => u && u.roomId === activeSess.roomId,
             );
             activeSess.totalCount = roomMembers.length;
             activeSess.missingCount = Math.max(

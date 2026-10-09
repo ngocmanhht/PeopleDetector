@@ -292,18 +292,18 @@ const TabletDetectorScreen: React.FC<TabletDetectorScreenProps> = ({
 
   const availableZones =
     isOfficer && currentUser?.zoneId
-      ? (zones || []).filter(z => z.id === currentUser.zoneId)
+      ? (zones || []).filter(z => z && z.id === currentUser.zoneId)
       : zones || [];
   const selectedZone =
-    availableZones.find(z => z.id === selectedZoneId) || availableZones[0];
+    availableZones.find(z => z && z.id === selectedZoneId) || availableZones[0];
   const effectiveZoneId =
     selectedZoneId || selectedZone?.id || availableZones[0]?.id || '';
 
   const roomsInSelectedZone = (rooms || []).filter(
-    r => r.zoneId === effectiveZoneId,
+    r => r && r.zoneId === effectiveZoneId,
   );
   const selectedRoom =
-    roomsInSelectedZone.find(r => r.id === selectedRoomId) ||
+    roomsInSelectedZone.find(r => r && r.id === selectedRoomId) ||
     roomsInSelectedZone[0];
   const effectiveRoomId =
     selectedRoom?.id || selectedRoomId || roomsInSelectedZone[0]?.id || '';
@@ -312,7 +312,9 @@ const TabletDetectorScreen: React.FC<TabletDetectorScreenProps> = ({
   const roomIdsInZone = useMemo(
     () =>
       new Set(
-        (rooms || []).filter(r => r.zoneId === effectiveZoneId).map(r => r.id),
+        (rooms || [])
+          .filter(r => r && r.zoneId === effectiveZoneId)
+          .map(r => r.id),
       ),
     [rooms, effectiveZoneId],
   );
@@ -321,16 +323,17 @@ const TabletDetectorScreen: React.FC<TabletDetectorScreenProps> = ({
   const currentZoneUsers = useMemo(() => {
     if (!effectiveZoneId) return [];
     return (userProfiles || []).filter(u => {
+      if (!u) return false;
       if (u.zoneId === effectiveZoneId) return true;
       if (u.roomId && roomIdsInZone.has(u.roomId)) return true;
       if (u.isVisitor && u.visitedProfileId) {
         const visitedUser = (userProfiles || []).find(
-          v => v.id === u.visitedProfileId,
+          v => v && v.id === u.visitedProfileId,
         );
         return (
           visitedUser &&
           (visitedUser.zoneId === effectiveZoneId ||
-            roomIdsInZone.has(visitedUser.roomId))
+            (visitedUser.roomId && roomIdsInZone.has(visitedUser.roomId)))
         );
       }
       return false;
@@ -341,11 +344,11 @@ const TabletDetectorScreen: React.FC<TabletDetectorScreenProps> = ({
   const currentRoomUsers = useMemo(
     () =>
       (userProfiles || []).filter(u => {
-        if (!effectiveRoomId) return false;
+        if (!u || !effectiveRoomId) return false;
         if (u.roomId === effectiveRoomId) return true;
         if (u.isVisitor && u.visitedProfileId) {
           const visitedUser = (userProfiles || []).find(
-            v => v.id === u.visitedProfileId,
+            v => v && v.id === u.visitedProfileId,
           );
           return visitedUser?.roomId === effectiveRoomId;
         }
@@ -356,9 +359,9 @@ const TabletDetectorScreen: React.FC<TabletDetectorScreenProps> = ({
 
   // Target profiles: in 'all' mode match against all facility profiles, in 'zone' match zone profiles, in 'room' match room profiles
   const targetProfiles = useMemo(() => {
-    if (scanMode === 'all') return userProfiles || [];
-    if (scanMode === 'zone') return currentZoneUsers;
-    return currentRoomUsers;
+    if (scanMode === 'all') return (userProfiles || []).filter(Boolean);
+    if (scanMode === 'zone') return (currentZoneUsers || []).filter(Boolean);
+    return (currentRoomUsers || []).filter(Boolean);
   }, [scanMode, userProfiles, currentZoneUsers, currentRoomUsers]);
 
   // Clear legacy mock data once on mount if present
@@ -429,67 +432,86 @@ const TabletDetectorScreen: React.FC<TabletDetectorScreenProps> = ({
   // Pre-warm embeddings for target profiles when engine is ready or targetProfiles change
   useEffect(() => {
     let isCancelled = false;
-    YoloDetectorService.initialize().then(async ready => {
-      console.log('[TabletDetectorScreen] YOLO Engine ready:', ready);
-      if (ready && targetProfiles.length > 0) {
-        // Kiểm tra xem có học viên nào chưa có vector (cần nạp cục bộ) không
-        const unreadyProfiles = targetProfiles.filter(
-          p => !YoloDetectorService.hasCachedEmbeddings(p),
-        );
-
-        if (unreadyProfiles.length === 0) {
-          // 100% hồ sơ đã có vector sẵn sàng từ Server hoặc MMKV!
-          // Sẵn sàng quét ngay lập tức, bỏ hoàn toàn modal chờ!
-          setIsFaceDataReady(true);
-          setFaceSyncModalVisible(false);
-          YoloDetectorService.warmupRoomEmbeddings(targetProfiles).catch(() => {});
-          return;
-        }
-
-        // Chỉ hiện modal nếu có hồ sơ chưa có vector cần trích xuất cục bộ
-        setIsFaceDataReady(false);
-        setFaceSyncProgress({
-          current: 0,
-          total: unreadyProfiles.length,
-          profileName: unreadyProfiles[0]?.fullName || '',
-        });
-        setFaceSyncModalVisible(true);
-
-        await YoloDetectorService.warmupRoomEmbeddings(
-          targetProfiles,
-          (current, total, profileName) => {
-            if (isCancelled) return;
-            setFaceSyncProgress({
-              current,
-              total,
-              profileName: profileName || '',
-            });
-          },
-        );
-
-        if (!isCancelled) {
-          setIsFaceDataReady(true);
-          // Cho phép xem hoàn thành 100% trong 600ms rồi đóng mượt mà
-          setTimeout(() => {
-            if (!isCancelled) {
-              setFaceSyncModalVisible(false);
-            }
-          }, 600);
-
-          // Background warmup for remaining user profiles in facility
-          const remainingProfiles = (userProfiles || []).filter(
-            u => !targetProfiles.some(tp => tp.id === u.id),
-          );
-          if (remainingProfiles.length > 0) {
-            YoloDetectorService.warmupRoomEmbeddings(remainingProfiles).catch(
-              () => {},
+    YoloDetectorService.initialize()
+      .then(async ready => {
+        try {
+          if (isCancelled) return;
+          console.log('[TabletDetectorScreen] YOLO Engine ready:', ready);
+          const validProfiles = (targetProfiles || []).filter(p => Boolean(p && p.id));
+          if (ready && validProfiles.length > 0) {
+            // Kiểm tra xem có học viên nào chưa có vector (cần nạp cục bộ) không
+            const unreadyProfiles = validProfiles.filter(
+              p => !YoloDetectorService.hasCachedEmbeddings(p),
             );
+
+            if (unreadyProfiles.length === 0) {
+              // 100% hồ sơ đã có vector sẵn sàng từ Server hoặc MMKV!
+              // Sẵn sàng quét ngay lập tức, bỏ hoàn toàn modal chờ!
+              setIsFaceDataReady(true);
+              setFaceSyncModalVisible(false);
+              YoloDetectorService.warmupRoomEmbeddings(validProfiles).catch(() => {});
+              return;
+            }
+
+            // Chỉ hiện modal nếu có hồ sơ chưa có vector cần trích xuất cục bộ
+            setIsFaceDataReady(false);
+            setFaceSyncProgress({
+              current: 0,
+              total: unreadyProfiles.length,
+              profileName: unreadyProfiles[0]?.fullName || '',
+            });
+            setFaceSyncModalVisible(true);
+
+            await YoloDetectorService.warmupRoomEmbeddings(
+              validProfiles,
+              (current, total, profileName) => {
+                if (isCancelled) return;
+                setFaceSyncProgress({
+                  current,
+                  total,
+                  profileName: profileName || '',
+                });
+              },
+            );
+
+            if (!isCancelled) {
+              setIsFaceDataReady(true);
+              // Cho phép xem hoàn thành 100% trong 600ms rồi đóng mượt mà
+              setTimeout(() => {
+                if (!isCancelled) {
+                  setFaceSyncModalVisible(false);
+                }
+              }, 600);
+
+              // Background warmup for remaining user profiles in facility
+              const remainingProfiles = (userProfiles || []).filter(
+                u => u && u.id && !validProfiles.some(tp => tp && tp.id === u.id),
+              );
+              if (remainingProfiles.length > 0) {
+                YoloDetectorService.warmupRoomEmbeddings(remainingProfiles).catch(
+                  () => {},
+                );
+              }
+            }
+          } else {
+            setIsFaceDataReady(true);
+            setFaceSyncModalVisible(false);
+          }
+        } catch (warmupErr) {
+          console.warn('[TabletDetectorScreen] Warmup error ignored:', warmupErr);
+          if (!isCancelled) {
+            setIsFaceDataReady(true);
+            setFaceSyncModalVisible(false);
           }
         }
-      } else {
-        setIsFaceDataReady(true);
-      }
-    });
+      })
+      .catch(initErr => {
+        console.warn('[TabletDetectorScreen] YOLO init error ignored:', initErr);
+        if (!isCancelled) {
+          setIsFaceDataReady(true);
+          setFaceSyncModalVisible(false);
+        }
+      });
 
     return () => {
       isCancelled = true;
@@ -1223,38 +1245,56 @@ const TabletDetectorScreen: React.FC<TabletDetectorScreenProps> = ({
     );
   };
 
-  const zonePickerItems = availableZones.map(z => ({
-    id: z.id,
-    label: z.name,
-    subtitle: z.description,
-  }));
+  const zonePickerItems = useMemo(
+    () =>
+      (availableZones || [])
+        .filter(z => Boolean(z && z.id))
+        .map(z => ({
+          id: z.id,
+          label: z.name || 'Khu vực',
+          subtitle: z.description,
+        })),
+    [availableZones],
+  );
 
-  const roomPickerItems = isGuard
-    ? [
+  const roomPickerItems = useMemo(() => {
+    if (isGuard) {
+      return [
         {
           id: 'all_mode_option',
           label: 'Toàn cơ sở (Quét All - Ra/Vào cơ sở)',
           subtitle: `Điểm danh ra vào cổng cơ sở (${(userProfiles || []).length} nhân sự)`,
         },
-      ]
-    : isOfficer
-    ? roomsInSelectedZone.map(r => ({
-        id: r.id,
-        label: r.name,
-        subtitle: `Sức chứa ${r.capacity || 30} người`,
-      }))
-    : [
-        {
-          id: 'all_mode_option',
-          label: 'Tất cả phòng ban (Quét All - Vào cơ sở)',
-          subtitle: `Xác nhận vào cơ sở (${(userProfiles || []).length} nhân sự)`,
-        },
-        ...(roomsInSelectedZone.length > 0 ? roomsInSelectedZone : rooms || []).map(r => ({
+      ];
+    }
+    if (isOfficer) {
+      return (roomsInSelectedZone || [])
+        .filter(r => Boolean(r && r.id))
+        .map(r => ({
+          id: r.id,
+          label: r.name,
+          subtitle: `Sức chứa ${r.capacity || 30} người`,
+        }));
+    }
+    const targetRoomList =
+      (roomsInSelectedZone || []).length > 0
+        ? roomsInSelectedZone
+        : rooms || [];
+    return [
+      {
+        id: 'all_mode_option',
+        label: 'Tất cả phòng ban (Quét All - Vào cơ sở)',
+        subtitle: `Xác nhận vào cơ sở (${(userProfiles || []).length} nhân sự)`,
+      },
+      ...targetRoomList
+        .filter(r => Boolean(r && r.id))
+        .map(r => ({
           id: r.id,
           label: r.name,
           subtitle: `Sức chứa ${r.capacity || 30} người`,
         })),
-      ];
+    ];
+  }, [isGuard, isOfficer, userProfiles, roomsInSelectedZone, rooms]);
 
   return (
     <SafeAreaView style={styles.safeArea}>

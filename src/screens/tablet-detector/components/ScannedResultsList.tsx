@@ -65,23 +65,23 @@ export const ScannedResultsList: React.FC<ScannedResultsListProps> = ({
 
   // Counts
   const verifiedCount = useMemo(
-    () => scanHistory.filter(i => i.status === 'present').length,
+    () => (scanHistory || []).filter(i => i && i.status === 'present').length,
     [scanHistory],
   );
   const unverifiedCount = useMemo(
-    () => scanHistory.filter(i => i.status === 'verify').length,
+    () => (scanHistory || []).filter(i => i && i.status === 'verify').length,
     [scanHistory],
   );
 
   // Filtered List
   const filteredList = useMemo(() => {
     if (filter === 'verified') {
-      return scanHistory.filter(i => i.status === 'present');
+      return (scanHistory || []).filter(i => i && i.status === 'present');
     }
     if (filter === 'unverified') {
-      return scanHistory.filter(i => i.status === 'verify');
+      return (scanHistory || []).filter(i => i && i.status === 'verify');
     }
-    return scanHistory;
+    return scanHistory || [];
   }, [scanHistory, filter]);
 
   if (!isSessionActive) {

@@ -330,6 +330,7 @@ export class TfliteYoloService {
    * Generates a deterministic signature of profile photo sources to detect when photos change or new photos are added
    */
   public getProfilePhotoSignature(profile: UserProfile): string {
+    if (!profile) return '';
     const list: string[] = [];
     if (profile.avatarUri) list.push(profile.avatarUri);
     if (Array.isArray(profile.photos)) {
@@ -1234,6 +1235,7 @@ export class TfliteYoloService {
    * 5. Saves to MMKV storage permanently so restart doesn't require reprocessing.
    */
   public async enrollProfile(profile: UserProfile): Promise<void> {
+    if (!profile || !profile.id) return;
     if (!this.isInitialized) {
       await this.initModels();
     }
@@ -1995,6 +1997,7 @@ export class TfliteYoloService {
     try {
       for (let i = 0; i < total; i++) {
         const p = roomProfiles[i];
+        if (!p || !p.id) continue;
         const sig = this.getProfilePhotoSignature(p);
         const cached = this.profileEmbeddingsCache.get(p.id);
         const isAlreadyCached = Boolean(
@@ -2201,6 +2204,7 @@ export class TfliteYoloService {
   }
 
   public hasCachedEmbeddings(profile: UserProfile): boolean {
+    if (!profile || !profile.id) return false;
     const cached = this.profileEmbeddingsCache.get(profile.id);
     if (cached && cached.embeddings && cached.embeddings.length > 0) return true;
     if (

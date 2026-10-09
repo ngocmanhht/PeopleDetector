@@ -53,24 +53,28 @@ export const SessionSummaryBar: React.FC<SessionSummaryBarProps> = ({
 
   // Aggregate stats
   const verifiedItems = useMemo(
-    () => scanHistory?.filter(i => i.status === 'present'),
+    () => (scanHistory || []).filter(i => i && i.status === 'present'),
     [scanHistory],
   );
   const unverifiedItems = useMemo(
-    () => scanHistory?.filter(i => i.status === 'verify'),
+    () => (scanHistory || []).filter(i => i && i.status === 'verify'),
     [scanHistory],
   );
 
   const totalScansCount = useMemo(
-    () => scanHistory?.reduce((sum, item) => sum + item.scanCount, 0),
+    () =>
+      (scanHistory || []).reduce(
+        (sum, item) => sum + (item?.scanCount || 0),
+        0,
+      ),
     [scanHistory],
   );
 
   // Department Breakdown (Phòng ban breakdown)
   const departmentStats = useMemo(() => {
     const map: Record<string, number> = {};
-    verifiedItems.forEach(item => {
-      const dept = item.roomName ? item.roomName : 'Chưa phân phòng';
+    (verifiedItems || []).forEach(item => {
+      const dept = item?.roomName ? item.roomName : 'Chưa phân phòng';
       map[dept] = (map[dept] || 0) + 1;
     });
     return Object.entries(map).sort((a, b) => b[1] - a[1]);
@@ -105,10 +109,14 @@ export const SessionSummaryBar: React.FC<SessionSummaryBarProps> = ({
       </View>
       <View style={styles.modeTag}>
         <AppText style={styles.modeTagText}>
-          {isAllMode
+          {scanMode === 'all'
             ? isOut
               ? 'QUÉT ALL • RA CƠ SỞ'
               : 'QUÉT ALL • VÀO CƠ SỞ'
+            : scanMode === 'zone'
+            ? isOut
+              ? 'THEO KHU • RA'
+              : 'THEO KHU • VÀO'
             : isOut
             ? 'THEO PHÒNG • RA'
             : 'THEO PHÒNG • VÀO'}
