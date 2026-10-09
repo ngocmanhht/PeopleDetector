@@ -1240,7 +1240,7 @@ export class TfliteYoloService {
 
     const currentSignature = this.getProfilePhotoSignature(profile);
 
-    // 1. Check in-memory cache
+    // 1. Check in-memory cache (nếu đã nạp rồi và signature khớp thì bỏ qua)
     const existing = this.profileEmbeddingsCache.get(profile.id);
     if (existing && existing.embeddings.length > 0) {
       if (!currentSignature || existing.signature === currentSignature) {
@@ -1251,7 +1251,36 @@ export class TfliteYoloService {
       );
     }
 
-    // 2. Check persistent MMKV storage (instantly recovers on app launch)
+    // 2. Ưu tiên cao nhất: Vector tính sẵn từ Server (từ mô hình ONNX mới nhất)
+    if (
+      profile.embeddings &&
+      Array.isArray(profile.embeddings) &&
+      profile.embeddings.length > 0
+    ) {
+      const serverVectors = profile.embeddings
+        .filter(arr => Array.isArray(arr) && arr.length === 512)
+        .map(arr => new Float32Array(arr));
+
+      if (serverVectors.length > 0) {
+        this.saveEmbeddingsToStorage(profile.id, serverVectors, currentSignature);
+        this.profileEmbeddingsCache.set(profile.id, {
+          userId: profile.id,
+          fullName: profile.fullName,
+          code: profile.code,
+          avatarUri: profile.avatarUri,
+          zoneId: profile.zoneId,
+          roomId: profile.roomId,
+          embeddings: serverVectors,
+          signature: currentSignature,
+        });
+        console.log(
+          `[TFLite YOLO] Fast-enrolled ${profile.fullName} from Server pre-computed vectors (${serverVectors.length} vectors).`,
+        );
+        return;
+      }
+    }
+
+    // 3. Kiểm tra bộ nhớ đệm MMKV lưu cục bộ (dành cho trường hợp offline hoặc server chưa kịp tính)
     const storedEmbeddings = this.loadEmbeddingsFromStorage(
       profile.id,
       currentSignature,
@@ -1267,32 +1296,6 @@ export class TfliteYoloService {
         embeddings: storedEmbeddings,
         signature: currentSignature,
       });
-      return;
-    }
-
-    // 2b. Check Server pre-computed embeddings (Sync from NestJS ONNX model)
-    if (
-      profile.embeddings &&
-      Array.isArray(profile.embeddings) &&
-      profile.embeddings.length > 0
-    ) {
-      const serverVectors = profile.embeddings.map(
-        arr => new Float32Array(arr),
-      );
-      this.saveEmbeddingsToStorage(profile.id, serverVectors, currentSignature);
-      this.profileEmbeddingsCache.set(profile.id, {
-        userId: profile.id,
-        fullName: profile.fullName,
-        code: profile.code,
-        avatarUri: profile.avatarUri,
-        zoneId: profile.zoneId,
-        roomId: profile.roomId,
-        embeddings: serverVectors,
-        signature: currentSignature,
-      });
-      console.log(
-        `[TFLite YOLO] Fast-enrolled ${profile.fullName} from Server pre-computed vectors (${serverVectors.length} vectors).`,
-      );
       return;
     }
 
