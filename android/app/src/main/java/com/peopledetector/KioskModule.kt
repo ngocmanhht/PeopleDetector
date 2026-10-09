@@ -190,18 +190,6 @@ class KioskModule(reactContext: ReactApplicationContext) :
                         Log.w(TAG, "Failed to configure STAY_ON_WHILE_PLUGGED_IN", e)
                     }
 
-                    // 4. Thiết lập PeopleDetector làm Home Launcher duy nhất (ngăn không cho văng về màn hình desktop Samsung)
-                    try {
-                        val filter = IntentFilter(Intent.ACTION_MAIN).apply {
-                            addCategory(Intent.CATEGORY_HOME)
-                            addCategory(Intent.CATEGORY_DEFAULT)
-                        }
-                        val activityComponent = ComponentName(reactApplicationContext, MainActivity::class.java)
-                        dpm.addPersistentPreferredActivity(adminComponent, filter, activityComponent)
-                        Log.i(TAG, "Configured persistent HOME launcher for MainActivity")
-                    } catch (e: Exception) {
-                        Log.w(TAG, "Failed to configure persistent preferred HOME activity", e)
-                    }
 
                     // 5. Ngăn chặn khởi động vào Safe Boot
                     try {
@@ -257,12 +245,6 @@ class KioskModule(reactContext: ReactApplicationContext) :
                     dpm.setStatusBarDisabled(adminComponent, false)
                     dpm.setKeyguardDisabled(adminComponent, false)
 
-                    // 1. Trả lại Home Launcher mặc định của máy tính bảng
-                    try {
-                        dpm.clearPackagePersistentPreferredActivities(adminComponent, reactApplicationContext.packageName)
-                    } catch (e: Exception) {
-                        Log.w(TAG, "Failed to clear persistent preferred activities", e)
-                    }
 
                     // 2. Khôi phục thời gian tắt màn hình thông thường
                     try {

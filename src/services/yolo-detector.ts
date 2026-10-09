@@ -7,6 +7,14 @@ import { TfliteYoloService } from './tflite-yolo-service';
  * and matching against enrolled user profiles in the active room.
  */
 export class YoloDetectorService {
+  // Biometric Calibration Thresholds (Chỉ số hiệu chuẩn sinh trắc học)
+  public static readonly MATCH_THRESHOLD = TfliteYoloService.MATCH_THRESHOLD;
+  public static readonly AMBIGUITY_MARGIN = TfliteYoloService.AMBIGUITY_MARGIN;
+  public static readonly DECISIVE_CONFIDENCE = TfliteYoloService.DECISIVE_CONFIDENCE;
+  public static readonly CONFIDENCE_CEILING = TfliteYoloService.CONFIDENCE_CEILING;
+  public static readonly STRANGER_MATCH_THRESHOLD = TfliteYoloService.STRANGER_MATCH_THRESHOLD;
+  public static readonly MIN_SHARPNESS_THRESHOLD = TfliteYoloService.MIN_SHARPNESS_THRESHOLD;
+
   /**
    * Initializes on-device YOLO and MobileFaceNet models
    */
@@ -30,6 +38,7 @@ export class YoloDetectorService {
     isFrontCamera?: boolean,
     minConfidenceThreshold?: number,
     allProfiles?: UserProfile[],
+    options?: { isSingleShot?: boolean },
   ): Promise<DetectionResult | null> {
     return TfliteYoloService.processCapturedFrame(
       photoPath,
@@ -37,7 +46,15 @@ export class YoloDetectorService {
       isFrontCamera,
       minConfidenceThreshold,
       allProfiles,
+      options,
     );
+  }
+
+  /**
+   * Resets temporal voting sliding window buffer
+   */
+  public static resetTemporalVoting(): void {
+    TfliteYoloService.resetTemporalVoting();
   }
 
   /**

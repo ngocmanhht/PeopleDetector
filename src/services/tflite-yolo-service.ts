@@ -7,6 +7,13 @@ import { createMMKV } from 'react-native-mmkv';
 import { appAiModel } from '../const/app-ai-model';
 import { appUtils } from '../utils';
 import { Platform } from 'react-native';
+import { BIOMETRIC_CONFIG } from '../const/biometric-config';
+import {
+  PresentationAttackDetector,
+  TemporalVotingManager,
+  l2NormalizeVector,
+  computeCosineSimilarity,
+} from './temporal-voting-service';
 
 // Persistent MMKV storage for pre-computed 512-d biometric embeddings
 const faceEmbeddingStorage = createMMKV({ id: 'face-embeddings-cache-v9' });
@@ -160,6 +167,28 @@ export function extractRGB(
 }
 
 export class TfliteYoloService {
+  // =========================================================================
+  // BẢNG THÔNG SỐ CẤU HÌNH NHẬN DIỆN & SINH TRẮC HỌC (BIOMETRIC TUNING CONFIG)
+  // Tuân thủ chuẩn NIST 1:N Tablet Kiosk (Xem chi tiết tại src/const/biometric-config.ts)
+  // =========================================================================
+  public static readonly BIOMETRIC_CONFIG = BIOMETRIC_CONFIG;
+
+  public static readonly MATCH_THRESHOLD =
+    BIOMETRIC_CONFIG.recognition.matchThreshold; // 0.68
+  public static readonly AMBIGUITY_MARGIN =
+    BIOMETRIC_CONFIG.recognition.ambiguityMargin; // 0.045
+  public static readonly DECISIVE_CONFIDENCE = 0.74; // Giữ để tương thích ngược
+  public static readonly CONFIDENCE_CEILING =
+    BIOMETRIC_CONFIG.recognition.confidenceCeiling; // 0.85
+  public static readonly STRANGER_MATCH_THRESHOLD =
+    BIOMETRIC_CONFIG.strangerClustering.matchThreshold; // 0.70
+  public static readonly MIN_SHARPNESS_THRESHOLD =
+    BIOMETRIC_CONFIG.imageQuality.minSharpness; // 35.0
+  public static readonly MIN_FACE_SIZE =
+    BIOMETRIC_CONFIG.imageQuality.minFaceSize; // 80
+
+  // =========================================================================
+
   private static instance: TfliteYoloService | null = null;
   private static fastTfliteModule:
     | typeof import('react-native-fast-tflite')
@@ -170,6 +199,11 @@ export class TfliteYoloService {
   public biometricModelType: 'mobilefacenet' | 'ghostfacenet' = 'mobilefacenet';
   public isInitialized = false;
   public lastCalculatedSharpness = 100;
+  public lastCalculatedPadResult: {
+    accepted: boolean;
+    score: number;
+    warning?: string;
+  } = { accepted: true, score: 1.0 };
   private initPromise: Promise<boolean> | null = null;
   private isProcessingFrame = false;
 
@@ -287,8 +321,48 @@ export class TfliteYoloService {
       }
     }
 
+    if (src.startsWith('content://')) {
+      try {
+        const response = await fetch(src);
+        if (response.ok) {
+          const buffer = await response.arrayBuffer();
+          return loadImage({
+            encodedImageData: {
+              buffer,
+              width: 0,
+              height: 0,
+              imageFormat: 'jpg',
+            },
+          });
+        }
+      } catch (contentErr) {
+        console.warn('[TFLite YOLO] Content URI fetch note:', contentErr);
+      }
+    }
+
     const cleanPath = src.replace(/^file:\/\//, '');
-    return loadImage({ filePath: cleanPath });
+    try {
+      return loadImage({ filePath: cleanPath });
+    } catch (fileErr) {
+      try {
+        const uriToFetch = src.startsWith('file://')
+          ? src
+          : `file://${cleanPath}`;
+        const response = await fetch(uriToFetch);
+        if (response.ok) {
+          const buffer = await response.arrayBuffer();
+          return loadImage({
+            encodedImageData: {
+              buffer,
+              width: 0,
+              height: 0,
+              imageFormat: 'jpg',
+            },
+          });
+        }
+      } catch {}
+      throw fileErr;
+    }
   }
 
   /**
@@ -1029,8 +1103,14 @@ export class TfliteYoloService {
     isFrontCamera?: boolean,
   ): string {
     try {
-      const cropX1 = Math.max(0, Math.min(Math.round(cropBox.x1), frameImage.width - 2));
-      const cropY1 = Math.max(0, Math.min(Math.round(cropBox.y1), frameImage.height - 2));
+      const cropX1 = Math.max(
+        0,
+        Math.min(Math.round(cropBox.x1), frameImage.width - 2),
+      );
+      const cropY1 = Math.max(
+        0,
+        Math.min(Math.round(cropBox.y1), frameImage.height - 2),
+      );
       const cropX2 = Math.min(
         frameImage.width,
         Math.max(Math.round(cropBox.x2), cropX1 + 2),
@@ -1074,10 +1154,22 @@ export class TfliteYoloService {
     let faceImage = image;
     if (cropBox && cropBox.x2 > cropBox.x1 && cropBox.y2 > cropBox.y1) {
       try {
-        const x1 = Math.max(0, Math.min(Math.round(cropBox.x1), image.width - 2));
-        const y1 = Math.max(0, Math.min(Math.round(cropBox.y1), image.height - 2));
-        const x2 = Math.min(image.width, Math.max(Math.round(cropBox.x2), x1 + 2));
-        const y2 = Math.min(image.height, Math.max(Math.round(cropBox.y2), y1 + 2));
+        const x1 = Math.max(
+          0,
+          Math.min(Math.round(cropBox.x1), image.width - 2),
+        );
+        const y1 = Math.max(
+          0,
+          Math.min(Math.round(cropBox.y1), image.height - 2),
+        );
+        const x2 = Math.min(
+          image.width,
+          Math.max(Math.round(cropBox.x2), x1 + 2),
+        );
+        const y2 = Math.min(
+          image.height,
+          Math.max(Math.round(cropBox.y2), y1 + 2),
+        );
         faceImage = image.crop(x1, y1, x2, y2);
       } catch (e) {
         console.warn('[TFLite YOLO] image crop error, using full image:', e);
@@ -1157,6 +1249,18 @@ export class TfliteYoloService {
       gIdx,
       bIdx,
     );
+
+    // Presentation Attack Detection (PAD / Anti-Spoofing RGB evaluation on face crop)
+    this.lastCalculatedPadResult =
+      PresentationAttackDetector.evaluateTextureAndReflection(
+        u8,
+        112,
+        112,
+        step,
+        rIdx,
+        gIdx,
+        bIdx,
+      );
 
     return tensor;
   }
@@ -1248,7 +1352,25 @@ export class TfliteYoloService {
         );
         if (outputs && outputs.length > 0) {
           const raw = new Float32Array(outputs[0]);
-          return this.l2Normalize(raw);
+          if (raw.length !== 512) {
+            console.warn(
+              `[TFLite YOLO] Unexpected embedding dimension: ${raw.length}, expected 512`,
+            );
+            return null;
+          }
+          const normVec = this.l2Normalize(raw);
+          let hasSignal = false;
+          for (let i = 0; i < normVec.length; i++) {
+            if (normVec[i] !== 0) {
+              hasSignal = true;
+              break;
+            }
+          }
+          if (!hasSignal) {
+            console.warn('[TFLite YOLO] Degenerate/zero embedding rejected');
+            return null;
+          }
+          return normVec;
         }
       } catch (err) {
         console.warn(
@@ -1401,20 +1523,12 @@ export class TfliteYoloService {
             }
           }
 
-          // Fallback if YOLO didn't detect face in enrollment photo (e.g. tightly cropped selfie)
+          // If YOLO didn't detect face in enrollment photo, do NOT force embedding from a non-face image
           if (!cropBox) {
-            const side = Math.min(image.width, image.height);
-            const x1 = Math.max(0, Math.round((image.width - side) / 2));
-            const y1 =
-              image.height > image.width
-                ? Math.max(0, Math.round((image.height - side) * 0.35))
-                : Math.max(0, Math.round((image.height - side) / 2));
-            cropBox = {
-              x1,
-              y1,
-              x2: x1 + side,
-              y2: Math.min(image.height, y1 + side),
-            };
+            console.warn(
+              `[TFLite YOLO] No face detected in photo for ${profile.fullName} (${src}). Skipping to prevent corrupted vectors.`,
+            );
+            continue;
           }
 
           // 1. Normal orientation embedding with landmark roll alignment
@@ -1525,6 +1639,7 @@ export class TfliteYoloService {
     isFrontCamera?: boolean,
     minConfidenceThreshold: number = 75,
     allProfiles?: UserProfile[],
+    options?: { isSingleShot?: boolean },
   ): Promise<DetectionResult | null> {
     if (!photoPath) return null;
 
@@ -1619,7 +1734,7 @@ export class TfliteYoloService {
         return null;
       }
 
-      // Check Quality Gate for the primary detected face (angle / partial / edge cutoff)
+      // Check Quality Gate for the primary detected face (angle / partial / edge cutoff / min size)
       const primaryFaceCandidate = detectedFaces[0];
       if (primaryFaceCandidate.qualityWarning) {
         console.log(
@@ -1637,6 +1752,51 @@ export class TfliteYoloService {
           status: 'verify',
           boundingBox: primaryFaceCandidate.boundingBox,
           qualityWarning: primaryFaceCandidate.qualityWarning,
+        };
+      }
+
+      // Check minimum face size (80px in working frame image)
+      if (
+        primaryFaceCandidate.boundingBox.width <
+          BIOMETRIC_CONFIG.imageQuality.minFaceSize ||
+        primaryFaceCandidate.boundingBox.height <
+          BIOMETRIC_CONFIG.imageQuality.minFaceSize
+      ) {
+        const sizeWarning = 'Vui lòng đứng gần camera hơn';
+        return {
+          userId: '',
+          fullName: sizeWarning,
+          code: 'FACE_TOO_FAR',
+          avatarUri: '',
+          zoneName: '',
+          roomName: '',
+          confidence: primaryFaceCandidate.confidence,
+          timestamp: timeString,
+          status: 'verify',
+          boundingBox: primaryFaceCandidate.boundingBox,
+          qualityWarning: sizeWarning,
+        };
+      }
+
+      // Check head roll tilt angle
+      if (
+        primaryFaceCandidate.rollDegrees &&
+        Math.abs(primaryFaceCandidate.rollDegrees) >
+          BIOMETRIC_CONFIG.imageQuality.maxRollDegrees
+      ) {
+        const tiltWarning = 'Vui lòng nhìn thẳng vào camera';
+        return {
+          userId: '',
+          fullName: tiltWarning,
+          code: 'HEAD_TILTED',
+          avatarUri: '',
+          zoneName: '',
+          roomName: '',
+          confidence: primaryFaceCandidate.confidence,
+          timestamp: timeString,
+          status: 'verify',
+          boundingBox: primaryFaceCandidate.boundingBox,
+          qualityWarning: tiltWarning,
         };
       }
 
@@ -1668,16 +1828,15 @@ export class TfliteYoloService {
 
         // Check blur sharpness for primary face
         const sharpness = this.lastCalculatedSharpness;
-        const MIN_SHARPNESS_THRESHOLD = 35.0;
         if (
           face === primaryFaceCandidate &&
-          sharpness < MIN_SHARPNESS_THRESHOLD
+          sharpness < TfliteYoloService.MIN_SHARPNESS_THRESHOLD
         ) {
           const blurWarning = 'Ảnh bị mờ, vui lòng giữ yên';
           console.log(
             `[TFLite YOLO] Blur rejected face (sharpness variance: ${sharpness.toFixed(
               1,
-            )} < ${MIN_SHARPNESS_THRESHOLD})`,
+            )} < ${TfliteYoloService.MIN_SHARPNESS_THRESHOLD})`,
           );
           return {
             userId: '',
@@ -1694,6 +1853,37 @@ export class TfliteYoloService {
           };
         }
 
+        // Check Presentation Attack Detection (PAD / Anti-Spoofing) on primary face
+        const padResult = this.lastCalculatedPadResult;
+        if (
+          face === primaryFaceCandidate &&
+          BIOMETRIC_CONFIG.presentationAttackDetection.enabled &&
+          !padResult.accepted
+        ) {
+          const padWarning =
+            padResult.warning || 'Phát hiện dấu hiệu giả mạo khuôn mặt';
+          console.log(
+            `[TFLite YOLO] PAD rejected face: "${padWarning}" (score: ${padResult.score.toFixed(
+              2,
+            )})`,
+          );
+          return {
+            userId: '',
+            fullName: padWarning,
+            code: 'PAD_REJECTED',
+            avatarUri: faceAvatarUri,
+            zoneName: '',
+            roomName: '',
+            confidence: face.confidence,
+            timestamp: timeString,
+            status: 'verify',
+            boundingBox: face.boundingBox,
+            qualityWarning: padWarning,
+            padScore: padResult.score,
+            padAccepted: false,
+          };
+        }
+
         extractedFaces.push({
           face,
           avatarUri: faceAvatarUri,
@@ -1701,10 +1891,9 @@ export class TfliteYoloService {
         });
       }
 
-      // 6. Greedy 1-to-1 Assignment against enrolled profiles:
+      // 6. Greedy 1-to-1 Assignment against enrolled profiles with Ambiguity Margin Protection:
       // Prevents 2 different faces from claiming the same enrolled profile!
-      // Threshold 0.58 provides optimal balance for MobileFaceNet 512-d embeddings across varied camera angles
-      const MATCH_THRESHOLD = 0.58;
+      // Uses class-level calibration thresholds: MATCH_THRESHOLD, AMBIGUITY_MARGIN, DECISIVE_CONFIDENCE
 
       interface MatchCandidate {
         faceIdx: number;
@@ -1713,12 +1902,23 @@ export class TfliteYoloService {
       }
       const allCandidates: MatchCandidate[] = [];
       const faceMaxSim: number[] = new Array(extractedFaces.length).fill(0.15);
+      let primaryCandidateMatch: {
+        top1: { profile: UserProfile; similarity: number } | null;
+        top2: { profile: UserProfile; similarity: number } | null;
+        margin: number;
+      } = { top1: null, top2: null, margin: 0 };
 
       for (let fIdx = 0; fIdx < extractedFaces.length; fIdx++) {
         const liveEmb = extractedFaces[fIdx].embedding;
         if (!liveEmb) continue;
 
         let maxSimForThisFace = 0;
+        const candidateMap = new Map<
+          string,
+          { profile: UserProfile; similarity: number }
+        >();
+
+        // Check room profiles first
         for (const p of roomProfiles) {
           if (!p || !p.id) continue;
           const cached = this.profileEmbeddingsCache.get(p.id);
@@ -1729,19 +1929,94 @@ export class TfliteYoloService {
             if (sim > maxSimForThisFace) {
               maxSimForThisFace = sim;
             }
-            if (sim >= MATCH_THRESHOLD) {
-              allCandidates.push({
-                faceIdx: fIdx,
-                profile: p,
-                similarity: sim,
-              });
+            if (sim >= TfliteYoloService.MATCH_THRESHOLD) {
+              const prev = candidateMap.get(p.id);
+              if (!prev || sim > prev.similarity) {
+                candidateMap.set(p.id, { profile: p, similarity: sim });
+              }
             }
           }
         }
+
+        // Also check allProfiles (cross-room) to see if there is another matching profile
+        if (allProfiles && allProfiles.length > 0) {
+          const roomProfileIds = new Set(
+            roomProfiles.filter(p => Boolean(p?.id)).map(p => p.id),
+          );
+          for (const p of allProfiles) {
+            if (!p || !p.id || roomProfileIds.has(p.id)) continue;
+            const cached = this.profileEmbeddingsCache.get(p.id);
+            if (!cached || !cached.embeddings || cached.embeddings.length === 0)
+              continue;
+            for (const emb of cached.embeddings) {
+              const sim = this.calculateCosineSimilarity(liveEmb, emb);
+              if (sim > maxSimForThisFace) {
+                maxSimForThisFace = sim;
+              }
+              if (sim >= TfliteYoloService.MATCH_THRESHOLD) {
+                const prev = candidateMap.get(p.id);
+                if (!prev || sim > prev.similarity) {
+                  candidateMap.set(p.id, { profile: p, similarity: sim });
+                }
+              }
+            }
+          }
+        }
+
         faceMaxSim[fIdx] = maxSimForThisFace;
+
+        // Sort candidates for THIS face descending by similarity
+        const faceCandidates = Array.from(candidateMap.values()).sort(
+          (a, b) => b.similarity - a.similarity,
+        );
+
+        if (faceCandidates.length > 0) {
+          const top1 = faceCandidates[0];
+          const top2 = faceCandidates.length > 1 ? faceCandidates[1] : null;
+
+          if (fIdx === 0) {
+            primaryCandidateMatch = {
+              top1,
+              top2,
+              margin: top1 ? top1.similarity - (top2 ? top2.similarity : 0) : 0,
+            };
+          }
+
+          // MARGIN CHECK: If top-1 and top-2 are from 2 different people and the similarity gap
+          // is too narrow (< AMBIGUITY_MARGIN), reject to prevent User A from being falsely identified as User B!
+          const shouldBypassMargin =
+            BIOMETRIC_CONFIG.recognition.decisiveBypassEnabled &&
+            top1.similarity >= TfliteYoloService.DECISIVE_CONFIDENCE;
+
+          if (
+            top2 &&
+            !shouldBypassMargin &&
+            top1.similarity - top2.similarity <
+              TfliteYoloService.AMBIGUITY_MARGIN
+          ) {
+            console.warn(
+              `[TFLite YOLO] Ambiguous face match rejected for face #${fIdx}: "${
+                top1.profile.fullName
+              }" (${(top1.similarity * 100).toFixed(1)}%) vs "${
+                top2.profile.fullName
+              }" (${(top2.similarity * 100).toFixed(1)}%). Margin ${(
+                (top1.similarity - top2.similarity) *
+                100
+              ).toFixed(1)}% < ${(
+                TfliteYoloService.AMBIGUITY_MARGIN * 100
+              ).toFixed(1)}%`,
+            );
+          } else {
+            allCandidates.push({
+              faceIdx: fIdx,
+              profile: top1.profile,
+              similarity: top1.similarity,
+            });
+          }
+        }
       }
 
-      // Sort candidate matches descending by similarity
+      // Sort candidate matches across all faces descending by similarity
       allCandidates.sort((a, b) => b.similarity - a.similarity);
 
       const assignedFaces = new Set<number>();
@@ -1761,65 +2036,6 @@ export class TfliteYoloService {
         }
       }
 
-      // 6b. Cross-room fallback matching: check remaining unassigned faces against allProfiles (if provided)
-      if (allProfiles && allProfiles.length > 0) {
-        const unassignedFaceIndices = extractedFaces
-          .map((_, idx) => idx)
-          .filter(idx => !assignedFaces.has(idx));
-
-        if (unassignedFaceIndices.length > 0) {
-          const roomProfileIds = new Set(
-            roomProfiles.filter(p => Boolean(p?.id)).map(p => p.id),
-          );
-          const otherProfiles = allProfiles.filter(
-            p => p && p.id && !roomProfileIds.has(p.id),
-          );
-
-          const fallbackCandidates: MatchCandidate[] = [];
-          for (const fIdx of unassignedFaceIndices) {
-            const liveEmb = extractedFaces[fIdx].embedding;
-            if (!liveEmb) continue;
-
-            for (const p of otherProfiles) {
-              if (!p || !p.id) continue;
-              const cached = this.profileEmbeddingsCache.get(p.id);
-              if (
-                !cached ||
-                !cached.embeddings ||
-                cached.embeddings.length === 0
-              )
-                continue;
-              for (const emb of cached.embeddings) {
-                const sim = this.calculateCosineSimilarity(liveEmb, emb);
-                if (sim > faceMaxSim[fIdx]) {
-                  faceMaxSim[fIdx] = sim;
-                }
-                if (sim >= MATCH_THRESHOLD) {
-                  fallbackCandidates.push({
-                    faceIdx: fIdx,
-                    profile: p,
-                    similarity: sim,
-                  });
-                }
-              }
-            }
-          }
-
-          fallbackCandidates.sort((a, b) => b.similarity - a.similarity);
-          for (const cand of fallbackCandidates) {
-            if (
-              !assignedFaces.has(cand.faceIdx) &&
-              !assignedProfiles.has(cand.profile.id)
-            ) {
-              assignedFaces.add(cand.faceIdx);
-              assignedProfiles.add(cand.profile.id);
-              faceAssignedProfile.set(cand.faceIdx, cand.profile);
-              faceAssignedSim.set(cand.faceIdx, cand.similarity);
-            }
-          }
-        }
-      }
-
       interface EvaluatedFace {
         detection: YoloFaceDetection;
         profile: UserProfile | null;
@@ -1834,7 +2050,8 @@ export class TfliteYoloService {
         const item = extractedFaces[fIdx];
         const assignedProfile = faceAssignedProfile.get(fIdx) || null;
         const sim = faceAssignedSim.get(fIdx) ?? faceMaxSim[fIdx];
-        const isMatch = assignedProfile !== null && sim >= MATCH_THRESHOLD;
+        const isMatch =
+          assignedProfile !== null && sim >= TfliteYoloService.MATCH_THRESHOLD;
 
         evaluatedFaces.push({
           detection: item.face,
@@ -1869,10 +2086,17 @@ export class TfliteYoloService {
       );
       const additionalVerified: DetectionResult[] = [];
       for (const f of otherVerifiedFaces) {
-        const simRange = Math.max(0.01, 0.85 - MATCH_THRESHOLD);
+        const simRange = Math.max(
+          0.01,
+          TfliteYoloService.CONFIDENCE_CEILING -
+            TfliteYoloService.MATCH_THRESHOLD,
+        );
         const simRatio = Math.max(
           0,
-          Math.min(1, (f.similarity - MATCH_THRESHOLD) / simRange),
+          Math.min(
+            1,
+            (f.similarity - TfliteYoloService.MATCH_THRESHOLD) / simRange,
+          ),
         );
         const confPct = Math.min(
           99,
@@ -1909,29 +2133,52 @@ export class TfliteYoloService {
         } | MinThreshold: ${minConfidenceThreshold}%`,
       );
 
-      if (primary.status === 'present' && primary.profile) {
-        // Enrolled person recognized!
-        const simRange = Math.max(0.01, 0.85 - MATCH_THRESHOLD);
-        const simRatio = Math.max(
-          0,
-          Math.min(1, (primary.similarity - MATCH_THRESHOLD) / simRange),
-        );
-        const confidencePct = Math.min(
-          99,
-          Math.max(75, Math.round(75 + simRatio * 24)),
+      // 8. TEMPORAL VOTING PIPELINE (NIST 1:N Tablet Kiosk Standard)
+      const isSingleShot = options?.isSingleShot ?? false;
+      const padResult = this.lastCalculatedPadResult;
+
+      const temporalDecision =
+        TemporalVotingManager.getInstance().evaluateFrame(
+          {
+            personId: primaryCandidateMatch.top1?.profile.id || null,
+            profile: primaryCandidateMatch.top1?.profile || null,
+            top1Similarity: primaryCandidateMatch.top1?.similarity || 0,
+            top2Similarity: primaryCandidateMatch.top2?.similarity || 0,
+            margin: primaryCandidateMatch.margin,
+            qualityAccepted: true,
+            padAccepted: padResult.accepted,
+            padScore: padResult.score,
+            padWarning: padResult.warning,
+            timestamp: Date.now(),
+            avatarUri: primary.avatarUri,
+            boundingBox: primary.detection.boundingBox,
+            embedding: primary.embedding,
+          },
+          isSingleShot,
         );
 
-        // Check if confidence meets the user-configured threshold
-        const isThresholdMet = confidencePct >= minConfidenceThreshold;
+      console.log(
+        `[TFLite YOLO] Temporal Voting: ${temporalDecision.status} | Votes: ${
+          temporalDecision.votesCount
+        }/${BIOMETRIC_CONFIG.temporalVoting.minVotes} | Top1: "${
+          temporalDecision.profile?.fullName || 'UNKNOWN'
+        }" (${(temporalDecision.avgSimilarity * 100).toFixed(1)}%) | Margin: ${(
+          temporalDecision.margin * 100
+        ).toFixed(1)}%`,
+      );
 
+      // Decision 1: MATCH (Đạt chuẩn 3/5 votes, Top1 >= 0.68, Margin >= 0.045, PAD ok)
+      if (temporalDecision.status === 'MATCH' && temporalDecision.profile) {
+        const isThresholdMet =
+          temporalDecision.confidencePct >= minConfidenceThreshold;
         return {
-          userId: primary.profile.id,
-          fullName: primary.profile.fullName,
-          code: primary.profile.code,
-          avatarUri: primary.avatarUri, // Clean portrait crop of THIS enrolled person
+          userId: temporalDecision.personId!,
+          fullName: temporalDecision.profile.fullName,
+          code: temporalDecision.profile.code,
+          avatarUri: primary.avatarUri,
           zoneName: 'Khu vực chính',
           roomName: 'Phòng hiện tại',
-          confidence: confidencePct,
+          confidence: temporalDecision.confidencePct,
           timestamp: timeString,
           status: isThresholdMet ? 'present' : 'verify',
           boundingBox: primary.detection.boundingBox,
@@ -1940,6 +2187,57 @@ export class TfliteYoloService {
             isThresholdMet && additionalVerified.length > 0
               ? additionalVerified
               : undefined,
+          temporalVotes: temporalDecision.votesCount,
+          top1Similarity: temporalDecision.avgSimilarity,
+          margin: temporalDecision.margin,
+          padScore: padResult.score,
+          padAccepted: true,
+        };
+      }
+
+      // Decision 2: VERIFY (Mơ hồ, margin hẹp hoặc đang gom phiếu 1/3, 2/3)
+      if (temporalDecision.status === 'VERIFY') {
+        return {
+          userId: temporalDecision.profile?.id || '',
+          fullName:
+            temporalDecision.profile?.fullName ||
+            temporalDecision.message ||
+            'Đang xác minh danh tính...',
+          code: temporalDecision.profile?.code || 'VERIFYING',
+          avatarUri: primary.avatarUri,
+          zoneName: 'Khu vực chính',
+          roomName: 'Phòng hiện tại',
+          confidence: temporalDecision.confidencePct,
+          timestamp: timeString,
+          status: 'verify',
+          boundingBox: primary.detection.boundingBox,
+          qualityWarning: temporalDecision.message,
+          hasUnverifiedStranger,
+          temporalVotes: temporalDecision.votesCount,
+          top1Similarity: temporalDecision.avgSimilarity,
+          margin: temporalDecision.margin,
+          padScore: padResult.score,
+          padAccepted: padResult.accepted,
+        };
+      }
+
+      // Decision 3: RECAPTURE (Ảnh mờ hoặc nghi vấn giả mạo)
+      if (temporalDecision.status === 'RECAPTURE') {
+        return {
+          userId: '',
+          fullName:
+            temporalDecision.qualityWarning || 'Vui lòng giữ yên khuôn mặt',
+          code: 'RECAPTURE',
+          avatarUri: primary.avatarUri,
+          zoneName: '',
+          roomName: '',
+          confidence: 0,
+          timestamp: timeString,
+          status: 'verify',
+          boundingBox: primary.detection.boundingBox,
+          qualityWarning: temporalDecision.qualityWarning,
+          padScore: padResult.score,
+          padAccepted: padResult.accepted,
         };
       }
 
@@ -1947,7 +2245,6 @@ export class TfliteYoloService {
       // Check against session stranger embeddings cache to group repeat sightings of the same stranger
       let matchedStranger: StrangerRecord | null = null;
       let bestStrangerSim = 0;
-      const STRANGER_MATCH_THRESHOLD = 0.7;
 
       if (primary.embedding) {
         for (const stranger of this.strangerEmbeddingsCache.values()) {
@@ -1961,7 +2258,10 @@ export class TfliteYoloService {
         }
       }
 
-      if (matchedStranger && bestStrangerSim >= STRANGER_MATCH_THRESHOLD) {
+      if (
+        matchedStranger &&
+        bestStrangerSim >= TfliteYoloService.STRANGER_MATCH_THRESHOLD
+      ) {
         // Matched existing stranger from this session!
         matchedStranger.lastSeen = Date.now();
         if (primary.embedding && matchedStranger.embeddings.length < 3) {
@@ -1993,7 +2293,7 @@ export class TfliteYoloService {
       const strangerConfidence = Math.max(
         10,
         Math.round(
-          (bestStrangerSim >= STRANGER_MATCH_THRESHOLD
+          (bestStrangerSim >= TfliteYoloService.STRANGER_MATCH_THRESHOLD
             ? bestStrangerSim
             : primary.similarity) * 100,
         ),
@@ -2138,34 +2438,14 @@ export class TfliteYoloService {
     vecA: Float32Array | number[],
     vecB: Float32Array | number[],
   ): number {
-    let dotProduct = 0;
-    let normA = 0;
-    let normB = 0;
-
-    for (let i = 0; i < vecA.length; i++) {
-      dotProduct += vecA[i] * vecB[i];
-      normA += vecA[i] * vecA[i];
-      normB += vecB[i] * vecB[i];
-    }
-
-    if (normA === 0 || normB === 0) return 0;
-    return dotProduct / (Math.sqrt(normA) * Math.sqrt(normB));
+    return computeCosineSimilarity(vecA, vecB);
   }
 
   /**
    * Helper to normalize a vector by its L2 norm
    */
   private l2Normalize(vec: Float32Array): Float32Array {
-    let norm = 0;
-    for (let i = 0; i < vec.length; i++) {
-      norm += vec[i] * vec[i];
-    }
-    const sqrtNorm = Math.sqrt(norm) || 1;
-    const normalized = new Float32Array(vec.length);
-    for (let i = 0; i < vec.length; i++) {
-      normalized[i] = vec[i] / sqrtNorm;
-    }
-    return normalized;
+    return l2NormalizeVector(vec);
   }
 
   /**
@@ -2246,6 +2526,7 @@ export class TfliteYoloService {
     isFrontCamera?: boolean,
     minConfidenceThreshold?: number,
     allProfiles?: UserProfile[],
+    options?: { isSingleShot?: boolean },
   ): Promise<DetectionResult | null> {
     return this.getInstance().processCapturedFrame(
       photoPath,
@@ -2253,7 +2534,12 @@ export class TfliteYoloService {
       isFrontCamera,
       minConfidenceThreshold,
       allProfiles,
+      options,
     );
+  }
+
+  public static resetTemporalVoting(): void {
+    TemporalVotingManager.getInstance().reset();
   }
 
   public static async warmupRoomEmbeddings(
@@ -2319,7 +2605,9 @@ export class TfliteYoloService {
         ) {
           rawVectors = [p.embeddings as unknown as number[]];
         } else {
-          rawVectors = (p.embeddings as unknown as (number[] | Float32Array)[]).filter(
+          rawVectors = (
+            p.embeddings as unknown as (number[] | Float32Array)[]
+          ).filter(
             arr =>
               (Array.isArray(arr) || arr instanceof Float32Array) &&
               arr.length === 512,

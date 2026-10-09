@@ -30,6 +30,9 @@ import {
   UserCheck,
   RefreshCw,
   AlertCircle,
+  Search,
+  CheckCircle2,
+  Users,
 } from 'lucide-react-native';
 import { PickerModal } from './PickerModal';
 import {
@@ -92,6 +95,29 @@ export const AddUserModal: React.FC<AddUserModalProps> = ({
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isGeneratingCode, setIsGeneratingCode] = useState(false);
 
+  // States for linking stranger to existing member
+  const [enrollMode, setEnrollMode] = useState<'link_existing' | 'create_new'>(
+    initialPhotoUri ? 'link_existing' : 'create_new',
+  );
+  const [searchMemberQuery, setSearchMemberQuery] = useState('');
+  const [selectedExistingUserId, setSelectedExistingUserId] = useState<string | null>(null);
+  const [isLinkingUser, setIsLinkingUser] = useState(false);
+
+  const selectedExistingProfile = (userProfiles || []).find(
+    u => u.id === selectedExistingUserId,
+  );
+
+  const filteredExistingProfiles = (userProfiles || []).filter(u => {
+    if (u.isVisitor) return false;
+    const q = searchMemberQuery.trim().toLowerCase();
+    if (!q) return true;
+    const matchName = u.fullName?.toLowerCase().includes(q);
+    const matchCode = u.code?.toLowerCase().includes(q);
+    const room = rooms.find(r => r.id === u.roomId);
+    const matchRoom = room?.name?.toLowerCase().includes(q);
+    return Boolean(matchName || matchCode || matchRoom);
+  });
+
   const bodyScrollRef = useRef<React.ElementRef<typeof ScrollView>>(null);
 
   const handleTabPress = (tab: FormTab) => {
@@ -102,6 +128,110 @@ export const AddUserModal: React.FC<AddUserModalProps> = ({
   };
 
   const officialProfiles = (userProfiles || []).filter(u => !u.isVisitor);
+
+  // Manual attendance check-in & face enrichment for existing user
+  const handleConfirmLinkUser = async () => {
+    if (!selectedExistingProfile) {
+      Alert.alert(
+        'Chưa chọn nhân sự',
+        'Vui lòng chọn nhân sự trong danh sách để gán khuôn mặt.',
+      );
+      return;
+    }
+
+    if (!initialPhotoUri) {
+      Alert.alert('Lỗi', 'Không tìm thấy ảnh vừa quét để bổ sung.');
+      return;
+    }
+
+    try {
+      setIsLinkingUser(true);
+
+      // 1. Chuẩn bị danh sách ảnh mới cho User:
+      let updatedPhotos = Array.isArray(selectedExistingProfile.photos)
+        ? [...selectedExistingProfile.photos]
+        : [];
+
+      // Kiểm tra nếu chưa có ảnh này thì thêm vào
+      if (!updatedPhotos.includes(initialPhotoUri)) {
+        if (updatedPhotos.length >= PHOTO_CONFIG.MAX_PHOTOS_PER_USER) {
+          // Nếu đã đủ 5 ảnh, thay thế ảnh cũ nhất (giữ ảnh avatar chính)
+          updatedPhotos = [...updatedPhotos.slice(1), initialPhotoUri];
+        } else {
+          updatedPhotos.push(initialPhotoUri);
+        }
+      }
+
+      const mainAvatar =
+        selectedExistingProfile.avatarUri || initialPhotoUri;
+
+      const updatedProfile: UserProfile = {
+        ...selectedExistingProfile,
+        avatarUri: mainAvatar,
+        photos: updatedPhotos,
+      };
+
+      // 2. Cập nhật vào Redux store
+      dispatch(upsertUserProfile(updatedProfile));
+
+      // 3. Nạp vector mới vào RAM ngay lập tức
+      await YoloDetectorService.enrollProfile(updatedProfile).catch(err => {
+        console.warn('[AddUserModal] enrollProfile error:', err);
+      });
+
+      // 4. Kích hoạt onUserCreated -> chuyển stranger thành Có mặt trong session
+      if (onUserCreated) {
+        onUserCreated(updatedProfile);
+      }
+
+      // 5. Đồng bộ lên Server Backend trong background
+      try {
+        let uploadedPhotoUri = initialPhotoUri;
+        if (
+          !initialPhotoUri.startsWith('http://') &&
+          !initialPhotoUri.startsWith('https://')
+        ) {
+          try {
+            const upRes = await uploadService.uploadImage(
+              initialPhotoUri,
+              UploadFolder.PROFILES,
+            );
+            if (upRes?.path) {
+              uploadedPhotoUri = upRes.path;
+            }
+          } catch (upErr) {
+            console.log('[AddUserModal] uploadImage error:', upErr);
+          }
+        }
+
+        const serverPhotos = updatedPhotos.map(p =>
+          p === initialPhotoUri ? uploadedPhotoUri : p,
+        );
+
+        await profileService.updateProfile(selectedExistingProfile.id, {
+          avatarUri:
+            mainAvatar === initialPhotoUri ? uploadedPhotoUri : mainAvatar,
+          photos: serverPhotos,
+        });
+      } catch (syncErr) {
+        console.log('[AddUserModal] Failed to sync photo to server:', syncErr);
+      }
+
+      Alert.alert(
+        'Điểm danh thành công',
+        `Đã bổ sung ảnh nhận diện AI và ghi nhận Có mặt cho ${selectedExistingProfile.fullName} (${selectedExistingProfile.code}).`,
+      );
+
+      onClose();
+    } catch (err: unknown) {
+      Alert.alert(
+        'Lỗi gán nhân sự',
+        (err as Error)?.message || 'Không thể cập nhật hồ sơ',
+      );
+    } finally {
+      setIsLinkingUser(false);
+    }
+  };
 
   const {
     control,
@@ -230,6 +360,11 @@ export const AddUserModal: React.FC<AddUserModalProps> = ({
       });
 
       handleRegenerateCode();
+
+      setEnrollMode(initialPhotoUri ? 'link_existing' : 'create_new');
+      setSearchMemberQuery(initialFullName || '');
+      setSelectedExistingUserId(null);
+      setIsLinkingUser(false);
 
       if (initialPhotoUri) {
         setPhotos([initialPhotoUri]);
@@ -575,6 +710,242 @@ export const AddUserModal: React.FC<AddUserModalProps> = ({
     </View>
   );
 
+  const renderLinkExistingView = () => (
+    <View style={styles.linkContainer}>
+      {/* Stranger Face Banner */}
+      <View style={styles.strangerFaceBanner}>
+        <View style={styles.strangerFaceThumbWrap}>
+          {initialPhotoUri ? (
+            <Image
+              source={{ uri: initialPhotoUri }}
+              style={styles.strangerFaceThumb}
+            />
+          ) : null}
+          <View style={styles.strangerFaceBadge}>
+            <AppText style={styles.strangerFaceBadgeText}>Ảnh vừa quét</AppText>
+          </View>
+        </View>
+        <View style={{ flex: 1, paddingLeft: 12 }}>
+          <AppText style={styles.linkBannerTitle}>
+            Điểm danh & Bổ sung ảnh mẫu AI
+          </AppText>
+          <AppText style={styles.linkBannerDesc}>
+            Chọn nhân sự có sẵn để gán ảnh mặt vừa quét. AI sẽ nạp thêm góc ảnh này để các lần sau nhận diện chuẩn xác hơn.
+          </AppText>
+        </View>
+      </View>
+
+      {/* Search Input */}
+      <View style={styles.searchBarWrap}>
+        <Search size={16} color={appColors.slate400} />
+        <TextInput
+          style={styles.searchInput}
+          placeholder="Tìm theo họ tên, mã nhân sự, phòng..."
+          placeholderTextColor={appColors.slate400}
+          value={searchMemberQuery}
+          onChangeText={setSearchMemberQuery}
+        />
+        {Boolean(searchMemberQuery) && (
+          <TouchableOpacity onPress={() => setSearchMemberQuery('')}>
+            <X size={16} color={appColors.slate400} />
+          </TouchableOpacity>
+        )}
+      </View>
+
+      {/* Split layout: List on left, Compare on right */}
+      <View
+        style={[
+          styles.linkContentSplit,
+          !isPhone && styles.linkContentSplitTablet,
+        ]}
+      >
+        {/* Left Column: Member List */}
+        <View style={styles.memberListCol}>
+          <AppText style={styles.colHeaderLabel}>
+            Chọn nhân sự ({filteredExistingProfiles.length}):
+          </AppText>
+          <ScrollView
+            style={styles.memberListScroll}
+            showsVerticalScrollIndicator={false}
+          >
+            {filteredExistingProfiles.length === 0 ? (
+              <View style={styles.emptySearchBox}>
+                <AppText style={styles.emptySearchText}>
+                  Không tìm thấy nhân sự phù hợp với từ khóa "{searchMemberQuery}"
+                </AppText>
+              </View>
+            ) : (
+              filteredExistingProfiles.map(u => {
+                const isSelected = u.id === selectedExistingUserId;
+                const room = rooms.find(r => r.id === u.roomId);
+                return (
+                  <TouchableOpacity
+                    key={u.id}
+                    style={[
+                      styles.memberItemCard,
+                      isSelected && styles.memberItemCardSelected,
+                    ]}
+                    onPress={() => setSelectedExistingUserId(u.id)}
+                    activeOpacity={0.7}
+                  >
+                    <View style={styles.memberAvatarWrap}>
+                      {u.avatarUri ? (
+                        <Image
+                          source={{
+                            uri: appUtils.getUrlImage(u.avatarUri),
+                          }}
+                          style={styles.memberAvatarImg}
+                        />
+                      ) : (
+                        <View style={styles.memberAvatarPlaceholder}>
+                          <AppText style={styles.memberAvatarPlaceholderText}>
+                            {(u.fullName || 'N')[0]}
+                          </AppText>
+                        </View>
+                      )}
+                    </View>
+                    <View style={{ flex: 1, minWidth: 0 }}>
+                      <AppText
+                        style={[
+                          styles.memberName,
+                          isSelected && styles.memberNameSelected,
+                        ]}
+                        numberOfLines={1}
+                      >
+                        {u.fullName}
+                      </AppText>
+                      <AppText style={styles.memberMeta} numberOfLines={1}>
+                        Mã: {u.code} • {room?.name || 'Chưa xếp phòng'}
+                      </AppText>
+                    </View>
+                    {isSelected && (
+                      <CheckCircle2 size={18} color={appColors.blue600} />
+                    )}
+                  </TouchableOpacity>
+                );
+              })
+            )}
+          </ScrollView>
+        </View>
+
+        {/* Right Column: Visual Side-by-Side Comparison */}
+        <View style={styles.compareCol}>
+          <AppText style={styles.colHeaderLabel}>Đối chiếu khuôn mặt:</AppText>
+          {selectedExistingProfile ? (
+            <View style={styles.compareCard}>
+              <View style={styles.comparePhotosRow}>
+                {/* Photo 1: Captured Stranger Photo */}
+                <View style={styles.comparePhotoBox}>
+                  {initialPhotoUri ? (
+                    <Image
+                      source={{ uri: initialPhotoUri }}
+                      style={styles.compareImg}
+                    />
+                  ) : null}
+                  <View style={styles.comparePhotoTagNew}>
+                    <AppText style={styles.comparePhotoTagText}>
+                      Ảnh vừa quét
+                    </AppText>
+                  </View>
+                </View>
+
+                <View style={styles.compareArrowBox}>
+                  <UserCheck size={20} color={appColors.blue600} />
+                  <AppText style={styles.compareArrowText}>Gán vào</AppText>
+                </View>
+
+                {/* Photo 2: Existing Profile Photo */}
+                <View style={styles.comparePhotoBox}>
+                  {selectedExistingProfile.avatarUri ? (
+                    <Image
+                      source={{
+                        uri: appUtils.getUrlImage(
+                          selectedExistingProfile.avatarUri,
+                        ),
+                      }}
+                      style={styles.compareImg}
+                    />
+                  ) : (
+                    <View style={styles.compareImgPlaceholder}>
+                      <AppText style={styles.comparePlaceholderText}>
+                        {(selectedExistingProfile.fullName || 'N')[0]}
+                      </AppText>
+                    </View>
+                  )}
+                  <View style={styles.comparePhotoTagOld}>
+                    <AppText style={styles.comparePhotoTagText}>
+                      Hồ sơ gốc
+                    </AppText>
+                  </View>
+                </View>
+              </View>
+
+              {/* Selected Profile Details */}
+              <View style={styles.compareInfoBox}>
+                <AppText style={styles.compareName}>
+                  {selectedExistingProfile.fullName}
+                </AppText>
+                <AppText style={styles.compareCode}>
+                  Mã NV/HV: {selectedExistingProfile.code}
+                </AppText>
+                <AppText style={styles.compareRoom}>
+                  Phòng:{' '}
+                  {rooms.find(
+                    r => r.id === selectedExistingProfile.roomId,
+                  )?.name || 'Chưa xếp phòng'}
+                </AppText>
+                <AppText style={styles.comparePhotosCount}>
+                  Số lượng ảnh AI hiện có:{' '}
+                  {(selectedExistingProfile.photos || []).length}/5
+                </AppText>
+              </View>
+            </View>
+          ) : (
+            <View style={styles.noSelectionBox}>
+              <Users size={36} color={appColors.slate300} />
+              <AppText style={styles.noSelectionText}>
+                Chọn một nhân sự từ danh sách bên trái để đối chiếu khuôn mặt trước khi xác nhận.
+              </AppText>
+            </View>
+          )}
+        </View>
+      </View>
+
+      {/* Footer Buttons for Link Mode */}
+      <View style={styles.linkFooterRow}>
+        <TouchableOpacity
+          style={styles.cancelLinkBtn}
+          onPress={onClose}
+          disabled={isLinkingUser}
+        >
+          <AppText style={styles.cancelLinkBtnText}>Hủy bỏ</AppText>
+        </TouchableOpacity>
+
+        <TouchableOpacity
+          style={[
+            styles.confirmLinkBtn,
+            (!selectedExistingProfile || isLinkingUser) &&
+              styles.confirmLinkBtnDisabled,
+          ]}
+          onPress={handleConfirmLinkUser}
+          disabled={!selectedExistingProfile || isLinkingUser}
+          activeOpacity={0.8}
+        >
+          {isLinkingUser ? (
+            <ActivityIndicator size="small" color={appColors.white} />
+          ) : (
+            <>
+              <CheckCircle2 size={18} color={appColors.white} />
+              <AppText style={styles.confirmLinkBtnText}>
+                Xác nhận gán ảnh & Điểm danh Có mặt
+              </AppText>
+            </>
+          )}
+        </TouchableOpacity>
+      </View>
+    </View>
+  );
+
   return (
     <Modal
       visible={visible}
@@ -616,8 +987,71 @@ export const AddUserModal: React.FC<AddUserModalProps> = ({
               </TouchableOpacity>
             </View>
 
-            {/* Visitor Switch Section - Đặt ở trên đầu */}
-            <View style={styles.visitorSwitchRow}>
+            {/* Mode Switcher when initialPhotoUri is present */}
+            {Boolean(initialPhotoUri) && (
+              <View style={styles.modeTabsRow}>
+                <TouchableOpacity
+                  style={[
+                    styles.modeTabButton,
+                    enrollMode === 'link_existing' && styles.modeTabButtonActive,
+                  ]}
+                  onPress={() => setEnrollMode('link_existing')}
+                  activeOpacity={0.8}
+                >
+                  <UserCheck
+                    size={16}
+                    color={
+                      enrollMode === 'link_existing'
+                        ? appColors.blue600
+                        : appColors.slate500
+                    }
+                  />
+                  <AppText
+                    style={[
+                      styles.modeTabButtonText,
+                      enrollMode === 'link_existing' &&
+                        styles.modeTabButtonTextActive,
+                    ]}
+                  >
+                    Gán vào hồ sơ có sẵn
+                  </AppText>
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  style={[
+                    styles.modeTabButton,
+                    enrollMode === 'create_new' && styles.modeTabButtonActive,
+                  ]}
+                  onPress={() => setEnrollMode('create_new')}
+                  activeOpacity={0.8}
+                >
+                  <UserPlus
+                    size={16}
+                    color={
+                      enrollMode === 'create_new'
+                        ? appColors.blue600
+                        : appColors.slate500
+                    }
+                  />
+                  <AppText
+                    style={[
+                      styles.modeTabButtonText,
+                      enrollMode === 'create_new' &&
+                        styles.modeTabButtonTextActive,
+                    ]}
+                  >
+                    Tạo hồ sơ mới
+                  </AppText>
+                </TouchableOpacity>
+              </View>
+            )}
+
+            {enrollMode === 'link_existing' && Boolean(initialPhotoUri) ? (
+              renderLinkExistingView()
+            ) : (
+              <>
+                {/* Visitor Switch Section - Đặt ở trên đầu */}
+                <View style={styles.visitorSwitchRow}>
               <View style={{ flex: 1, paddingRight: 8 }}>
                 <AppText style={styles.visitorSwitchTitle}>Khách thăm gặp / Thân nhân</AppText>
                 <AppText style={styles.visitorSwitchSub}>
@@ -1717,8 +2151,10 @@ export const AddUserModal: React.FC<AddUserModalProps> = ({
                 )}
               </TouchableOpacity>
             </View>
-          </View>
-        </View>
+          </>
+        )}
+      </View>
+    </View>
       </KeyboardAvoidingView>
 
       {/* Visited Person Picker Modal */}
@@ -2245,6 +2681,351 @@ const styles = StyleSheet.create({
     opacity: 0.6,
   },
   saveBtnText: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: appColors.white,
+  },
+  modeTabsRow: {
+    flexDirection: 'row',
+    gap: 8,
+    marginBottom: 12,
+    backgroundColor: appColors.slate100,
+    padding: 4,
+    borderRadius: 10,
+  },
+  modeTabButton: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    paddingVertical: 9,
+    borderRadius: 8,
+  },
+  modeTabButtonActive: {
+    backgroundColor: appColors.white,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.1,
+    shadowRadius: 2,
+    elevation: 2,
+  },
+  modeTabButtonText: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: appColors.slate600,
+  },
+  modeTabButtonTextActive: {
+    color: appColors.blue600,
+    fontWeight: '700',
+  },
+  linkContainer: {
+    flex: 1,
+  },
+  strangerFaceBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#eff6ff',
+    borderWidth: 1,
+    borderColor: '#bfdbfe',
+    borderRadius: 12,
+    padding: 10,
+    marginBottom: 10,
+  },
+  strangerFaceThumbWrap: {
+    position: 'relative',
+  },
+  strangerFaceThumb: {
+    width: 60,
+    height: 60,
+    borderRadius: 10,
+    borderWidth: 2,
+    borderColor: appColors.blue600,
+    backgroundColor: appColors.slate200,
+  },
+  strangerFaceBadge: {
+    position: 'absolute',
+    bottom: -6,
+    left: 2,
+    right: 2,
+    backgroundColor: appColors.blue600,
+    borderRadius: 4,
+    paddingVertical: 1,
+    alignItems: 'center',
+  },
+  strangerFaceBadgeText: {
+    color: appColors.white,
+    fontSize: 8,
+    fontWeight: '700',
+  },
+  linkBannerTitle: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: appColors.slate800,
+  },
+  linkBannerDesc: {
+    fontSize: 11,
+    color: appColors.slate600,
+    marginTop: 2,
+    lineHeight: 15,
+  },
+  searchBarWrap: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: appColors.slate50,
+    borderWidth: 1,
+    borderColor: appColors.slate200,
+    borderRadius: 10,
+    paddingHorizontal: 10,
+    height: 40,
+    marginBottom: 10,
+    gap: 8,
+  },
+  searchInput: {
+    flex: 1,
+    fontSize: 13,
+    color: appColors.slate800,
+    paddingVertical: 0,
+  },
+  linkContentSplit: {
+    flex: 1,
+    gap: 10,
+  },
+  linkContentSplitTablet: {
+    flexDirection: 'row',
+  },
+  memberListCol: {
+    flex: 1,
+  },
+  colHeaderLabel: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: appColors.slate700,
+    marginBottom: 4,
+  },
+  memberListScroll: {
+    flex: 1,
+    borderWidth: 1,
+    borderColor: appColors.slate200,
+    borderRadius: 10,
+    backgroundColor: appColors.slate50,
+    padding: 6,
+  },
+  emptySearchBox: {
+    padding: 20,
+    alignItems: 'center',
+  },
+  emptySearchText: {
+    fontSize: 12,
+    color: appColors.slate500,
+    textAlign: 'center',
+  },
+  memberItemCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: appColors.white,
+    borderRadius: 8,
+    padding: 8,
+    marginBottom: 6,
+    borderWidth: 1,
+    borderColor: appColors.slate200,
+    gap: 10,
+  },
+  memberItemCardSelected: {
+    borderColor: appColors.blue600,
+    backgroundColor: '#eff6ff',
+  },
+  memberAvatarWrap: {
+    width: 36,
+    height: 36,
+    borderRadius: 8,
+    overflow: 'hidden',
+    backgroundColor: appColors.slate200,
+  },
+  memberAvatarImg: {
+    width: '100%',
+    height: '100%',
+  },
+  memberAvatarPlaceholder: {
+    width: '100%',
+    height: '100%',
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: appColors.blue600,
+  },
+  memberAvatarPlaceholderText: {
+    color: appColors.white,
+    fontSize: 14,
+    fontWeight: '700',
+  },
+  memberName: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: appColors.slate800,
+  },
+  memberNameSelected: {
+    color: appColors.blue700,
+    fontWeight: '700',
+  },
+  memberMeta: {
+    fontSize: 11,
+    color: appColors.slate500,
+    marginTop: 2,
+  },
+  compareCol: {
+    flex: 1.1,
+  },
+  compareCard: {
+    backgroundColor: appColors.white,
+    borderWidth: 1,
+    borderColor: appColors.blue200,
+    borderRadius: 12,
+    padding: 12,
+    alignItems: 'center',
+  },
+  comparePhotosRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 14,
+    marginBottom: 10,
+  },
+  comparePhotoBox: {
+    alignItems: 'center',
+  },
+  compareImg: {
+    width: 76,
+    height: 76,
+    borderRadius: 12,
+    borderWidth: 2,
+    borderColor: appColors.blue500,
+    backgroundColor: appColors.slate100,
+  },
+  compareImgPlaceholder: {
+    width: 76,
+    height: 76,
+    borderRadius: 12,
+    borderWidth: 2,
+    borderColor: appColors.slate300,
+    backgroundColor: appColors.slate200,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  comparePlaceholderText: {
+    fontSize: 22,
+    fontWeight: '700',
+    color: appColors.slate600,
+  },
+  comparePhotoTagNew: {
+    backgroundColor: appColors.blue600,
+    borderRadius: 6,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    marginTop: 4,
+  },
+  comparePhotoTagOld: {
+    backgroundColor: appColors.slate600,
+    borderRadius: 6,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    marginTop: 4,
+  },
+  comparePhotoTagText: {
+    color: appColors.white,
+    fontSize: 9,
+    fontWeight: '700',
+  },
+  compareArrowBox: {
+    alignItems: 'center',
+    gap: 2,
+  },
+  compareArrowText: {
+    fontSize: 10,
+    color: appColors.blue600,
+    fontWeight: '600',
+  },
+  compareInfoBox: {
+    width: '100%',
+    backgroundColor: appColors.slate50,
+    borderRadius: 8,
+    padding: 10,
+    borderWidth: 1,
+    borderColor: appColors.slate200,
+  },
+  compareName: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: appColors.slate900,
+  },
+  compareCode: {
+    fontSize: 12,
+    color: appColors.slate600,
+    marginTop: 2,
+  },
+  compareRoom: {
+    fontSize: 12,
+    color: appColors.slate600,
+    marginTop: 2,
+  },
+  comparePhotosCount: {
+    fontSize: 11,
+    color: appColors.blue600,
+    fontWeight: '600',
+    marginTop: 4,
+  },
+  noSelectionBox: {
+    flex: 1,
+    borderWidth: 1,
+    borderColor: appColors.slate200,
+    borderRadius: 12,
+    backgroundColor: appColors.slate50,
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 24,
+  },
+  noSelectionText: {
+    fontSize: 12,
+    color: appColors.slate500,
+    textAlign: 'center',
+    marginTop: 8,
+    lineHeight: 18,
+  },
+  linkFooterRow: {
+    flexDirection: 'row',
+    gap: 10,
+    paddingTop: 10,
+    borderTopWidth: 1,
+    borderTopColor: appColors.slate100,
+  },
+  cancelLinkBtn: {
+    flex: 1,
+    height: 42,
+    borderWidth: 1,
+    borderColor: appColors.slate300,
+    borderRadius: 10,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: appColors.white,
+  },
+  cancelLinkBtnText: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: appColors.slate600,
+  },
+  confirmLinkBtn: {
+    flex: 2,
+    height: 42,
+    backgroundColor: appColors.green600,
+    borderRadius: 10,
+    flexDirection: 'row',
+    justifyContent: 'center',
+    alignItems: 'center',
+    gap: 6,
+  },
+  confirmLinkBtnDisabled: {
+    backgroundColor: appColors.slate300,
+  },
+  confirmLinkBtnText: {
     fontSize: 13,
     fontWeight: '700',
     color: appColors.white,

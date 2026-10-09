@@ -85,3 +85,28 @@ adb shell dpm remove-active-admin com.peopledetector/.AdminReceiver
 # Cách 2: Gỡ hoàn toàn ứng dụng khỏi thiết bị
 adb uninstall com.peopledetector
 ```
+
+---
+
+## 5. Khắc Phục Hiện Tượng Tự Thoát Ứng Dụng Hoặc Rơi Vào Màn Hình Khóa Trên Samsung Tablet
+
+Nếu trong quá trình vận hành, máy tính bảng thỉnh thoảng tự thoát ứng dụng hoặc hiện màn hình khóa yêu cầu vuốt/mở lại, hãy cấu hình 4 mục sau trên Samsung Tablet:
+
+### 5.1. Tắt hoàn toàn Màn hình khóa của Samsung (BẮT BUỘC)
+- Vào **Cài đặt (Settings)** -> **Màn hình khóa (Lock screen)**.
+- Chọn **Kiểu khóa màn hình (Lock screen type)** -> Chọn **Không có (None)** (Không chọn Vuốt, PIN hay Mật khẩu).
+- *Lý do*: Theo chính sách bảo mật Android, nếu máy có đặt mã PIN/Mật khẩu hoặc kiểu khóa Vuốt, hệ điều hành sẽ chặn Device Owner tắt Keyguard. Khi đặt là "Không có", máy tính bảng sẽ không bao giờ xuất hiện màn hình khóa.
+
+### 5.2. Tắt tính năng tự khởi động lại ban đêm của Samsung
+- Vào **Cài đặt (Settings)** -> **Chăm sóc thiết bị (Device care)**.
+- Chọn **Tự động tối ưu hóa (Auto optimization)**.
+- **TẮT mục "Tự khởi động lại khi cần thiết" (Auto restart when needed)**.
+- *Lý do*: Samsung One UI thường tự âm thầm khởi động lại tablet vào khoảng 3h sáng để dọn dẹp bộ nhớ.
+
+### 5.3. Bỏ giới hạn Pin (Battery Optimization) cho PeopleDetector
+- Vào **Cài đặt (Settings)** -> **Ứng dụng (Apps)** -> Chọn **PeopleDetector**.
+- Chọn mục **Pin (Battery)** -> Chọn **Không hạn chế (Unrestricted)** (thay vì Tối ưu hóa hoặc Hạn chế).
+- Vào **Chăm sóc thiết bị (Device care)** -> **Pin (Battery)** -> **Giới hạn sử dụng dưới nền (Background usage limits)** -> Đảm bảo PeopleDetector KHÔNG nằm trong danh sách "Ứng dụng nghỉ sâu" (Deep sleeping apps).
+
+### 5.4. Luôn cắm sạc nguồn 24/7
+- Kiosk đã được cấu hình tự động kích hoạt cờ hệ thống `STAY_ON_WHILE_PLUGGED_IN`. Khi cắm sạc liên tục, màn hình tablet sẽ **luôn luôn sáng 100%**, không bao giờ bị tắt màn hình (Screen Timeout).

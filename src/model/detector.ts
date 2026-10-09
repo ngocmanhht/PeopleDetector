@@ -138,6 +138,11 @@ export interface DetectionResult {
   isVisitor?: boolean;
   visitedProfileName?: string;
   qualityWarning?: string;
+  temporalVotes?: number;
+  padScore?: number;
+  padAccepted?: boolean;
+  top1Similarity?: number;
+  margin?: number;
 }
 
 export interface AlertLog {

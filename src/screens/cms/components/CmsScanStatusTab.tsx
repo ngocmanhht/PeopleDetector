@@ -35,7 +35,7 @@ import { useResponsive } from '../../../hooks/use-responsive';
 import { appColors } from '../../../const/app-colors';
 import { deleteTempFile } from '../../../utils/file-cleaner';
 import { ImagePickerService } from '../../../services/image-picker-service';
-import { tfliteYoloService } from '../../../services/tflite-yolo-service';
+import { YoloDetectorService } from '../../../services/yolo-detector';
 import { appUtils } from '../../../utils';
 import dayjs from 'dayjs';
 import { STATUS_CONFIG, getStatusConfig } from '../types';
@@ -57,6 +57,9 @@ export const CmsScanStatusTab: React.FC<CmsScanStatusTabProps> = ({
   const zones = useAppSelector(state => state.detector.zones);
   const sessions = useAppSelector(state => state.detector.sessions);
   const currentUser = useAppSelector(state => state.app.currentUser);
+  const confidenceThreshold = useAppSelector(
+    state => state.detector.confidenceThreshold ?? 70,
+  );
 
   // Admin form state for updating condition
   const [targetStatus, setTargetStatus] =
@@ -69,6 +72,26 @@ export const CmsScanStatusTab: React.FC<CmsScanStatusTabProps> = ({
     () => (userProfiles || []).find(u => u.id === selectedUserId),
     [userProfiles, selectedUserId],
   );
+
+  // Pre-initialize AI models and fast-hydrate biometric embeddings into RAM cache (< 2ms)
+  useEffect(() => {
+    YoloDetectorService.initialize().catch(() => {});
+    if (userProfiles && userProfiles.length > 0) {
+      YoloDetectorService.fastHydrateServerEmbeddings(userProfiles);
+      const unready = userProfiles.filter(
+        p =>
+          p &&
+          p.id &&
+          YoloDetectorService.hasFacePhotos(p) &&
+          !YoloDetectorService.hasCachedEmbeddings(p),
+      );
+      if (unready.length > 0) {
+        YoloDetectorService.warmupRoomEmbeddings(unready).catch(err => {
+          console.warn('[CmsScanStatusTab] Background warmup error:', err);
+        });
+      }
+    }
+  }, [userProfiles]);
 
   // Synchronize form when selectedUser changes
   useEffect(() => {
@@ -98,25 +121,77 @@ export const CmsScanStatusTab: React.FC<CmsScanStatusTabProps> = ({
       });
   }, [selectedUserId, sessions, rooms]);
 
-  // Step 1: Face Scan handler via Camera
-  const handleFaceScan = async () => {
+  // Step 1: Face Scan handler via Camera options
+  const handleFaceScan = () => {
+    Alert.alert(
+      'Quét khuôn mặt AI',
+      'Chọn phương thức chụp ảnh hoặc chọn từ thư viện để nhận diện nhân sự:',
+      [
+        {
+          text: 'Camera sau (Khuyên dùng)',
+          onPress: () => runFaceScan('back'),
+        },
+        {
+          text: 'Camera trước (Selfie)',
+          onPress: () => runFaceScan('front'),
+        },
+        {
+          text: 'Chọn từ thư viện ảnh',
+          onPress: () => runFaceScan('gallery'),
+        },
+        {
+          text: 'Hủy',
+          style: 'cancel',
+        },
+      ],
+    );
+  };
+
+  const runFaceScan = async (source: 'front' | 'back' | 'gallery') => {
     let photoUri: string | null = null;
     try {
       setIsScanningFace(true);
-      photoUri = await ImagePickerService.captureImageWithCamera(
-        0,
-        'front',
-      );
+
+      if (source === 'gallery') {
+        const uris = await ImagePickerService.pickImagesFromLibrary(0);
+        if (!uris || uris.length === 0) {
+          setIsScanningFace(false);
+          return;
+        }
+        photoUri = uris[0];
+      } else {
+        photoUri = await ImagePickerService.captureImageWithCamera(0, source);
+      }
+
       if (!photoUri) {
         setIsScanningFace(false);
         return;
       }
 
-      // Run AI face matching against user profiles
-      const match = await tfliteYoloService.processCapturedFrame(
+      // 1. Ensure server embeddings & local storage are hydrated into RAM
+      YoloDetectorService.fastHydrateServerEmbeddings(userProfiles);
+
+      // 2. Warm up unready profiles so their embeddings are available for matching
+      const unready = userProfiles.filter(
+        p =>
+          p &&
+          p.id &&
+          YoloDetectorService.hasFacePhotos(p) &&
+          !YoloDetectorService.hasCachedEmbeddings(p),
+      );
+      if (unready.length > 0) {
+        await YoloDetectorService.warmupRoomEmbeddings(unready);
+      }
+
+      // 3. Run AI face detection & MobileFaceNet matching with configured threshold
+      const isFront = source === 'front';
+      const match = await YoloDetectorService.processCapturedFrame(
         photoUri,
         userProfiles,
-        true,
+        isFront,
+        confidenceThreshold,
+        userProfiles,
+        { isSingleShot: true },
       );
 
       if (match && match.status === 'present' && match.userId) {
@@ -129,7 +204,17 @@ export const CmsScanStatusTab: React.FC<CmsScanStatusTabProps> = ({
             : 95;
         Alert.alert(
           'Nhận diện thành công',
-          `Đã tìm thấy hồ sơ: ${match.fullName} (${confPct}%)`,
+          `Đã tìm thấy hồ sơ: ${match.fullName} (${confPct}% độ khớp)`,
+        );
+      } else if (match && match.qualityWarning) {
+        Alert.alert(
+          'Chưa đạt chất lượng ảnh quét',
+          `${match.qualityWarning}. Vui lòng thử lại với góc nhìn thẳng và giữ yên camera.`,
+        );
+      } else if (match && match.confidence && match.confidence >= 40) {
+        Alert.alert(
+          'Độ khớp chưa đủ tin cậy',
+          `Khuôn mặt có nét tương đồng (${match.confidence}%) nhưng chưa đạt ngưỡng xác nhận an toàn (${confidenceThreshold}%). Vui lòng quét lại rõ nét hơn hoặc chọn trực tiếp từ danh sách.`,
         );
       } else {
         Alert.alert(
@@ -140,10 +225,10 @@ export const CmsScanStatusTab: React.FC<CmsScanStatusTabProps> = ({
     } catch (e: unknown) {
       Alert.alert(
         'Lỗi quét khuôn mặt',
-        (e as Error)?.message || 'Không thể xử lý ảnh',
+        (e as Error)?.message || 'Không thể xử lý ảnh nhận diện',
       );
     } finally {
-      if (photoUri) {
+      if (photoUri && source !== 'gallery') {
         deleteTempFile(photoUri).catch(() => {});
       }
       setIsScanningFace(false);
@@ -187,7 +272,9 @@ export const CmsScanStatusTab: React.FC<CmsScanStatusTabProps> = ({
       );
       Alert.alert(
         'Chưa đồng bộ được với server',
-        `Đã lưu tạm trên máy. Lỗi: ${(e as Error)?.message || 'không kết nối được server'}`,
+        `Đã lưu tạm trên máy. Lỗi: ${
+          (e as Error)?.message || 'không kết nối được server'
+        }`,
       );
     } finally {
       setIsSavingCondition(false);
@@ -248,7 +335,10 @@ export const CmsScanStatusTab: React.FC<CmsScanStatusTabProps> = ({
               return (
                 <TouchableOpacity
                   key={u.id}
-                  style={[styles.userChip, isSelected && styles.userChipSelected]}
+                  style={[
+                    styles.userChip,
+                    isSelected && styles.userChipSelected,
+                  ]}
                   onPress={() => onSelectUserId(u.id)}
                 >
                   <View style={styles.userChipAvatar}>
@@ -306,7 +396,9 @@ export const CmsScanStatusTab: React.FC<CmsScanStatusTabProps> = ({
                 <View style={styles.avatarLargeWrapper}>
                   {selectedUser.avatarUri ? (
                     <Image
-                      source={{ uri: appUtils.getUrlImage(selectedUser.avatarUri) }}
+                      source={{
+                        uri: appUtils.getUrlImage(selectedUser.avatarUri),
+                      }}
                       style={styles.avatarLarge}
                     />
                   ) : (
@@ -348,7 +440,9 @@ export const CmsScanStatusTab: React.FC<CmsScanStatusTabProps> = ({
 
                   {/* Current Condition Status Badge */}
                   {(() => {
-                    const curCond = getStatusConfig(selectedUser.conditionStatus);
+                    const curCond = getStatusConfig(
+                      selectedUser.conditionStatus,
+                    );
                     return (
                       <View style={styles.currentStatusRow}>
                         <View
@@ -377,7 +471,9 @@ export const CmsScanStatusTab: React.FC<CmsScanStatusTabProps> = ({
 
               {selectedUser.conditionNote && (
                 <View style={styles.noteBox}>
-                  <AppText style={styles.noteBoxLabel}>Ghi chú hiện tại:</AppText>
+                  <AppText style={styles.noteBoxLabel}>
+                    Ghi chú hiện tại:
+                  </AppText>
                   <AppText style={styles.noteBoxText}>
                     {selectedUser.conditionNote}
                   </AppText>
@@ -608,10 +704,7 @@ export const CmsScanStatusTab: React.FC<CmsScanStatusTabProps> = ({
                           >
                             {oldCfg.label}
                           </AppText>
-                          <ChevronRight
-                            size={12}
-                            color={appColors.slate400}
-                          />
+                          <ChevronRight size={12} color={appColors.slate400} />
                           <AppText
                             style={[
                               styles.logTag,

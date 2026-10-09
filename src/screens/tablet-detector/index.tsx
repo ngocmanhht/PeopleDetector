@@ -384,6 +384,7 @@ const TabletDetectorScreen: React.FC<TabletDetectorScreenProps> = ({
         effectiveRoomId,
       );
       dispatch(resetAttendanceMap());
+      YoloDetectorService.resetTemporalVoting();
     }
     prevRoomIdRef.current = effectiveRoomId;
   }, [effectiveRoomId, autoSessionReset, dispatch]);
@@ -619,6 +620,7 @@ const TabletDetectorScreen: React.FC<TabletDetectorScreenProps> = ({
             isFront,
             confidenceThreshold,
             userProfiles,
+            { isSingleShot: false },
           );
 
           if (realResult) {
@@ -1106,6 +1108,7 @@ const TabletDetectorScreen: React.FC<TabletDetectorScreenProps> = ({
   const handleStartSessionConfirm = async (sessionName: string) => {
     setStartSessionModalVisible(false);
     YoloDetectorService.clearStrangerCache();
+    YoloDetectorService.resetTemporalVoting();
     try {
       const finalScanMode = isGuard ? 'all' : scanMode;
       const finalSessionName = isGuard

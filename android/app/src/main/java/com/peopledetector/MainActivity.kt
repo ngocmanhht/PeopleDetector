@@ -1,9 +1,8 @@
 package com.peopledetector
 
 import android.app.ActivityManager
-import android.app.KeyguardManager
+import android.app.admin.DevicePolicyManager
 import android.content.Context
-import android.content.Intent
 import android.os.Build
 import android.os.Bundle
 import android.util.Log
@@ -55,13 +54,8 @@ class MainActivity : ReactActivity() {
           WindowManager.LayoutParams.FLAG_SHOW_WHEN_LOCKED or
           WindowManager.LayoutParams.FLAG_TURN_SCREEN_ON
       )
-
-      val keyguardManager = getSystemService(Context.KEYGUARD_SERVICE) as? KeyguardManager
-      if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-        keyguardManager?.requestDismissKeyguard(this, null)
-      }
     } catch (e: Exception) {
-      Log.w("MainActivity", "Failed to dismissKeyguard: ${e.message}")
+      Log.w("MainActivity", "Failed to keepScreenOn: ${e.message}")
     }
   }
 
@@ -75,9 +69,13 @@ class MainActivity : ReactActivity() {
         am.isInLockTaskMode
       }
 
-      if (!isLockTaskRunning) {
-        Log.i("MainActivity", "Re-asserting startLockTask() onResume")
-        startLockTask()
+      if (!isLockTaskRunning && KioskModule.isKioskPersisted(this)) {
+        val dpm = getSystemService(Context.DEVICE_POLICY_SERVICE) as? DevicePolicyManager
+        val isOwner = dpm?.isDeviceOwnerApp(packageName) == true
+        if (isOwner) {
+          Log.i("MainActivity", "Re-asserting startLockTask() for DeviceOwner")
+          startLockTask()
+        }
       }
     } catch (e: Exception) {
       Log.w("MainActivity", "ensureLockTaskActive failed: ${e.message}")
@@ -119,23 +117,9 @@ class MainActivity : ReactActivity() {
   override fun onWindowFocusChanged(hasFocus: Boolean) {
     super.onWindowFocusChanged(hasFocus)
     val isKiosk = isKioskImmersive || KioskModule.isKioskPersisted(this) || KioskModule.isKioskRunning
-    if (isKiosk) {
-      if (hasFocus) {
-        dismissKeyguardAndKeepScreenOn()
-        applyImmersiveMode()
-        ensureLockTaskActive()
-      } else {
-        collapseStatusBar()
-      }
+    if (isKiosk && hasFocus) {
+      applyImmersiveMode()
     }
-  }
-
-  private fun collapseStatusBar() {
-    try {
-      @Suppress("DEPRECATION")
-      val closeDialog = Intent(Intent.ACTION_CLOSE_SYSTEM_DIALOGS)
-      sendBroadcast(closeDialog)
-    } catch (_: Exception) {}
   }
 
   override fun dispatchTouchEvent(ev: MotionEvent?): Boolean {
@@ -147,7 +131,6 @@ class MainActivity : ReactActivity() {
       if (ev.y <= edgeThreshold || ev.y >= (height - edgeThreshold)) {
         if (ev.action == MotionEvent.ACTION_MOVE || ev.action == MotionEvent.ACTION_DOWN) {
           applyImmersiveMode()
-          collapseStatusBar()
         }
       }
     }
