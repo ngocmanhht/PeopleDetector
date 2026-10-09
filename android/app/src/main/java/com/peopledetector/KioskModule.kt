@@ -5,7 +5,12 @@ import android.app.ActivityManager
 import android.app.admin.DevicePolicyManager
 import android.content.ComponentName
 import android.content.Context
+import android.content.Intent
+import android.content.IntentFilter
+import android.os.BatteryManager
 import android.os.Build
+import android.os.UserManager
+import android.provider.Settings
 import android.util.Log
 import com.facebook.react.bridge.Arguments
 import com.facebook.react.bridge.Promise
@@ -18,8 +23,22 @@ class KioskModule(reactContext: ReactApplicationContext) :
 
     companion object {
         private const val TAG = "KioskModule"
+        private const val PREFS_NAME = "kiosk_prefs"
+        private const val KEY_KIOSK_PERSISTED = "kiosk_running_persisted"
+
         @Volatile
         var isKioskRunning: Boolean = false
+
+        fun isKioskPersisted(context: Context): Boolean {
+            val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+            return prefs.getBoolean(KEY_KIOSK_PERSISTED, false)
+        }
+
+        fun setKioskPersisted(context: Context, enabled: Boolean) {
+            isKioskRunning = enabled
+            val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+            prefs.edit().putBoolean(KEY_KIOSK_PERSISTED, enabled).apply()
+        }
     }
 
     override fun getName(): String = "KioskModule"
@@ -146,23 +165,58 @@ class KioskModule(reactContext: ReactApplicationContext) :
 
             if (isOwner) {
                 try {
-                    // Set lock task packages whitelist for true Device Owner kiosk mode
+                    // 1. Whitelist package cho True LockTask mode
                     val packages = arrayOf(reactApplicationContext.packageName)
                     dpm.setLockTaskPackages(adminComponent, packages)
-                    if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.P) {
-                        dpm.setLockTaskFeatures(adminComponent, android.app.admin.DevicePolicyManager.LOCK_TASK_FEATURE_NONE)
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+                        dpm.setLockTaskFeatures(adminComponent, DevicePolicyManager.LOCK_TASK_FEATURE_NONE)
                     }
-                    // Khóa hoàn toàn StatusBar (ngăn vuốt từ mép trên xuống để mở thanh thông báo / Quick Settings)
+
+                    // 2. Khóa hoàn toàn StatusBar và Keyguard
                     dpm.setStatusBarDisabled(adminComponent, true)
-                    // Tắt màn hình khóa Keyguard
                     dpm.setKeyguardDisabled(adminComponent, true)
-                    Log.i(TAG, "Configured setStatusBarDisabled(true), setKeyguardDisabled(true), and LOCK_TASK_FEATURE_NONE for ${reactApplicationContext.packageName}")
+
+                    // 3. Giữ màn hình luôn sáng khi đang cắm sạc (AC, USB, Wireless) để tránh rơi vào màn hình khóa
+                    try {
+                        val pluggedFlags = (BatteryManager.BATTERY_PLUGGED_AC or
+                                            BatteryManager.BATTERY_PLUGGED_USB or
+                                            BatteryManager.BATTERY_PLUGGED_WIRELESS).toString()
+                        dpm.setGlobalSetting(
+                            adminComponent,
+                            Settings.Global.STAY_ON_WHILE_PLUGGED_IN,
+                            pluggedFlags
+                        )
+                    } catch (e: Exception) {
+                        Log.w(TAG, "Failed to configure STAY_ON_WHILE_PLUGGED_IN", e)
+                    }
+
+                    // 4. Thiết lập PeopleDetector làm Home Launcher duy nhất (ngăn không cho văng về màn hình desktop Samsung)
+                    try {
+                        val filter = IntentFilter(Intent.ACTION_MAIN).apply {
+                            addCategory(Intent.CATEGORY_HOME)
+                            addCategory(Intent.CATEGORY_DEFAULT)
+                        }
+                        val activityComponent = ComponentName(reactApplicationContext, MainActivity::class.java)
+                        dpm.addPersistentPreferredActivity(adminComponent, filter, activityComponent)
+                        Log.i(TAG, "Configured persistent HOME launcher for MainActivity")
+                    } catch (e: Exception) {
+                        Log.w(TAG, "Failed to configure persistent preferred HOME activity", e)
+                    }
+
+                    // 5. Ngăn chặn khởi động vào Safe Boot
+                    try {
+                        dpm.addUserRestriction(adminComponent, UserManager.DISALLOW_SAFE_BOOT)
+                    } catch (e: Exception) {
+                        Log.w(TAG, "Failed to set DISALLOW_SAFE_BOOT restriction", e)
+                    }
+
+                    Log.i(TAG, "Configured full DeviceOwner policies for ${reactApplicationContext.packageName}")
                 } catch (e: Exception) {
                     Log.w(TAG, "Failed to configure DeviceOwner policies", e)
                 }
             }
 
-            isKioskRunning = true
+            setKioskPersisted(reactApplicationContext, true)
 
             activity.runOnUiThread {
                 try {
@@ -171,13 +225,13 @@ class KioskModule(reactContext: ReactApplicationContext) :
                     Log.i(TAG, "activity.startLockTask() invoked successfully")
                     promise.resolve(true)
                 } catch (e: Exception) {
-                    isKioskRunning = false
+                    setKioskPersisted(reactApplicationContext, false)
                     Log.e(TAG, "activity.startLockTask() failed", e)
                     promise.reject("START_LOCK_TASK_FAILED", e.message, e)
                 }
             }
         } catch (e: Exception) {
-            isKioskRunning = false
+            setKioskPersisted(reactApplicationContext, false)
             Log.e(TAG, "startKioskMode exception", e)
             promise.reject("START_KIOSK_ERROR", e.message, e)
         }
@@ -192,7 +246,7 @@ class KioskModule(reactContext: ReactApplicationContext) :
         }
 
         try {
-            isKioskRunning = false
+            setKioskPersisted(reactApplicationContext, false)
             val dpm = getDpm()
             val adminComponent = getAdminComponent()
             val isOwner = dpm?.isDeviceOwnerApp(reactApplicationContext.packageName) == true
@@ -202,10 +256,32 @@ class KioskModule(reactContext: ReactApplicationContext) :
                     // Khôi phục StatusBar và Keyguard
                     dpm.setStatusBarDisabled(adminComponent, false)
                     dpm.setKeyguardDisabled(adminComponent, false)
-                    if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.P) {
-                        dpm.setLockTaskFeatures(adminComponent, android.app.admin.DevicePolicyManager.LOCK_TASK_FEATURE_SYSTEM_INFO or android.app.admin.DevicePolicyManager.LOCK_TASK_FEATURE_HOME)
+
+                    // 1. Trả lại Home Launcher mặc định của máy tính bảng
+                    try {
+                        dpm.clearPackagePersistentPreferredActivities(adminComponent, reactApplicationContext.packageName)
+                    } catch (e: Exception) {
+                        Log.w(TAG, "Failed to clear persistent preferred activities", e)
                     }
-                    Log.i(TAG, "Restored setStatusBarDisabled(false) and keyguard")
+
+                    // 2. Khôi phục thời gian tắt màn hình thông thường
+                    try {
+                        dpm.setGlobalSetting(adminComponent, Settings.Global.STAY_ON_WHILE_PLUGGED_IN, "0")
+                    } catch (e: Exception) {
+                        Log.w(TAG, "Failed to clear STAY_ON_WHILE_PLUGGED_IN", e)
+                    }
+
+                    // 3. Khôi phục Safe Boot
+                    try {
+                        dpm.clearUserRestriction(adminComponent, UserManager.DISALLOW_SAFE_BOOT)
+                    } catch (e: Exception) {
+                        Log.w(TAG, "Failed to clear DISALLOW_SAFE_BOOT", e)
+                    }
+
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+                        dpm.setLockTaskFeatures(adminComponent, DevicePolicyManager.LOCK_TASK_FEATURE_SYSTEM_INFO or DevicePolicyManager.LOCK_TASK_FEATURE_HOME)
+                    }
+                    Log.i(TAG, "Restored normal system settings and DeviceOwner policies")
                 } catch (e: Exception) {
                     Log.w(TAG, "Failed to restore DeviceOwner policies", e)
                 }
