@@ -429,6 +429,23 @@ const TabletDetectorScreen: React.FC<TabletDetectorScreenProps> = ({
     };
   }, [dispatch]);
 
+  // Khi userProfiles được cập nhật từ Background Sync (TanStack Query),
+  // nạp nhanh vector mới vào RAM và đóng modal ngay nếu đã đủ 100%
+  useEffect(() => {
+    if (userProfiles && userProfiles.length > 0) {
+      YoloDetectorService.fastHydrateServerEmbeddings(userProfiles);
+      const unready = userProfiles.filter(
+        p =>
+          YoloDetectorService.hasFacePhotos(p) &&
+          !YoloDetectorService.hasCachedEmbeddings(p),
+      );
+      if (unready.length === 0) {
+        setIsFaceDataReady(true);
+        setFaceSyncModalVisible(false);
+      }
+    }
+  }, [userProfiles]);
+
   // Pre-warm embeddings for target profiles when engine is ready or targetProfiles change
   useEffect(() => {
     let isCancelled = false;
@@ -439,9 +456,14 @@ const TabletDetectorScreen: React.FC<TabletDetectorScreenProps> = ({
           console.log('[TabletDetectorScreen] YOLO Engine ready:', ready);
           const validProfiles = (targetProfiles || []).filter(p => Boolean(p && p.id));
           if (ready && validProfiles.length > 0) {
-            // Kiểm tra xem có học viên nào chưa có vector (cần nạp cục bộ) không
+            // 1. Nạp tức thì toàn bộ vector tính sẵn từ Server vào RAM (< 5ms)
+            YoloDetectorService.fastHydrateServerEmbeddings(validProfiles);
+
+            // 2. Kiểm tra xem có học viên nào CÓ ẢNH nhưng CHƯA CÓ VECTOR (cần trích xuất cục bộ) không
             const unreadyProfiles = validProfiles.filter(
-              p => !YoloDetectorService.hasCachedEmbeddings(p),
+              p =>
+                YoloDetectorService.hasFacePhotos(p) &&
+                !YoloDetectorService.hasCachedEmbeddings(p),
             );
 
             if (unreadyProfiles.length === 0) {
@@ -449,11 +471,10 @@ const TabletDetectorScreen: React.FC<TabletDetectorScreenProps> = ({
               // Sẵn sàng quét ngay lập tức, bỏ hoàn toàn modal chờ!
               setIsFaceDataReady(true);
               setFaceSyncModalVisible(false);
-              YoloDetectorService.warmupRoomEmbeddings(validProfiles).catch(() => {});
               return;
             }
 
-            // Chỉ hiện modal nếu có hồ sơ chưa có vector cần trích xuất cục bộ
+            // Chỉ hiện modal nếu thực sự có hồ sơ có ảnh nhưng chưa có vector cần trích xuất cục bộ
             setIsFaceDataReady(false);
             setFaceSyncProgress({
               current: 0,
@@ -462,8 +483,9 @@ const TabletDetectorScreen: React.FC<TabletDetectorScreenProps> = ({
             });
             setFaceSyncModalVisible(true);
 
+            // CHỈ WARMUP unreadyProfiles (thay vì lặp lại toàn bộ validProfiles)
             await YoloDetectorService.warmupRoomEmbeddings(
-              validProfiles,
+              unreadyProfiles,
               (current, total, profileName) => {
                 if (isCancelled) return;
                 setFaceSyncProgress({
@@ -476,16 +498,20 @@ const TabletDetectorScreen: React.FC<TabletDetectorScreenProps> = ({
 
             if (!isCancelled) {
               setIsFaceDataReady(true);
-              // Cho phép xem hoàn thành 100% trong 600ms rồi đóng mượt mà
               setTimeout(() => {
                 if (!isCancelled) {
                   setFaceSyncModalVisible(false);
                 }
-              }, 600);
+              }, 400);
 
               // Background warmup for remaining user profiles in facility
               const remainingProfiles = (userProfiles || []).filter(
-                u => u && u.id && !validProfiles.some(tp => tp && tp.id === u.id),
+                u =>
+                  u &&
+                  u.id &&
+                  !validProfiles.some(tp => tp && tp.id === u.id) &&
+                  YoloDetectorService.hasFacePhotos(u) &&
+                  !YoloDetectorService.hasCachedEmbeddings(u),
               );
               if (remainingProfiles.length > 0) {
                 YoloDetectorService.warmupRoomEmbeddings(remainingProfiles).catch(
@@ -623,15 +649,15 @@ const TabletDetectorScreen: React.FC<TabletDetectorScreenProps> = ({
               scanMode === 'room' &&
               Boolean(
                 matchedProfile?.roomId &&
-                  matchedProfile.roomId !== selectedRoomId,
+                  matchedProfile.roomId !== effectiveRoomId,
               );
 
             const userRoomId =
               matchedProfile?.roomId ||
-              (scanMode === 'room' ? selectedRoomId : undefined);
+              (scanMode === 'room' ? effectiveRoomId : undefined);
             const userZoneId =
               matchedProfile?.zoneId ||
-              (scanMode === 'room' ? selectedZoneId : undefined);
+              (scanMode === 'room' ? effectiveZoneId : undefined);
             const userRoom = rooms.find(r => r.id === userRoomId);
             const userZone = zones.find(z => z.id === userZoneId);
             const roomDisplayName = isOtherRoom
@@ -779,10 +805,10 @@ const TabletDetectorScreen: React.FC<TabletDetectorScreenProps> = ({
 
                   const addRoomId =
                     addMatched?.roomId ||
-                    (scanMode === 'room' ? selectedRoomId : undefined);
+                    (scanMode === 'room' ? effectiveRoomId : undefined);
                   const addZoneId =
                     addMatched?.zoneId ||
-                    (scanMode === 'room' ? selectedZoneId : undefined);
+                    (scanMode === 'room' ? effectiveZoneId : undefined);
                   const addRoom = rooms.find(r => r.id === addRoomId);
                   const addZone = zones.find(z => z.id === addZoneId);
                   const addDept = addRoom?.name || 'Phòng ban khác';
@@ -1016,13 +1042,15 @@ const TabletDetectorScreen: React.FC<TabletDetectorScreenProps> = ({
     [
       activeSessionId,
       targetProfiles,
+      userProfiles,
+      isFaceDataReady,
       cameraFacing,
       dispatch,
       scheduleNextScan,
       scanMode,
       scanDirection,
-      selectedRoomId,
-      selectedZoneId,
+      effectiveRoomId,
+      effectiveZoneId,
       rooms,
       zones,
       confidenceThreshold,
@@ -1044,7 +1072,7 @@ const TabletDetectorScreen: React.FC<TabletDetectorScreenProps> = ({
 
     const timer = setTimeout(() => {
       handleScanDetection();
-    }, 350);
+    }, 600);
 
     return () => {
       clearTimeout(timer);

@@ -102,6 +102,7 @@ export const CameraViewFinder = forwardRef<
       (cameraFacing === 'front' ? backDevice : frontDevice);
 
     const lastPendingSnapshot = useRef<string | null>(null);
+    const isCapturingRef = useRef(false);
 
     useEffect(() => {
       return () => {
@@ -115,50 +116,62 @@ export const CameraViewFinder = forwardRef<
     // Expose captureFrame to parent via ref
     useImperativeHandle(ref, () => ({
       captureFrame: async (): Promise<string | null> => {
-        if (!cameraRef.current || !hasPermission || !device) {
+        if (
+          !cameraRef.current ||
+          !hasPermission ||
+          !device ||
+          isCapturingRef.current
+        ) {
           return null;
         }
-
-        if (lastPendingSnapshot.current) {
-          deleteTempFile(lastPendingSnapshot.current).catch(() => {});
-          lastPendingSnapshot.current = null;
-        }
-
-        // On Android, takeSnapshot gets the GPU preview bitmap directly without locking Camera2 hardware
-        // Provides instant (~20ms) zero-latency capture and exact preview orientation matching.
-        if (Platform.OS === 'android') {
-          try {
-            const snapshot = await cameraRef.current.takeSnapshot({
-              quality: 85,
-            });
-            if (snapshot?.path) {
-              lastPendingSnapshot.current = snapshot.path;
-              return snapshot.path;
-            }
-          } catch (snapErr) {
-            console.log(
-              '[VisionCamera] Android takeSnapshot note, falling back to takePhoto:',
-              snapErr,
-            );
-          }
-        }
+        isCapturingRef.current = true;
 
         try {
-          const photo = await cameraRef.current.takePhoto({
-            enableShutterSound: false,
-          });
-          lastPendingSnapshot.current = photo.path;
-          return photo.path;
-        } catch {
-          try {
-            const fallbackPhoto = await cameraRef.current.takePhoto();
-            lastPendingSnapshot.current = fallbackPhoto.path;
-            return fallbackPhoto.path;
-          } catch (photoErr) {
-            console.warn('[VisionCamera] captureFrame error:', photoErr);
+          if (lastPendingSnapshot.current) {
+            deleteTempFile(lastPendingSnapshot.current).catch(() => {});
+            lastPendingSnapshot.current = null;
           }
+
+          // On Android, takeSnapshot gets the GPU preview bitmap directly without locking Camera2 hardware
+          // Provides instant (~20ms) zero-latency capture and exact preview orientation matching.
+          if (Platform.OS === 'android') {
+            try {
+              const snapshot = await cameraRef.current.takeSnapshot({
+                quality: 85,
+              });
+              if (snapshot?.path) {
+                lastPendingSnapshot.current = snapshot.path;
+                return snapshot.path;
+              }
+            } catch (snapErr) {
+              console.log(
+                '[VisionCamera] Android takeSnapshot note, falling back to takePhoto:',
+                snapErr,
+              );
+            }
+          }
+
+          if (!cameraRef.current) return null;
+          try {
+            const photo = await cameraRef.current.takePhoto({
+              enableShutterSound: false,
+            });
+            lastPendingSnapshot.current = photo.path;
+            return photo.path;
+          } catch {
+            if (!cameraRef.current) return null;
+            try {
+              const fallbackPhoto = await cameraRef.current.takePhoto();
+              lastPendingSnapshot.current = fallbackPhoto.path;
+              return fallbackPhoto.path;
+            } catch (photoErr) {
+              console.warn('[VisionCamera] captureFrame error:', photoErr);
+            }
+          }
+          return null;
+        } finally {
+          isCapturingRef.current = false;
         }
-        return null;
       },
     }));
 
@@ -434,7 +447,7 @@ export const CameraViewFinder = forwardRef<
             ref={cameraRef}
             style={StyleSheet.absoluteFill}
             device={device}
-            isActive={isSessionActive && isTabFocused && !cameraError}
+            isActive={isTabFocused && !cameraError}
             photo={true}
             photoQualityBalance="speed"
             outputOrientation="preview"

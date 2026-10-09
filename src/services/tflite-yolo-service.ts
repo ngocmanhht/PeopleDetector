@@ -59,7 +59,10 @@ export function arrayBufferToBase64(buffer: ArrayBuffer): string {
   }
   const globalObj =
     typeof globalThis !== 'undefined'
-      ? (globalThis as unknown as { btoa?: (s: string) => string; atob?: (s: string) => string })
+      ? (globalThis as unknown as {
+          btoa?: (s: string) => string;
+          atob?: (s: string) => string;
+        })
       : {};
   if (typeof globalObj.btoa === 'function') {
     return globalObj.btoa(binary);
@@ -86,7 +89,10 @@ export function base64ToArrayBuffer(base64: string): ArrayBuffer {
   const base64Clean = base64.includes(',') ? base64.split(',')[1] : base64;
   const globalObj =
     typeof globalThis !== 'undefined'
-      ? (globalThis as unknown as { btoa?: (s: string) => string; atob?: (s: string) => string })
+      ? (globalThis as unknown as {
+          btoa?: (s: string) => string;
+          atob?: (s: string) => string;
+        })
       : {};
   if (typeof globalObj.atob === 'function') {
     const binary = globalObj.atob(base64Clean);
@@ -167,6 +173,25 @@ export class TfliteYoloService {
   private initPromise: Promise<boolean> | null = null;
   private isProcessingFrame = false;
 
+  // Native TFLite Interpreter Mutex (strictly serializes native C++ invoke calls)
+  private inferenceMutex: Promise<any> = Promise.resolve();
+
+  public async runInferenceSafely<T>(fn: () => Promise<T>): Promise<T> {
+    let nextResolve: () => void;
+    const currentPromise = new Promise<void>(resolve => {
+      nextResolve = resolve;
+    });
+    const previousMutex = this.inferenceMutex;
+    this.inferenceMutex = currentPromise;
+
+    try {
+      await previousMutex;
+      return await fn();
+    } finally {
+      nextResolve!();
+    }
+  }
+
   // In-memory cache of enrolled user face embeddings (512-d Float32Array)
   private profileEmbeddingsCache: Map<string, CachedProfileEmbedding> =
     new Map();
@@ -176,8 +201,12 @@ export class TfliteYoloService {
   private strangerSequenceCounter = 0;
 
   // Zero-allocation buffer pool for YOLO & FaceNet tensors (eliminates ~50MB/s garbage collection churn)
-  private readonly yoloTensorBuffer: Float32Array = new Float32Array(3 * 640 * 640);
-  private readonly faceNetTensorBuffer: Float32Array = new Float32Array(3 * 112 * 112);
+  private readonly yoloTensorBuffer: Float32Array = new Float32Array(
+    3 * 640 * 640,
+  );
+  private readonly faceNetTensorBuffer: Float32Array = new Float32Array(
+    3 * 112 * 112,
+  );
 
   constructor() {
     this.initModels();
@@ -726,7 +755,7 @@ export class TfliteYoloService {
 
     // 2. Avatar portrait crop box (used for UI display in AttendanceCard, Session history, etc.):
     // Scaled to 1.30x face size, centered right on the face so eyes, nose, mouth and forehead are framed perfectly
-    const avatarMultiplier = 1.30;
+    const avatarMultiplier = 1.3;
     const avatarSide = Math.min(
       Math.round(faceSize * avatarMultiplier),
       maxSide,
@@ -859,6 +888,7 @@ export class TfliteYoloService {
     minConfidence: number = 0.4,
   ): YoloFaceDetection[] {
     try {
+      if (!outputBuffer) return [];
       const data = new Float32Array(outputBuffer);
       const totalLen = data.length;
       if (totalLen < 20 * 8400) return [];
@@ -999,15 +1029,15 @@ export class TfliteYoloService {
     isFrontCamera?: boolean,
   ): string {
     try {
-      const cropX1 = Math.max(0, Math.min(cropBox.x1, frameImage.width - 2));
-      const cropY1 = Math.max(0, Math.min(cropBox.y1, frameImage.height - 2));
+      const cropX1 = Math.max(0, Math.min(Math.round(cropBox.x1), frameImage.width - 2));
+      const cropY1 = Math.max(0, Math.min(Math.round(cropBox.y1), frameImage.height - 2));
       const cropX2 = Math.min(
         frameImage.width,
-        Math.max(cropBox.x2, cropX1 + 1),
+        Math.max(Math.round(cropBox.x2), cropX1 + 2),
       );
       const cropY2 = Math.min(
         frameImage.height,
-        Math.max(cropBox.y2, cropY1 + 1),
+        Math.max(Math.round(cropBox.y2), cropY1 + 2),
       );
 
       let croppedFaceImage = frameImage.crop(cropX1, cropY1, cropX2, cropY2);
@@ -1044,7 +1074,11 @@ export class TfliteYoloService {
     let faceImage = image;
     if (cropBox && cropBox.x2 > cropBox.x1 && cropBox.y2 > cropBox.y1) {
       try {
-        faceImage = image.crop(cropBox.x1, cropBox.y1, cropBox.x2, cropBox.y2);
+        const x1 = Math.max(0, Math.min(Math.round(cropBox.x1), image.width - 2));
+        const y1 = Math.max(0, Math.min(Math.round(cropBox.y1), image.height - 2));
+        const x2 = Math.min(image.width, Math.max(Math.round(cropBox.x2), x1 + 2));
+        const y2 = Math.min(image.height, Math.max(Math.round(cropBox.y2), y1 + 2));
+        faceImage = image.crop(x1, y1, x2, y2);
       } catch (e) {
         console.warn('[TFLite YOLO] image crop error, using full image:', e);
       }
@@ -1209,9 +1243,9 @@ export class TfliteYoloService {
           cropBox,
           rollDegrees,
         );
-        const outputs = await this.faceRecognitionModel.run([
-          tensor.buffer as ArrayBuffer,
-        ]);
+        const outputs = await this.runInferenceSafely(() =>
+          this.faceRecognitionModel!.run([tensor.buffer as ArrayBuffer]),
+        );
         if (outputs && outputs.length > 0) {
           const raw = new Float32Array(outputs[0]);
           return this.l2Normalize(raw);
@@ -1264,7 +1298,11 @@ export class TfliteYoloService {
         .map(arr => new Float32Array(arr));
 
       if (serverVectors.length > 0) {
-        this.saveEmbeddingsToStorage(profile.id, serverVectors, currentSignature);
+        this.saveEmbeddingsToStorage(
+          profile.id,
+          serverVectors,
+          currentSignature,
+        );
         this.profileEmbeddingsCache.set(profile.id, {
           userId: profile.id,
           fullName: profile.fullName,
@@ -1316,6 +1354,9 @@ export class TfliteYoloService {
         try {
           const resolvedSrc = appUtils.getUrlImage(src) || src;
           const rawImg = await this.loadNativeImage(resolvedSrc);
+          if (!rawImg || rawImg.width <= 0 || rawImg.height <= 0) {
+            continue;
+          }
 
           // Clamp large image dimension to max 960 to avoid huge memory spike and lag
           const MAX_ENROLL_DIM = 960;
@@ -1337,9 +1378,9 @@ export class TfliteYoloService {
           if (this.faceDetectorModel) {
             try {
               const yoloTensor = this.preprocessImageForYolo(image);
-              const yoloOutputs = await this.faceDetectorModel.run([
-                yoloTensor.buffer as ArrayBuffer,
-              ]);
+              const yoloOutputs = await this.runInferenceSafely(() =>
+                this.faceDetectorModel!.run([yoloTensor.buffer as ArrayBuffer]),
+              );
               if (yoloOutputs && yoloOutputs.length > 0) {
                 const detectedFace = this.parseYoloOutputs(
                   yoloOutputs[0],
@@ -1498,8 +1539,17 @@ export class TfliteYoloService {
         await this.initModels();
       }
 
-      // 2. Ensure room profile embeddings are ready in cache before matching
+      // 2. Ensure server embeddings & storage cache are hydrated into RAM (< 2ms)
+      if (allProfiles && allProfiles.length > 0) {
+        this.fastHydrateServerEmbeddings(allProfiles);
+      } else {
+        this.fastHydrateServerEmbeddings(roomProfiles);
+      }
+
+      // Check room profiles: load from MMKV storage if present
       for (const p of roomProfiles) {
+        if (!p || !p.id) continue;
+        if (!TfliteYoloService.hasFacePhotos(p)) continue;
         const sig = this.getProfilePhotoSignature(p);
         const cached = this.profileEmbeddingsCache.get(p.id);
 
@@ -1516,9 +1566,6 @@ export class TfliteYoloService {
               embeddings: stored,
               signature: sig,
             });
-          } else {
-            // Await enrollment so biometric vectors exist before cosine matching
-            await this.enrollProfile(p);
           }
         }
       }
@@ -1535,6 +1582,9 @@ export class TfliteYoloService {
 
       // 3. Load camera frame image safely across data URL, remote URL, or local file
       const rawImage = await this.loadNativeImage(photoPath);
+      if (!rawImage || rawImage.width <= 0 || rawImage.height <= 0) {
+        return null;
+      }
 
       // Clamp frame image to optimal working size (max dimension 720)
       // This normalizes native UIImage EXIF orientation, speeds up processing, and keeps memory light (<1.5MB)
@@ -1550,9 +1600,9 @@ export class TfliteYoloService {
 
       // 4. Run YOLOv8-Face detection
       const yoloTensor = this.preprocessImageForYolo(frameImage);
-      const yoloOutputs = await this.faceDetectorModel.run([
-        yoloTensor.buffer as ArrayBuffer,
-      ]);
+      const yoloOutputs = await this.runInferenceSafely(() =>
+        this.faceDetectorModel!.run([yoloTensor.buffer as ArrayBuffer]),
+      );
       if (!yoloOutputs || yoloOutputs.length === 0) {
         return null;
       }
@@ -1653,8 +1703,8 @@ export class TfliteYoloService {
 
       // 6. Greedy 1-to-1 Assignment against enrolled profiles:
       // Prevents 2 different faces from claiming the same enrolled profile!
-      // Threshold 0.68 ensures high precision for MobileFaceNet 512-d embeddings
-      const MATCH_THRESHOLD = 0.68;
+      // Threshold 0.58 provides optimal balance for MobileFaceNet 512-d embeddings across varied camera angles
+      const MATCH_THRESHOLD = 0.58;
 
       interface MatchCandidate {
         faceIdx: number;
@@ -1670,6 +1720,7 @@ export class TfliteYoloService {
 
         let maxSimForThisFace = 0;
         for (const p of roomProfiles) {
+          if (!p || !p.id) continue;
           const cached = this.profileEmbeddingsCache.get(p.id);
           if (!cached || !cached.embeddings || cached.embeddings.length === 0)
             continue;
@@ -1717,9 +1768,11 @@ export class TfliteYoloService {
           .filter(idx => !assignedFaces.has(idx));
 
         if (unassignedFaceIndices.length > 0) {
-          const roomProfileIds = new Set(roomProfiles.map(p => p.id));
+          const roomProfileIds = new Set(
+            roomProfiles.filter(p => Boolean(p?.id)).map(p => p.id),
+          );
           const otherProfiles = allProfiles.filter(
-            p => !roomProfileIds.has(p.id),
+            p => p && p.id && !roomProfileIds.has(p.id),
           );
 
           const fallbackCandidates: MatchCandidate[] = [];
@@ -1728,6 +1781,7 @@ export class TfliteYoloService {
             if (!liveEmb) continue;
 
             for (const p of otherProfiles) {
+              if (!p || !p.id) continue;
               const cached = this.profileEmbeddingsCache.get(p.id);
               if (
                 !cached ||
@@ -1815,7 +1869,7 @@ export class TfliteYoloService {
       );
       const additionalVerified: DetectionResult[] = [];
       for (const f of otherVerifiedFaces) {
-        const simRange = Math.max(0.01, 0.9 - MATCH_THRESHOLD);
+        const simRange = Math.max(0.01, 0.85 - MATCH_THRESHOLD);
         const simRatio = Math.max(
           0,
           Math.min(1, (f.similarity - MATCH_THRESHOLD) / simRange),
@@ -1857,7 +1911,7 @@ export class TfliteYoloService {
 
       if (primary.status === 'present' && primary.profile) {
         // Enrolled person recognized!
-        const simRange = Math.max(0.01, 0.9 - MATCH_THRESHOLD);
+        const simRange = Math.max(0.01, 0.85 - MATCH_THRESHOLD);
         const simRatio = Math.max(
           0,
           Math.min(1, (primary.similarity - MATCH_THRESHOLD) / simRange),
@@ -1988,6 +2042,10 @@ export class TfliteYoloService {
       onProgress?.(0, 0);
       return;
     }
+
+    // 1. Nạp tức thì toàn bộ vector tính sẵn từ Server vào RAM (< 5ms)
+    this.fastHydrateServerEmbeddings(roomProfiles);
+
     if (!this.isInitialized) {
       await this.initModels();
     }
@@ -1998,6 +2056,13 @@ export class TfliteYoloService {
       for (let i = 0; i < total; i++) {
         const p = roomProfiles[i];
         if (!p || !p.id) continue;
+
+        // Bỏ qua nếu hồ sơ không có bất kỳ ảnh nào
+        if (!TfliteYoloService.hasFacePhotos(p)) {
+          onProgress?.(i + 1, total, p.fullName, true);
+          continue;
+        }
+
         const sig = this.getProfilePhotoSignature(p);
         const cached = this.profileEmbeddingsCache.get(p.id);
         const isAlreadyCached = Boolean(
@@ -2203,10 +2268,117 @@ export class TfliteYoloService {
     return this.getInstance().warmupRoomEmbeddings(roomProfiles, onProgress);
   }
 
+  public static hasFacePhotos(profile: UserProfile): boolean {
+    if (!profile) return false;
+    if (
+      profile.avatarUri &&
+      typeof profile.avatarUri === 'string' &&
+      profile.avatarUri.trim().length > 0
+    ) {
+      return true;
+    }
+    if (
+      Array.isArray(profile.photos) &&
+      profile.photos.some(
+        p => p && typeof p === 'string' && p.trim().length > 0,
+      )
+    ) {
+      return true;
+    }
+    return false;
+  }
+
+  public fastHydrateServerEmbeddings(profiles: UserProfile[]): number {
+    if (!profiles || !Array.isArray(profiles)) return 0;
+    let hydratedCount = 0;
+    for (let i = 0; i < profiles.length; i++) {
+      const p = profiles[i];
+      if (!p || !p.id) continue;
+
+      const cached = this.profileEmbeddingsCache.get(p.id);
+      const sig = this.getProfilePhotoSignature(p);
+      if (
+        cached &&
+        cached.embeddings &&
+        cached.embeddings.length > 0 &&
+        (!sig || cached.signature === sig)
+      ) {
+        continue;
+      }
+
+      // 1. Try hydrating from server pre-computed embeddings
+      if (
+        p.embeddings &&
+        Array.isArray(p.embeddings) &&
+        p.embeddings.length > 0
+      ) {
+        let rawVectors: (number[] | Float32Array)[] = [];
+        if (
+          p.embeddings.length === 512 &&
+          typeof (p.embeddings as unknown as number[])[0] === 'number'
+        ) {
+          rawVectors = [p.embeddings as unknown as number[]];
+        } else {
+          rawVectors = (p.embeddings as unknown as (number[] | Float32Array)[]).filter(
+            arr =>
+              (Array.isArray(arr) || arr instanceof Float32Array) &&
+              arr.length === 512,
+          );
+        }
+
+        const serverVectors = rawVectors.map(arr =>
+          arr instanceof Float32Array ? arr : new Float32Array(arr),
+        );
+
+        if (serverVectors.length > 0) {
+          this.profileEmbeddingsCache.set(p.id, {
+            userId: p.id,
+            fullName: p.fullName,
+            code: p.code,
+            avatarUri: p.avatarUri,
+            zoneId: p.zoneId,
+            roomId: p.roomId,
+            embeddings: serverVectors,
+            signature: sig,
+          });
+          this.saveEmbeddingsToStorage(p.id, serverVectors, sig);
+          hydratedCount++;
+          continue;
+        }
+      }
+
+      // 2. Fallback to cached local MMKV storage
+      const stored = this.loadEmbeddingsFromStorage(p.id, sig);
+      if (stored && stored.length > 0) {
+        this.profileEmbeddingsCache.set(p.id, {
+          userId: p.id,
+          fullName: p.fullName,
+          code: p.code,
+          avatarUri: p.avatarUri,
+          zoneId: p.zoneId,
+          roomId: p.roomId,
+          embeddings: stored,
+          signature: sig,
+        });
+        hydratedCount++;
+      }
+    }
+    return hydratedCount;
+  }
+
+  public static fastHydrateServerEmbeddings(profiles: UserProfile[]): number {
+    return this.getInstance().fastHydrateServerEmbeddings(profiles);
+  }
+
   public hasCachedEmbeddings(profile: UserProfile): boolean {
     if (!profile || !profile.id) return false;
+    // Hồ sơ không có ảnh mẫu thì không thể trích xuất sinh trắc, xem như đã sẵn sàng để không block màn hình
+    if (!TfliteYoloService.hasFacePhotos(profile)) {
+      return true;
+    }
     const cached = this.profileEmbeddingsCache.get(profile.id);
-    if (cached && cached.embeddings && cached.embeddings.length > 0) return true;
+    if (cached && cached.embeddings && cached.embeddings.length > 0)
+      return true;
     if (
       profile.embeddings &&
       Array.isArray(profile.embeddings) &&

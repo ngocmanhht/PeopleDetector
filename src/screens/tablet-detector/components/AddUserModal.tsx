@@ -32,7 +32,12 @@ import {
   AlertCircle,
 } from 'lucide-react-native';
 import { PickerModal } from './PickerModal';
-import { addUserProfile } from '../../../store/slices/detectorSlice';
+import {
+  addUserProfile,
+  deleteUserProfile,
+  upsertUserProfile,
+} from '../../../store/slices/detectorSlice';
+import { YoloDetectorService } from '../../../services/yolo-detector';
 import { profileService, uploadService, settingService } from '../../../services/api';
 import { PHOTO_CONFIG } from '../../../const/photo-config';
 import { UploadFolder } from '../../../const/upload-folder';
@@ -431,9 +436,27 @@ export const AddUserModal: React.FC<AddUserModalProps> = ({
       if (onUserCreated) {
         onUserCreated(newProfile);
       }
-      profileService.createProfile(newProfile).catch(err => {
-        console.log('[AddUserModal] Failed to sync profile to BE:', err);
-      });
+      profileService
+        .createProfile(newProfile)
+        .then(async res => {
+          if (res?.data) {
+            // Replace temporary user profile with the server record containing real UUID and pre-computed embeddings
+            dispatch(deleteUserProfile(newProfile.id));
+            dispatch(upsertUserProfile(res.data));
+            if (res.data.embeddings && res.data.embeddings.length > 0) {
+              YoloDetectorService.fastHydrateServerEmbeddings([res.data]);
+            } else {
+              await YoloDetectorService.enrollProfile(res.data);
+            }
+            console.log(
+              '[AddUserModal] Successfully synced profile with server embeddings:',
+              res.data.code,
+            );
+          }
+        })
+        .catch(err => {
+          console.log('[AddUserModal] Failed to sync profile to BE:', err);
+        });
 
       onClose();
     } catch (err: unknown) {

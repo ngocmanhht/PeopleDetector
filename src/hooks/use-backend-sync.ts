@@ -14,6 +14,7 @@ import {
   sessionService,
   alertService,
 } from '../services/api';
+import { YoloDetectorService } from '../services/yolo-detector';
 
 /**
  * Hook tự động đồng bộ toàn bộ dữ liệu hệ thống từ Backend sử dụng TanStack Query
@@ -49,6 +50,7 @@ export const useBackendSync = (intervalMs: number = 60000) => {
 
       if (profilesRes.status === 'fulfilled' && profilesRes.value?.data) {
         dispatch(setUserProfiles(profilesRes.value.data));
+        YoloDetectorService.fastHydrateServerEmbeddings(profilesRes.value.data);
       }
 
       if (sessionsRes.status === 'fulfilled' && sessionsRes.value?.data) {

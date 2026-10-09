@@ -63,6 +63,20 @@ export class YoloDetectorService {
   }
 
   /**
+   * Checks whether a profile has any photos available for face enrollment
+   */
+  public static hasFacePhotos(profile: UserProfile): boolean {
+    return TfliteYoloService.hasFacePhotos(profile);
+  }
+
+  /**
+   * Fast-hydrates server pre-computed embeddings into RAM cache (< 5ms)
+   */
+  public static fastHydrateServerEmbeddings(profiles: UserProfile[]): number {
+    return TfliteYoloService.fastHydrateServerEmbeddings(profiles);
+  }
+
+  /**
    * Returns whether a profile already has pre-computed embeddings (from server or cache)
    */
   public static hasCachedEmbeddings(profile: UserProfile): boolean {
