@@ -288,10 +288,20 @@ const TabletDetectorScreen: React.FC<TabletDetectorScreenProps> = ({
   // Camera Facing
   const [cameraFacing, setCameraFacing] = useState<'front' | 'back'>('front');
 
-  const availableZones =
-    isOfficer && currentUser?.zoneId
-      ? (zones || []).filter(z => z && z.id === currentUser.zoneId)
-      : zones || [];
+  // const availableZones =
+  //   isOfficer && currentUser?.zoneId
+  //     ? (zones || []).filter(z => z && z.id === currentUser.zoneId)
+  //     : zones || [];
+
+  const availableZones = useMemo(() => {
+    if (isOfficer && currentUser?.zoneId) {
+      const officerZone = (zones || []).filter(
+        z => z && z.id === currentUser.zoneId,
+      );
+      return officerZone ?? [];
+    }
+    return zones || [];
+  }, [zones, isOfficer, currentUser?.zoneId]);
   const selectedZone =
     availableZones.find(z => z && z.id === selectedZoneId) || availableZones[0];
   const effectiveZoneId =
@@ -603,7 +613,11 @@ const TabletDetectorScreen: React.FC<TabletDetectorScreenProps> = ({
   const handleScanDetection = useCallback(
     async (providedPhotoPath?: string) => {
       if (!isSessionRunningRef.current) return;
-      if (!isFaceDataReady && faceSyncModalVisible && YoloDetectorService.isWarmingUp()) {
+      if (
+        !isFaceDataReady &&
+        faceSyncModalVisible &&
+        YoloDetectorService.isWarmingUp()
+      ) {
         scheduleNextScan(400);
         return;
       }
@@ -666,19 +680,37 @@ const TabletDetectorScreen: React.FC<TabletDetectorScreenProps> = ({
               (scanMode === 'room' ? effectiveRoomId : undefined);
             const userZoneId =
               matchedProfile?.zoneId ||
-              (scanMode === 'room' ? effectiveZoneId : undefined);
-            const userRoom = rooms.find(r => r.id === userRoomId);
-            const userZone = zones.find(z => z.id === userZoneId);
+              (scanMode === 'zone' || scanMode === 'room'
+                ? effectiveZoneId
+                : undefined);
+            const userRoom =
+              rooms.find(r => r.id === userRoomId) ||
+              (scanMode === 'room' ? selectedRoom : undefined);
+            const userZone =
+              zones.find(z => z.id === userZoneId) ||
+              (scanMode === 'zone' || scanMode === 'room'
+                ? selectedZone
+                : undefined);
 
             const rawRoomName =
               userRoom?.name ||
               matchedProfile?.roomName ||
-              (matchedProfile?.room as any)?.name;
+              (matchedProfile?.room as any)?.name ||
+              (realResult.roomName && realResult.roomName !== 'Phòng hiện tại'
+                ? realResult.roomName
+                : undefined) ||
+              (scanMode === 'room' ? selectedRoom?.name : undefined);
 
             const rawZoneName =
               userZone?.name ||
               matchedProfile?.zoneName ||
-              (matchedProfile?.zone as any)?.name;
+              (matchedProfile?.zone as any)?.name ||
+              (realResult.zoneName && realResult.zoneName !== 'Khu vực chính'
+                ? realResult.zoneName
+                : undefined) ||
+              (scanMode === 'zone' || scanMode === 'room'
+                ? selectedZone?.name
+                : undefined);
 
             const roomDisplayName = isOtherRoom
               ? `${rawRoomName || 'Phòng khác'} (Khác phòng)`
@@ -686,10 +718,20 @@ const TabletDetectorScreen: React.FC<TabletDetectorScreenProps> = ({
               ? `Khách thăm (${
                   visitedProfileName ? `gặp ${visitedProfileName}` : 'Thân nhân'
                 })`
-              : rawRoomName;
+              : rawRoomName ||
+                (scanMode === 'all'
+                  ? rawZoneName
+                    ? `Khu ${rawZoneName}`
+                    : 'Toàn cơ sở'
+                  : 'Chưa gán phòng');
             const deptName = isOtherRoom
               ? `${rawRoomName || 'Phòng khác'} (Khác phòng)`
-              : rawRoomName || (isVisitor ? 'Khách thăm' : 'Toàn cơ sở');
+              : rawRoomName ||
+                (isVisitor
+                  ? 'Khách thăm'
+                  : rawZoneName
+                  ? `Khu ${rawZoneName}`
+                  : 'Toàn cơ sở');
 
             const profileAvatar = matchedProfile?.avatarUri;
 

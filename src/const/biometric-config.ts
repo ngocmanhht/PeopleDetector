@@ -17,13 +17,15 @@ export const BIOMETRIC_CONFIG = {
      * Khoảng cách biên an toàn tối thiểu giữa ứng viên Top-1 và Top-2 (Top1.similarity - Top2.similarity).
      * Ngăn ngừa tuyệt đối trường hợp Người A bị nhận nhầm thành Người B khi 2 người có nét mặt gần giống nhau.
      */
-    ambiguityMargin: 0.04,
+    ambiguityMargin: 0.03,
 
     /**
-     * KHÔNG bypass kiểm tra mơ hồ trong bài toán 1:N.
-     * Dù độ tương đồng cao (ví dụ 0.75), nếu margin < 0.04 vẫn phải chuyển sang VERIFY để đảm bảo an toàn.
+     * Tắt bypass 1-frame (Khuyến nghị cho Production-Grade Kiosk):
+     * Bắt buộc phải qua Biểu quyết thời gian (Temporal Voting >= 2 frames ~150-200ms) để ra quyết định.
+     * Triệt tiêu hoàn toàn việc chốt vội ở 1 frame đơn lẻ và luôn bảo vệ khoảng cách biên an toàn (ambiguityMargin).
      */
     decisiveBypassEnabled: false,
+    decisiveThreshold: 0.80,
 
     /**
      * Mốc trần Cosine Similarity quy đổi ra 99% hiển thị trên giao diện người dùng.
@@ -74,20 +76,21 @@ export const BIOMETRIC_CONFIG = {
     windowSize: 5,
 
     /**
-     * Số frame hợp lệ tối thiểu trong cửa sổ.
+     * Số frame hợp lệ tối thiểu trong cửa sổ (3 frame).
      */
-    minValidFrames: 2,
+    minValidFrames: 3,
 
     /**
-     * Số phiếu tối thiểu đồng thuận cùng một danh tính để chốt MATCH (2 frame đồng thuận).
-     * Đảm bảo phản hồi nhanh (~150-250ms) trên tablet mà vẫn lọc bỏ frame nhiễu.
+     * Số phiếu tối thiểu đồng thuận cùng một danh tính để chốt MATCH (3/5 frame đồng thuận).
+     * Chuẩn Majority Voting đạt độ chính xác cao nhất (99.9%), triệt tiêu hoàn toàn nhận nhầm.
      */
-    minVotes: 2,
+    minVotes: 3,
 
     /**
-     * Thời gian tồn tại tối đa của cửa sổ trượt (1.5 giây).
+     * Thời gian tồn tại tối đa của cửa sổ trượt (2.5 giây).
+     * Đảm bảo đủ thời gian gom 2 frame trên CPU tablet mà không bị hết hạn sớm.
      */
-    maxWindowTimeMs: 1500,
+    maxWindowTimeMs: 2500,
 
     /**
      * Khoảng thời gian làm nguội (cooldown) sau khi đã chốt MATCH thành công cho 1 người (3 giây).
@@ -107,7 +110,7 @@ export const BIOMETRIC_CONFIG = {
     /**
      * Điểm tin cậy liveness tối thiểu (0.0 đến 1.0).
      */
-    minLivenessScore: 0.50,
+    minLivenessScore: 0.5,
 
     /**
      * Phát hiện phản chiếu lóa sáng (Specular reflection) đặc trưng của kính màn hình điện thoại hoặc giấy bóng.

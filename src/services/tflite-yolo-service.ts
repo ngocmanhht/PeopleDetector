@@ -1673,6 +1673,7 @@ export class TfliteYoloService {
 
       // If no face was detected in camera frame (score < 0.40), return null immediately
       if (detectedFaces.length === 0) {
+        TemporalVotingManager.getInstance().notifyFaceAbsence();
         return null;
       }
 
@@ -1775,6 +1776,7 @@ export class TfliteYoloService {
         if (
           face === primaryFaceCandidate &&
           BIOMETRIC_CONFIG.presentationAttackDetection.enabled &&
+          !options?.isSingleShot &&
           !padResult.accepted &&
           padResult.score < 0.25
         ) {
@@ -1808,6 +1810,57 @@ export class TfliteYoloService {
           embedding: liveEmbedding,
         });
       }
+
+      // 5b. Khử trùng lặp khuôn mặt (IoU & Biometric Deduplication):
+      // Đảm bảo 1 người thật đứng trước camera KHÔNG BAO GIỜ bị tách thành 2-3 khuôn mặt ảo!
+      const uniqueFaces: ExtractedFaceInfo[] = [];
+      for (const item of extractedFaces) {
+        let isDuplicate = false;
+        for (const existing of uniqueFaces) {
+          // 1. Kiểm tra tỷ lệ giao nhau hình học (IoU) giữa 2 bounding box
+          const boxA = item.face.boundingBox;
+          const boxB = existing.face.boundingBox;
+          const interX1 = Math.max(boxA.x, boxB.x);
+          const interY1 = Math.max(boxA.y, boxB.y);
+          const interX2 = Math.min(boxA.x + boxA.width, boxB.x + boxB.width);
+          const interY2 = Math.min(boxA.y + boxA.height, boxB.y + boxB.height);
+          const interW = Math.max(0, interX2 - interX1);
+          const interH = Math.max(0, interY2 - interY1);
+          const interArea = interW * interH;
+          const areaA = boxA.width * boxA.height;
+          const areaB = boxB.width * boxB.height;
+          const iou = interArea > 0 ? interArea / (areaA + areaB - interArea) : 0;
+
+          if (iou > 0.20) {
+            isDuplicate = true;
+            break;
+          }
+
+          // 2. Kiểm tra khoảng cách tâm (Center Distance)
+          const centerDistX = Math.abs((boxA.x + boxA.width / 2) - (boxB.x + boxB.width / 2));
+          const centerDistY = Math.abs((boxA.y + boxA.height / 2) - (boxB.y + boxB.height / 2));
+          const avgFaceSize = (boxA.width + boxB.width) / 2;
+          if (centerDistX < avgFaceSize * 0.4 && centerDistY < avgFaceSize * 0.4) {
+            isDuplicate = true;
+            break;
+          }
+
+          // 3. Kiểm tra độ tương đồng vector sinh trắc học giữa 2 crop khuôn mặt
+          if (item.embedding && existing.embedding) {
+            const crossFaceSim = this.calculateCosineSimilarity(item.embedding, existing.embedding);
+            if (crossFaceSim >= 0.70) {
+              // Hai khuôn mặt trong cùng 1 frame mà vector giống nhau >= 70% -> Cùng 1 người!
+              isDuplicate = true;
+              break;
+            }
+          }
+        }
+        if (!isDuplicate) {
+          uniqueFaces.push(item);
+        }
+      }
+      extractedFaces.length = 0;
+      extractedFaces.push(...uniqueFaces);
 
       // 6. Greedy 1-to-1 Assignment against enrolled profiles with Ambiguity Margin Protection:
       // Prevents 2 different faces from claiming the same enrolled profile!
@@ -1899,9 +1952,10 @@ export class TfliteYoloService {
         if (faceCandidates.length > 0 && top1) {
           // MARGIN CHECK: If top-1 and top-2 are from 2 different people and the similarity gap
           // is too narrow (< AMBIGUITY_MARGIN), reject to prevent User A from being falsely identified as User B!
+          const decisiveCutoff = (BIOMETRIC_CONFIG.recognition as any).decisiveThreshold ?? TfliteYoloService.DECISIVE_CONFIDENCE;
           const shouldBypassMargin =
             BIOMETRIC_CONFIG.recognition.decisiveBypassEnabled &&
-            top1.similarity >= TfliteYoloService.DECISIVE_CONFIDENCE;
+            top1.similarity >= decisiveCutoff;
 
           if (
             top2 &&
@@ -1921,6 +1975,8 @@ export class TfliteYoloService {
                 TfliteYoloService.AMBIGUITY_MARGIN * 100
               ).toFixed(1)}%`,
             );
+            // Xóa top1 để Temporal Voting không lấy nhầm danh tính mơ hồ này hiển thị lên UI
+            faceCandidateMatches.set(fIdx, { top1: null, top2: null, margin: 0 });
           } else {
             allCandidates.push({
               faceIdx: fIdx,
@@ -2087,26 +2143,33 @@ export class TfliteYoloService {
         ).toFixed(1)}%`,
       );
 
-      // Decision 1: MATCH (Đạt chuẩn 3/5 votes, Top1 >= 0.68, Margin >= 0.045, PAD ok)
+      // Decision 1: MATCH (Đạt chuẩn biểu quyết đa frame, Top1 đạt chuẩn, PAD ok)
       if (temporalDecision.status === 'MATCH' && temporalDecision.profile) {
-        const isThresholdMet =
-          temporalDecision.confidencePct >= minConfidenceThreshold;
+        const decZone =
+          temporalDecision.profile.zoneName ||
+          (temporalDecision.profile.zone as any)?.name ||
+          '';
+        const decRoom =
+          temporalDecision.profile.roomName ||
+          (temporalDecision.profile.room as any)?.name ||
+          '';
         return {
           userId: temporalDecision.personId!,
           fullName: temporalDecision.profile.fullName,
           code: temporalDecision.profile.code,
           avatarUri: primary.avatarUri,
-          zoneName: 'Khu vực chính',
-          roomName: 'Phòng hiện tại',
-          confidence: temporalDecision.confidencePct,
+          zoneName: decZone,
+          roomName: decRoom,
+          confidence: Math.max(
+            minConfidenceThreshold,
+            temporalDecision.confidencePct,
+          ),
           timestamp: timeString,
-          status: isThresholdMet ? 'present' : 'verify',
+          status: 'present',
           boundingBox: primary.detection.boundingBox,
           hasUnverifiedStranger,
           additionalVerified:
-            isThresholdMet && additionalVerified.length > 0
-              ? additionalVerified
-              : undefined,
+            additionalVerified.length > 0 ? additionalVerified : undefined,
           temporalVotes: temporalDecision.votesCount,
           top1Similarity: temporalDecision.avgSimilarity,
           margin: temporalDecision.margin,
@@ -2117,6 +2180,14 @@ export class TfliteYoloService {
 
       // Decision 2: VERIFY (Mơ hồ, margin hẹp hoặc đang gom phiếu 1/2)
       if (temporalDecision.status === 'VERIFY') {
+        const decZone =
+          temporalDecision.profile?.zoneName ||
+          (temporalDecision.profile?.zone as any)?.name ||
+          '';
+        const decRoom =
+          temporalDecision.profile?.roomName ||
+          (temporalDecision.profile?.room as any)?.name ||
+          '';
         return {
           userId: temporalDecision.profile?.id || '',
           fullName:
@@ -2125,8 +2196,8 @@ export class TfliteYoloService {
             'Đang xác minh danh tính...',
           code: temporalDecision.profile?.code || 'VERIFYING',
           avatarUri: primary.avatarUri,
-          zoneName: 'Khu vực chính',
-          roomName: 'Phòng hiện tại',
+          zoneName: decZone,
+          roomName: decRoom,
           confidence: temporalDecision.confidencePct,
           timestamp: timeString,
           status: 'verify',

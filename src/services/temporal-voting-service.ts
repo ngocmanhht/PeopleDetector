@@ -271,7 +271,11 @@ export class TemporalVotingManager {
 
   // Tránh lặp lại điểm danh cho cùng 1 người trong khoảng thời gian cooldown
   private lastMatchedPersonId: string | null = null;
+  private lastMatchedProfile: UserProfile | null = null;
+  private lastMatchedFaceEmbedding: Float32Array | null = null;
   private lastMatchedTimestamp = 0;
+
+  private firstFaceAbsenceTimestamp = 0;
 
   public static getInstance(): TemporalVotingManager {
     if (!this.instance) {
@@ -285,6 +289,23 @@ export class TemporalVotingManager {
    */
   public reset(): void {
     this.slidingWindow = [];
+    this.lastMatchedPersonId = null;
+    this.lastMatchedProfile = null;
+    this.lastMatchedFaceEmbedding = null;
+    this.lastMatchedTimestamp = 0;
+    this.firstFaceAbsenceTimestamp = 0;
+  }
+
+  /**
+   * Thông báo khi không còn khuôn mặt nào trong khung hình (người đã bước ra)
+   * Nếu vắng mặt liên tục > 1.0 giây, tự động giải phóng toàn bộ khóa phiên người cũ!
+   */
+  public notifyFaceAbsence(now = Date.now()): void {
+    if (!this.firstFaceAbsenceTimestamp) {
+      this.firstFaceAbsenceTimestamp = now;
+    } else if (now - this.firstFaceAbsenceTimestamp >= 1000) {
+      this.reset();
+    }
   }
 
   /**
@@ -298,6 +319,7 @@ export class TemporalVotingManager {
   ): TemporalDecision {
     const config = BIOMETRIC_CONFIG;
     const now = candidate.timestamp || Date.now();
+    this.firstFaceAbsenceTimestamp = 0;
 
     // -----------------------------------------------------------------------
     // Chế độ Single-Shot (chụp 1 ảnh trong CMS hoặc upload ảnh thử nghiệm)
@@ -340,13 +362,20 @@ export class TemporalVotingManager {
         };
       }
 
+      // Trong chế độ Single-Shot (chụp 1 ảnh hoặc chọn từ thư viện trong CMS để tìm hồ sơ):
+      // Cho phép khớp ngay khi similarity >= 0.75 hoặc khoảng cách an toàn margin >= ambiguityMargin!
+      const isDecisiveSingle =
+        (config.recognition.decisiveBypassEnabled || isSingleShot) &&
+        candidate.top1Similarity >= 0.75;
+
       const isMatch =
         candidate.personId !== null &&
         candidate.top1Similarity >= config.recognition.matchThreshold &&
-        candidate.margin >= config.recognition.ambiguityMargin;
+        (isDecisiveSingle || candidate.margin >= config.recognition.ambiguityMargin);
 
       const isAmbiguous =
         candidate.personId !== null &&
+        !isDecisiveSingle &&
         candidate.top1Similarity >= config.recognition.matchThreshold &&
         candidate.margin < config.recognition.ambiguityMargin;
 
@@ -404,10 +433,83 @@ export class TemporalVotingManager {
     // -----------------------------------------------------------------------
     // Chế độ Live Kiosk: Temporal Voting (Biểu quyết trượt đa frame)
     // -----------------------------------------------------------------------
+    // 0. Kiểm tra Cooldown: Nếu vừa match người này xong trong vòng 3s, duy trì ngay MATCH
+    // Giữ viền xanh và không đè trạng thái 'verify' lên UI khi người đó vẫn đứng trước camera!
+    if (
+      this.lastMatchedPersonId &&
+      now - this.lastMatchedTimestamp < config.temporalVoting.cooldownAfterMatchMs
+    ) {
+      let isSamePerson = candidate.personId === this.lastMatchedPersonId;
+
+      // Face Biometric Continuity Lock:
+      // Chỉ duy trì khóa khi:
+      // 1. Độ tương đồng liên tục giữa 2 frame của cùng 1 khuôn mặt >= 0.80 (chắc chắn cùng 1 khuôn mặt vật lý đang đứng yên)
+      // 2. VÀ khuôn mặt hiện tại KHÔNG có bằng chứng vượt trội của một người khác (Dominant Identity Override):
+      //    Nếu candidate hiện tại khớp với một người khác (Người B) với độ tin cậy cao (>= 0.78)
+      //    và khoảng cách an toàn rõ rệt (margin >= 0.05), thì KHÔNG ĐƯỢC ép giữ người A,
+      //    nhằm ngăn ngừa trường hợp người A bị nhận nhầm ở frame trước!
+      if (!isSamePerson && this.lastMatchedFaceEmbedding && candidate.embedding) {
+        const faceContinuitySim = computeCosineSimilarity(
+          candidate.embedding,
+          this.lastMatchedFaceEmbedding,
+        );
+
+        if (faceContinuitySim >= 0.80) {
+          const isDominantOtherCandidate =
+            candidate.personId &&
+            candidate.personId !== this.lastMatchedPersonId &&
+            candidate.top1Similarity >= 0.78 &&
+            candidate.margin >= 0.05;
+
+          if (!isDominantOtherCandidate) {
+            isSamePerson = true;
+          }
+        }
+      }
+
+      if (
+        !isSamePerson &&
+        !candidate.personId &&
+        candidate.top1Similarity >= config.recognition.matchThreshold * 0.9
+      ) {
+        isSamePerson = true;
+      }
+
+      if (isSamePerson) {
+        const profile =
+          (candidate.profile?.id === this.lastMatchedPersonId
+            ? candidate.profile
+            : null) || this.lastMatchedProfile;
+        if (profile) {
+          const confPct = Math.max(
+            90,
+            this.calculateConfidencePct(
+              candidate.top1Similarity || 0.8,
+              config.recognition.matchThreshold,
+              config.recognition.confidenceCeiling,
+            ),
+          );
+          return {
+            status: 'MATCH',
+            personId: this.lastMatchedPersonId,
+            profile: profile,
+            confidencePct: confPct,
+            votesCount: config.temporalVoting.minVotes,
+            totalValidFrames: config.temporalVoting.minVotes,
+            avgSimilarity: candidate.top1Similarity || 0.8,
+            margin: candidate.margin || 0.1,
+            avatarUri: candidate.avatarUri,
+            boundingBox: candidate.boundingBox,
+            message: 'Đã điểm danh thành công gần đây',
+          };
+        }
+      }
+    }
+
     // 1. Thêm frame vào cửa sổ trượt
     this.slidingWindow.push(candidate);
 
-    // 2. Loại bỏ các frame cũ quá maxWindowTimeMs (1.5 giây) hoặc vượt quá windowSize (5 frame)
+    // 2. Loại bỏ các frame cũ quá maxWindowTimeMs hoặc vượt quá windowSize
     const windowCutoff = now - config.temporalVoting.maxWindowTimeMs;
     this.slidingWindow = this.slidingWindow.filter(
       f => f.timestamp >= windowCutoff,
@@ -419,14 +521,15 @@ export class TemporalVotingManager {
     }
 
     // 3. Lọc danh sách các frame hợp lệ
-    const validFrames = this.slidingWindow.filter(
-      f =>
-        f.qualityAccepted &&
-        f.padAccepted &&
-        f.personId !== null &&
-        f.top1Similarity >= config.recognition.matchThreshold &&
-        f.margin >= config.recognition.ambiguityMargin,
-    );
+    const validFrames = this.slidingWindow.filter(f => {
+      if (!f.qualityAccepted || !f.padAccepted || !f.personId) return false;
+      if (f.top1Similarity < config.recognition.matchThreshold) return false;
+      const isDecisive =
+        config.recognition.decisiveBypassEnabled &&
+        f.top1Similarity >= (config.recognition as any).decisiveThreshold;
+      if (!isDecisive && f.margin < config.recognition.ambiguityMargin) return false;
+      return true;
+    });
 
     // 4. Nếu frame hiện tại có cảnh báo chất lượng hoặc PAD
     if (!candidate.qualityAccepted) {
@@ -462,10 +565,49 @@ export class TemporalVotingManager {
       };
     }
 
-    // 5. Kiểm tra điều kiện số frame hợp lệ tối thiểu (3 frame)
+    // 5. Kiểm tra điều kiện số frame hợp lệ tối thiểu
     if (validFrames.length < config.temporalVoting.minValidFrames) {
-      // Đang thu thập frame (1/3 hoặc 2/3)
-      if (candidate.personId && candidate.top1Similarity >= config.recognition.matchThreshold) {
+      const isDecisive =
+        config.recognition.decisiveBypassEnabled &&
+        candidate.top1Similarity >= (config.recognition as any).decisiveThreshold &&
+        candidate.margin >= config.recognition.ambiguityMargin;
+
+      // Nếu độ tương đồng đạt mức dứt khoát cao (>= 0.72) VÀ có khoảng cách an toàn (margin):
+      // Xác nhận MATCH NGAY LẬP TỨC để viền lập tức chuyển sang xanh lá và điểm danh vào phòng!
+      if (isDecisive && candidate.personId && candidate.profile) {
+        const confPct = this.calculateConfidencePct(
+          candidate.top1Similarity,
+          config.recognition.matchThreshold,
+          config.recognition.confidenceCeiling,
+        );
+        this.lastMatchedPersonId = candidate.personId;
+        this.lastMatchedProfile = candidate.profile;
+        this.lastMatchedFaceEmbedding = candidate.embedding || null;
+        this.lastMatchedTimestamp = now;
+        this.slidingWindow = [];
+
+        return {
+          status: 'MATCH',
+          personId: candidate.personId,
+          profile: candidate.profile,
+          confidencePct: confPct,
+          votesCount: 1,
+          totalValidFrames: 1,
+          avgSimilarity: candidate.top1Similarity,
+          margin: candidate.margin,
+          avatarUri: candidate.avatarUri,
+          boundingBox: candidate.boundingBox,
+        };
+      }
+
+      // Đang thu thập frame (1/2) cho các trường hợp tương đồng ở mức biên
+      const isClearCandidate = candidate.margin >= config.recognition.ambiguityMargin;
+
+      if (
+        candidate.personId &&
+        candidate.top1Similarity >= config.recognition.matchThreshold &&
+        isClearCandidate
+      ) {
         const confPct = this.calculateConfidencePct(
           candidate.top1Similarity,
           config.recognition.matchThreshold,
@@ -575,30 +717,13 @@ export class TemporalVotingManager {
       };
     }
 
-    // 9. Kiểm tra Cooldown sau khi vừa match người này xong (duy trì trạng thái MATCH, tránh duplicate API)
-    if (
-      this.lastMatchedPersonId === topPersonId &&
-      now - this.lastMatchedTimestamp < config.temporalVoting.cooldownAfterMatchMs
-    ) {
-      return {
-        status: 'MATCH',
-        personId: topPersonId,
-        profile: topVoteInfo.profile,
-        confidencePct: confPct,
-        votesCount: topVoteInfo.count,
-        totalValidFrames: validFrames.length,
-        avgSimilarity,
-        margin: candidate.margin,
-        avatarUri: topVoteInfo.lastCandidate.avatarUri,
-        boundingBox: topVoteInfo.lastCandidate.boundingBox,
-        message: 'Đã điểm danh thành công gần đây',
-      };
-    }
-
     // -----------------------------------------------------------------------
-    // QUYẾT ĐỊNH MATCH: Đạt chuẩn 100% (>= 3/5 votes, Top1 >= 0.68, Margin >= 0.045)
+    // QUYẾT ĐỊNH MATCH: Đạt chuẩn đồng thuận (>= 2 votes, Top1 đạt chuẩn, PAD ok)
     // -----------------------------------------------------------------------
     this.lastMatchedPersonId = topPersonId;
+    this.lastMatchedProfile = topVoteInfo.profile;
+    this.lastMatchedFaceEmbedding =
+      topVoteInfo.lastCandidate.embedding || candidate.embedding || null;
     this.lastMatchedTimestamp = now;
     // Xóa cửa sổ trượt để chuẩn bị nhận diện người tiếp theo
     this.slidingWindow = [];

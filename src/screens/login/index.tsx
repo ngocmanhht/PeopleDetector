@@ -42,9 +42,10 @@ export const LoginScreen = () => {
   const dispatch = useAppDispatch();
   const navigation = useCustomNavigation<RootNavigatorParamList>();
   const { showErrorToast } = useAppToast();
-
-  const [email, setEmail] = useState('admin@cscns2.ag');
-  const [password, setPassword] = useState('Aa@123456');
+  // admin@cscns2.ag
+  // Aa@123456
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [deniedModal, setDeniedModal] = useState<{
     visible: boolean;
@@ -168,7 +169,7 @@ export const LoginScreen = () => {
           <Mail size={18} color={appColors.slate400} />
           <TextInput
             style={styles.textInput}
-            placeholder="admin@cscns2.ag"
+            placeholder="Tên đăng nhập"
             value={email}
             onChangeText={setEmail}
             autoCapitalize="none"
