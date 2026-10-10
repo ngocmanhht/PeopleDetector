@@ -162,10 +162,10 @@ export class PresentationAttackDetector {
     const avgBrightness = totalBrightness / totalPixels;
     const glareRatio = specularGlarePixels / totalPixels;
 
-    // Nếu diện tích lóa sáng vượt quá 6% diện tích mặt -> nghi vấn kính màn hình điện thoại
+    // Nếu diện tích lóa sáng vượt quá 15% diện tích mặt -> nghi vấn kính màn hình điện thoại
     if (
       BIOMETRIC_CONFIG.presentationAttackDetection.checkSpecularReflection &&
-      glareRatio > 0.06
+      glareRatio > 0.15
     ) {
       return {
         accepted: false,
@@ -178,13 +178,13 @@ export class PresentationAttackDetector {
     const rbRatio = (totalRed + 1) / (totalBlue + 1);
     let livenessScore = 0.85;
 
-    if (rbRatio < 0.75) {
+    if (rbRatio < 0.60) {
       // Màn hình LCD thường phát ánh sáng xanh lạnh quá mức (blue shift)
       livenessScore -= 0.15;
     }
 
     // Đánh giá dựa trên độ sáng vừa phải (không quá tối, không lóa cháy sáng)
-    if (avgBrightness < 30) {
+    if (avgBrightness < 15) {
       return {
         accepted: false,
         score: 0.3,
@@ -192,7 +192,7 @@ export class PresentationAttackDetector {
       };
     }
 
-    if (avgBrightness > 235) {
+    if (avgBrightness > 248) {
       return {
         accepted: false,
         score: 0.35,
@@ -318,7 +318,13 @@ export class TemporalVotingManager {
         };
       }
 
-      if (!candidate.padAccepted) {
+      // Trong chế độ Single-Shot (chụp ảnh thẻ hoặc chọn từ thư viện trong CMS),
+      // chỉ từ chối nếu có dấu hiệu giả mạo rõ rệt (score < 0.25)
+      if (
+        !candidate.padAccepted &&
+        candidate.padScore !== undefined &&
+        candidate.padScore < 0.25
+      ) {
         return {
           status: 'RECAPTURE',
           personId: null,
@@ -569,13 +575,13 @@ export class TemporalVotingManager {
       };
     }
 
-    // 9. Kiểm tra Cooldown sau khi vừa match người này xong (tránh duplicate trigger)
+    // 9. Kiểm tra Cooldown sau khi vừa match người này xong (duy trì trạng thái MATCH, tránh duplicate API)
     if (
       this.lastMatchedPersonId === topPersonId &&
       now - this.lastMatchedTimestamp < config.temporalVoting.cooldownAfterMatchMs
     ) {
       return {
-        status: 'VERIFY',
+        status: 'MATCH',
         personId: topPersonId,
         profile: topVoteInfo.profile,
         confidencePct: confPct,

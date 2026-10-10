@@ -9,19 +9,19 @@ export const BIOMETRIC_CONFIG = {
   recognition: {
     /**
      * Điểm Cosine Similarity tối thiểu để Top-1 được coi là khớp danh tính.
-     * Khởi điểm chuẩn: 0.68 (an toàn hơn 0.64 cho gallery lớn từ 500 - 5.000 người).
+     * 0.64 là ngưỡng chuẩn tối ưu thực tế cho MobileFaceNet 512-d giữa camera tablet và ảnh đại diện.
      */
-    matchThreshold: 0.68,
+    matchThreshold: 0.64,
 
     /**
      * Khoảng cách biên an toàn tối thiểu giữa ứng viên Top-1 và Top-2 (Top1.similarity - Top2.similarity).
      * Ngăn ngừa tuyệt đối trường hợp Người A bị nhận nhầm thành Người B khi 2 người có nét mặt gần giống nhau.
      */
-    ambiguityMargin: 0.045,
+    ambiguityMargin: 0.04,
 
     /**
      * KHÔNG bypass kiểm tra mơ hồ trong bài toán 1:N.
-     * Dù độ tương đồng cao (ví dụ 0.75), nếu margin < 0.045 vẫn phải chuyển sang VERIFY để đảm bảo an toàn.
+     * Dù độ tương đồng cao (ví dụ 0.75), nếu margin < 0.04 vẫn phải chuyển sang VERIFY để đảm bảo an toàn.
      */
     decisiveBypassEnabled: false,
 
@@ -37,9 +37,8 @@ export const BIOMETRIC_CONFIG = {
   strangerClustering: {
     /**
      * Ngưỡng Cosine Similarity để gộp các lần xuất hiện của cùng một người lạ.
-     * Tránh sinh ra hàng chục mã STRANGER-xx cho cùng một người đứng trước camera.
      */
-    matchThreshold: 0.70,
+    matchThreshold: 0.65,
   },
 
   /**
@@ -47,16 +46,15 @@ export const BIOMETRIC_CONFIG = {
    */
   imageQuality: {
     /**
-     * Ngưỡng độ nét tối thiểu đo bằng phương sai Laplacian (Laplacian Variance) trên ROI khuôn mặt 72x72.
-     * Khung hình có độ nét < 35.0 bị coi là mờ do chuyển động hoặc rung lắc camera.
+     * Ngưỡng độ nét tối thiểu đo bằng phương sai Laplacian trên ROI khuôn mặt.
+     * 12.0 là ngưỡng thực tế phù hợp với camera trước của tablet trong nhà, lọc bỏ rung lắc mạnh nhưng không chặn mặt thường.
      */
-    minSharpness: 35.0,
+    minSharpness: 12.0,
 
     /**
-     * Kích thước khuôn mặt tối thiểu trong khung hình gốc (pixel width & height).
-     * Khuôn mặt quá nhỏ (< 80px) sẽ thiếu chi tiết đặc trưng để trích xuất 512-d embedding chính xác.
+     * Kích thước khuôn mặt tối thiểu trong ảnh làm việc (pixel width & height).
      */
-    minFaceSize: 80,
+    minFaceSize: 50,
 
     /**
      * Góc nghiêng đầu tối đa cho phép (Roll degrees).
@@ -76,31 +74,29 @@ export const BIOMETRIC_CONFIG = {
     windowSize: 5,
 
     /**
-     * Số frame hợp lệ tối thiểu trong cửa sổ (phải đạt độ nét, kích thước và góc mặt).
+     * Số frame hợp lệ tối thiểu trong cửa sổ.
      */
-    minValidFrames: 3,
+    minValidFrames: 2,
 
     /**
-     * Số phiếu tối thiểu đồng thuận cùng một danh tính để chốt MATCH (ít nhất 3/5 frame).
+     * Số phiếu tối thiểu đồng thuận cùng một danh tính để chốt MATCH (2 frame đồng thuận).
+     * Đảm bảo phản hồi nhanh (~150-250ms) trên tablet mà vẫn lọc bỏ frame nhiễu.
      */
-    minVotes: 3,
+    minVotes: 2,
 
     /**
      * Thời gian tồn tại tối đa của cửa sổ trượt (1.5 giây).
-     * Các frame cũ hơn 1.5s sẽ tự động bị loại khỏi bộ đệm biểu quyết.
      */
     maxWindowTimeMs: 1500,
 
     /**
      * Khoảng thời gian làm nguội (cooldown) sau khi đã chốt MATCH thành công cho 1 người (3 giây).
-     * Tránh việc người đó đứng lâu trước camera liên tục kích hoạt biểu quyết điểm danh lặp lại.
      */
     cooldownAfterMatchMs: 3000,
   },
 
   /**
    * 5. Chống giả mạo khuôn mặt trên camera RGB (Presentation Attack Detection - PAD / Liveness)
-   * Ngăn chặn tấn công bằng ảnh in trên giấy hoặc phát lại video trên màn hình điện thoại/tablet.
    */
   presentationAttackDetection: {
     /**
@@ -111,7 +107,7 @@ export const BIOMETRIC_CONFIG = {
     /**
      * Điểm tin cậy liveness tối thiểu (0.0 đến 1.0).
      */
-    minLivenessScore: 0.65,
+    minLivenessScore: 0.50,
 
     /**
      * Phát hiện phản chiếu lóa sáng (Specular reflection) đặc trưng của kính màn hình điện thoại hoặc giấy bóng.

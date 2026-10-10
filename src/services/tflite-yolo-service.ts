@@ -850,75 +850,41 @@ export class TfliteYoloService {
     }
 
     // --- FACE QUALITY ASSESSMENT (FQA) ---
-    // Prevent partial edge faces, bowing heads showing only hair, extreme yaw poses, and abnormal aspect ratios
+    // Only warn when face is physically out-of-bounds or extreme pose prevents recognition
     let qualityWarning: string | undefined;
 
-    // 0. Landmark Check: Reject if eyes or nose are not detectable (e.g. hair, top of head, back of head)
-    if (!hasValidLandmarks) {
-      qualityWarning = 'Vui lòng nhìn thẳng vào camera';
-    }
-
-    // 1. Edge Boundary Cutoff (face entering/leaving or cut off by screen border)
+    // 1. Edge Boundary Cutoff (face entering/leaving or cut off significantly by screen border)
     const isEdgeCutoff =
-      normCx - normW / 2 < 0.015 ||
-      normCy - normH / 2 < 0.015 ||
-      normCx + normW / 2 > 0.985 ||
-      normCy + normH / 2 > 0.985;
-    if (!qualityWarning && isEdgeCutoff) {
+      normCx - normW / 2 < 0.005 ||
+      normCy - normH / 2 < 0.005 ||
+      normCx + normW / 2 > 0.995 ||
+      normCy + normH / 2 > 0.995;
+    if (isEdgeCutoff) {
       qualityWarning = 'Vui lòng vào giữa khung hình';
     }
 
-    // 2. Aspect Ratio Check (standard frontal face is ~0.55 to 1.25)
+    // 2. Aspect Ratio Check (extreme distortion)
     const aspectRatio = normW / normH;
-    if (!qualityWarning && (aspectRatio < 0.55 || aspectRatio > 1.25)) {
+    if (!qualityWarning && (aspectRatio < 0.40 || aspectRatio > 1.50)) {
       qualityWarning = 'Vui lòng nhìn thẳng vào camera';
     }
 
-    // 3. Minimum Face Size (too far away to reliably identify)
-    if (!qualityWarning && (origBoxW < 65 || origBoxH < 65 || normH < 0.085)) {
+    // 3. Minimum Face Size in working image (too tiny to extract features)
+    if (!qualityWarning && (origBoxW < 35 || origBoxH < 35)) {
       qualityWarning = 'Vui lòng lại gần camera hơn';
     }
 
-    // 4. Pose Yaw, Pitch & Roll Angle Check via facial landmarks
+    // 4. Extreme Pose Angle Check via facial landmarks (when landmarks are reliably detected)
     if (!qualityWarning && hasValidLandmarks) {
-      const avgEyeY = (eyeLeftY + eyeRightY) / 2;
-      const eyeDx = Math.abs(eyeRightX - eyeLeftX);
-
-      // Distance between eyes relative to face width
-      if (eyeDx / normW < 0.18) {
+      const dNoseLeft = Math.hypot(noseX - eyeLeftX, noseY - eyeLeftY);
+      const dNoseRight = Math.hypot(noseX - eyeRightX, noseY - eyeRightY);
+      const minEyeDist = Math.min(dNoseLeft, dNoseRight);
+      const maxEyeDist = Math.max(dNoseLeft, dNoseRight);
+      const yawAsymmetry = minEyeDist > 0.005 ? maxEyeDist / minEyeDist : 1.0;
+      if (yawAsymmetry > 2.5) {
         qualityWarning = 'Vui lòng nhìn thẳng vào camera';
-      }
-
-      // Vertical landmark check (Pitch down / bowing head showing hair)
-      const eyeToNoseDistY = noseY - avgEyeY;
-      if (
-        !qualityWarning &&
-        (eyeToNoseDistY <= 0.005 || eyeToNoseDistY / normH < 0.07)
-      ) {
-        qualityWarning = 'Vui lòng ngẩng cao đầu và nhìn thẳng';
-      }
-
-      // Mouth position check (if mouth detected, mouth must be below nose)
-      if (!qualityWarning && mouthLeftX > 0 && mouthRightX > 0) {
-        const avgMouthY = (mouthLeftY + mouthRightY) / 2;
-        const noseToMouthDistY = avgMouthY - noseY;
-        if (noseToMouthDistY <= 0.005 || noseToMouthDistY / normH < 0.05) {
-          qualityWarning = 'Vui lòng ngẩng cao đầu và nhìn thẳng';
-        }
-      }
-
-      // Yaw asymmetry check (turned sideways > 35 degrees)
-      if (!qualityWarning) {
-        const dNoseLeft = Math.hypot(noseX - eyeLeftX, noseY - eyeLeftY);
-        const dNoseRight = Math.hypot(noseX - eyeRightX, noseY - eyeRightY);
-        const minEyeDist = Math.min(dNoseLeft, dNoseRight);
-        const maxEyeDist = Math.max(dNoseLeft, dNoseRight);
-        const yawAsymmetry = minEyeDist > 0.005 ? maxEyeDist / minEyeDist : 1.0;
-        if (yawAsymmetry > 2.0) {
-          qualityWarning = 'Vui lòng nhìn thẳng vào camera';
-        } else if (Math.abs(signedRollDegrees) > 35) {
-          qualityWarning = 'Vui lòng giữ thẳng đầu';
-        }
+      } else if (Math.abs(signedRollDegrees) > 45) {
+        qualityWarning = 'Vui lòng giữ thẳng đầu';
       }
     }
 
@@ -1563,30 +1529,6 @@ export class TfliteYoloService {
                 mirrorErr,
               );
             }
-
-            // 3. Multi-scale context crop (+15% padding) for distance invariance
-            try {
-              const boxW = cropBox.x2 - cropBox.x1;
-              const boxH = cropBox.y2 - cropBox.y1;
-              const padW = Math.round(boxW * 0.15);
-              const padH = Math.round(boxH * 0.15);
-              const expandedCropBox = {
-                x1: Math.max(0, cropBox.x1 - padW),
-                y1: Math.max(0, cropBox.y1 - padH),
-                x2: Math.min(image.width, cropBox.x2 + padW),
-                y2: Math.min(image.height, cropBox.y2 + padH),
-              };
-              const expandedEmb = await this.extractFaceEmbedding(
-                image,
-                expandedCropBox,
-                rollDegrees,
-              );
-              if (expandedEmb) {
-                embeddings.push(expandedEmb);
-              }
-            } catch (expandErr) {
-              // ignore
-            }
           }
         } catch (e) {
           console.warn(
@@ -1734,34 +1676,13 @@ export class TfliteYoloService {
         return null;
       }
 
-      // Check Quality Gate for the primary detected face (angle / partial / edge cutoff / min size)
+      // Check physical face size in working frame pixels (must be at least 35px for reliable feature extraction)
       const primaryFaceCandidate = detectedFaces[0];
-      if (primaryFaceCandidate.qualityWarning) {
-        console.log(
-          `[TFLite YOLO] Quality gate rejected face: "${primaryFaceCandidate.qualityWarning}"`,
-        );
-        return {
-          userId: '',
-          fullName: primaryFaceCandidate.qualityWarning,
-          code: 'POOR_QUALITY',
-          avatarUri: '',
-          zoneName: '',
-          roomName: '',
-          confidence: primaryFaceCandidate.confidence,
-          timestamp: timeString,
-          status: 'verify',
-          boundingBox: primaryFaceCandidate.boundingBox,
-          qualityWarning: primaryFaceCandidate.qualityWarning,
-        };
-      }
-
-      // Check minimum face size (80px in working frame image)
-      if (
-        primaryFaceCandidate.boundingBox.width <
-          BIOMETRIC_CONFIG.imageQuality.minFaceSize ||
-        primaryFaceCandidate.boundingBox.height <
-          BIOMETRIC_CONFIG.imageQuality.minFaceSize
-      ) {
+      const facePixelW =
+        primaryFaceCandidate.cropBox.x2 - primaryFaceCandidate.cropBox.x1;
+      const facePixelH =
+        primaryFaceCandidate.cropBox.y2 - primaryFaceCandidate.cropBox.y1;
+      if (facePixelW < 35 || facePixelH < 35) {
         const sizeWarning = 'Vui lòng đứng gần camera hơn';
         return {
           userId: '',
@@ -1778,17 +1699,15 @@ export class TfliteYoloService {
         };
       }
 
-      // Check head roll tilt angle
-      if (
-        primaryFaceCandidate.rollDegrees &&
-        Math.abs(primaryFaceCandidate.rollDegrees) >
-          BIOMETRIC_CONFIG.imageQuality.maxRollDegrees
-      ) {
-        const tiltWarning = 'Vui lòng nhìn thẳng vào camera';
+      // Check Quality Gate for the primary detected face (e.g. cut off by screen edge)
+      if (primaryFaceCandidate.qualityWarning) {
+        console.log(
+          `[TFLite YOLO] Quality gate rejected face: "${primaryFaceCandidate.qualityWarning}"`,
+        );
         return {
           userId: '',
-          fullName: tiltWarning,
-          code: 'HEAD_TILTED',
+          fullName: primaryFaceCandidate.qualityWarning,
+          code: 'POOR_QUALITY',
           avatarUri: '',
           zoneName: '',
           roomName: '',
@@ -1796,7 +1715,7 @@ export class TfliteYoloService {
           timestamp: timeString,
           status: 'verify',
           boundingBox: primaryFaceCandidate.boundingBox,
-          qualityWarning: tiltWarning,
+          qualityWarning: primaryFaceCandidate.qualityWarning,
         };
       }
 
@@ -1826,17 +1745,14 @@ export class TfliteYoloService {
           face.rollDegrees,
         );
 
-        // Check blur sharpness for primary face
+        // Check blur sharpness for primary face (only reject severe motion blur, variance < 6.0)
         const sharpness = this.lastCalculatedSharpness;
-        if (
-          face === primaryFaceCandidate &&
-          sharpness < TfliteYoloService.MIN_SHARPNESS_THRESHOLD
-        ) {
+        if (face === primaryFaceCandidate && sharpness < 6.0) {
           const blurWarning = 'Ảnh bị mờ, vui lòng giữ yên';
           console.log(
             `[TFLite YOLO] Blur rejected face (sharpness variance: ${sharpness.toFixed(
               1,
-            )} < ${TfliteYoloService.MIN_SHARPNESS_THRESHOLD})`,
+            )} < 6.0)`,
           );
           return {
             userId: '',
@@ -1854,11 +1770,13 @@ export class TfliteYoloService {
         }
 
         // Check Presentation Attack Detection (PAD / Anti-Spoofing) on primary face
+        // Only hard-reject if spoofing attack is detected with high confidence (score < 0.25)
         const padResult = this.lastCalculatedPadResult;
         if (
           face === primaryFaceCandidate &&
           BIOMETRIC_CONFIG.presentationAttackDetection.enabled &&
-          !padResult.accepted
+          !padResult.accepted &&
+          padResult.score < 0.25
         ) {
           const padWarning =
             padResult.warning || 'Phát hiện dấu hiệu giả mạo khuôn mặt';
@@ -1902,11 +1820,14 @@ export class TfliteYoloService {
       }
       const allCandidates: MatchCandidate[] = [];
       const faceMaxSim: number[] = new Array(extractedFaces.length).fill(0.15);
-      let primaryCandidateMatch: {
-        top1: { profile: UserProfile; similarity: number } | null;
-        top2: { profile: UserProfile; similarity: number } | null;
-        margin: number;
-      } = { top1: null, top2: null, margin: 0 };
+      const faceCandidateMatches = new Map<
+        number,
+        {
+          top1: { profile: UserProfile; similarity: number } | null;
+          top2: { profile: UserProfile; similarity: number } | null;
+          margin: number;
+        }
+      >();
 
       for (let fIdx = 0; fIdx < extractedFaces.length; fIdx++) {
         const liveEmb = extractedFaces[fIdx].embedding;
@@ -1970,18 +1891,12 @@ export class TfliteYoloService {
           (a, b) => b.similarity - a.similarity,
         );
 
-        if (faceCandidates.length > 0) {
-          const top1 = faceCandidates[0];
-          const top2 = faceCandidates.length > 1 ? faceCandidates[1] : null;
+        const top1 = faceCandidates.length > 0 ? faceCandidates[0] : null;
+        const top2 = faceCandidates.length > 1 ? faceCandidates[1] : null;
+        const margin = top1 ? top1.similarity - (top2 ? top2.similarity : 0) : 0;
+        faceCandidateMatches.set(fIdx, { top1, top2, margin });
 
-          if (fIdx === 0) {
-            primaryCandidateMatch = {
-              top1,
-              top2,
-              margin: top1 ? top1.similarity - (top2 ? top2.similarity : 0) : 0,
-            };
-          }
-
+        if (faceCandidates.length > 0 && top1) {
           // MARGIN CHECK: If top-1 and top-2 are from 2 different people and the similarity gap
           // is too narrow (< AMBIGUITY_MARGIN), reject to prevent User A from being falsely identified as User B!
           const shouldBypassMargin =
@@ -2037,6 +1952,7 @@ export class TfliteYoloService {
       }
 
       interface EvaluatedFace {
+        faceIndex: number;
         detection: YoloFaceDetection;
         profile: UserProfile | null;
         similarity: number;
@@ -2054,6 +1970,7 @@ export class TfliteYoloService {
           assignedProfile !== null && sim >= TfliteYoloService.MATCH_THRESHOLD;
 
         evaluatedFaces.push({
+          faceIndex: fIdx,
           detection: item.face,
           profile: isMatch ? assignedProfile : null,
           similarity: sim,
@@ -2076,6 +1993,9 @@ export class TfliteYoloService {
       });
 
       const primary = evaluatedFaces[0];
+      const primaryCandidateMatch = faceCandidateMatches.get(
+        primary.faceIndex,
+      ) || { top1: null, top2: null, margin: 0 };
       const hasUnverifiedStranger = evaluatedFaces.some(
         f => f.status === 'verify' && f !== primary,
       );
@@ -2195,7 +2115,7 @@ export class TfliteYoloService {
         };
       }
 
-      // Decision 2: VERIFY (Mơ hồ, margin hẹp hoặc đang gom phiếu 1/3, 2/3)
+      // Decision 2: VERIFY (Mơ hồ, margin hẹp hoặc đang gom phiếu 1/2)
       if (temporalDecision.status === 'VERIFY') {
         return {
           userId: temporalDecision.profile?.id || '',
@@ -2211,7 +2131,6 @@ export class TfliteYoloService {
           timestamp: timeString,
           status: 'verify',
           boundingBox: primary.detection.boundingBox,
-          qualityWarning: temporalDecision.message,
           hasUnverifiedStranger,
           temporalVotes: temporalDecision.votesCount,
           top1Similarity: temporalDecision.avgSimilarity,
@@ -2629,8 +2548,11 @@ export class TfliteYoloService {
             embeddings: serverVectors,
             signature: sig,
           });
-          this.saveEmbeddingsToStorage(p.id, serverVectors, sig);
           hydratedCount++;
+          // Non-blocking background persistence so main JS thread & camera loop never freeze
+          setTimeout(() => {
+            this.saveEmbeddingsToStorage(p.id, serverVectors, sig);
+          }, 0);
           continue;
         }
       }

@@ -41,6 +41,10 @@ export interface UserProfile {
   embeddings?: number[][]; // Server pre-computed 512-dim biometric vectors
   zoneId: string;
   roomId: string;
+  roomName?: string;
+  zoneName?: string;
+  room?: { id?: string; name?: string };
+  zone?: { id?: string; name?: string };
   enrolledAt: string;
   phoneNumber?: string;
   conditionStatus?: UserConditionStatus | string;

@@ -131,9 +131,7 @@ const TabletDetectorScreen: React.FC<TabletDetectorScreenProps> = ({
   const confidenceThreshold = useAppSelector(
     state => state.detector.confidenceThreshold ?? 75,
   );
-  const targetFps = useAppSelector(
-    state => state.detector.targetFps ?? 30,
-  );
+  const targetFps = useAppSelector(state => state.detector.targetFps ?? 30);
   const soundEnabled = useAppSelector(
     state => state.detector.soundEnabled ?? true,
   );
@@ -455,7 +453,9 @@ const TabletDetectorScreen: React.FC<TabletDetectorScreenProps> = ({
         try {
           if (isCancelled) return;
           console.log('[TabletDetectorScreen] YOLO Engine ready:', ready);
-          const validProfiles = (targetProfiles || []).filter(p => Boolean(p && p.id));
+          const validProfiles = (targetProfiles || []).filter(p =>
+            Boolean(p && p.id),
+          );
           if (ready && validProfiles.length > 0) {
             // 1. Nạp tức thì toàn bộ vector tính sẵn từ Server vào RAM (< 5ms)
             YoloDetectorService.fastHydrateServerEmbeddings(validProfiles);
@@ -515,9 +515,9 @@ const TabletDetectorScreen: React.FC<TabletDetectorScreenProps> = ({
                   !YoloDetectorService.hasCachedEmbeddings(u),
               );
               if (remainingProfiles.length > 0) {
-                YoloDetectorService.warmupRoomEmbeddings(remainingProfiles).catch(
-                  () => {},
-                );
+                YoloDetectorService.warmupRoomEmbeddings(
+                  remainingProfiles,
+                ).catch(() => {});
               }
             }
           } else {
@@ -525,7 +525,10 @@ const TabletDetectorScreen: React.FC<TabletDetectorScreenProps> = ({
             setFaceSyncModalVisible(false);
           }
         } catch (warmupErr) {
-          console.warn('[TabletDetectorScreen] Warmup error ignored:', warmupErr);
+          console.warn(
+            '[TabletDetectorScreen] Warmup error ignored:',
+            warmupErr,
+          );
           if (!isCancelled) {
             setIsFaceDataReady(true);
             setFaceSyncModalVisible(false);
@@ -533,7 +536,10 @@ const TabletDetectorScreen: React.FC<TabletDetectorScreenProps> = ({
         }
       })
       .catch(initErr => {
-        console.warn('[TabletDetectorScreen] YOLO init error ignored:', initErr);
+        console.warn(
+          '[TabletDetectorScreen] YOLO init error ignored:',
+          initErr,
+        );
         if (!isCancelled) {
           setIsFaceDataReady(true);
           setFaceSyncModalVisible(false);
@@ -597,7 +603,7 @@ const TabletDetectorScreen: React.FC<TabletDetectorScreenProps> = ({
   const handleScanDetection = useCallback(
     async (providedPhotoPath?: string) => {
       if (!isSessionRunningRef.current) return;
-      if (!isFaceDataReady && YoloDetectorService.isWarmingUp()) {
+      if (!isFaceDataReady && faceSyncModalVisible && YoloDetectorService.isWarmingUp()) {
         scheduleNextScan(400);
         return;
       }
@@ -627,8 +633,8 @@ const TabletDetectorScreen: React.FC<TabletDetectorScreenProps> = ({
           if (realResult) {
             consecutiveMissedFramesRef.current = 0;
 
-            // Face Quality Gate: if frame is blurry or angle is partial/extreme, guide user without recording attendance
-            if (realResult.qualityWarning) {
+            // Face Quality Gate: if frame is physically unusable (has qualityWarning and no userId), guide user
+            if (realResult.qualityWarning && !realResult.userId) {
               dispatch(setActiveDetection(realResult));
               lastFaceSeenTimestampRef.current = Date.now();
               const activeTrackDelay = Math.max(
@@ -663,20 +669,35 @@ const TabletDetectorScreen: React.FC<TabletDetectorScreenProps> = ({
               (scanMode === 'room' ? effectiveZoneId : undefined);
             const userRoom = rooms.find(r => r.id === userRoomId);
             const userZone = zones.find(z => z.id === userZoneId);
+
+            const rawRoomName =
+              userRoom?.name ||
+              matchedProfile?.roomName ||
+              (matchedProfile?.room as any)?.name;
+
+            const rawZoneName =
+              userZone?.name ||
+              matchedProfile?.zoneName ||
+              (matchedProfile?.zone as any)?.name;
+
             const roomDisplayName = isOtherRoom
-              ? `${userRoom?.name || 'Phòng khác'} (Khác phòng)`
+              ? `${rawRoomName || 'Phòng khác'} (Khác phòng)`
               : isVisitor
-              ? `Khách thăm (${visitedProfileName ? `gặp ${visitedProfileName}` : 'Thân nhân'})`
-              : userRoom?.name;
+              ? `Khách thăm (${
+                  visitedProfileName ? `gặp ${visitedProfileName}` : 'Thân nhân'
+                })`
+              : rawRoomName;
             const deptName = isOtherRoom
-              ? `${userRoom?.name || 'Phòng khác'} (Khác phòng)`
-              : userRoom?.name || (isVisitor ? 'Khách thăm' : 'Toàn cơ sở');
+              ? `${rawRoomName || 'Phòng khác'} (Khác phòng)`
+              : rawRoomName || (isVisitor ? 'Khách thăm' : 'Toàn cơ sở');
 
             const profileAvatar = matchedProfile?.avatarUri;
 
             dispatch(
               setActiveDetection({
                 ...realResult,
+                roomName: roomDisplayName,
+                zoneName: rawZoneName,
                 avatarUri: profileAvatar || realResult.avatarUri,
               }),
             );
@@ -690,10 +711,10 @@ const TabletDetectorScreen: React.FC<TabletDetectorScreenProps> = ({
                   userId: realResult.userId,
                   fullName: realResult.fullName,
                   code: realResult.code,
-                  roomId: userRoom?.id,
+                  roomId: userRoomId,
                   roomName: roomDisplayName,
-                  zoneId: userZone?.id,
-                  zoneName: userZone?.name,
+                  zoneId: userZoneId,
+                  zoneName: rawZoneName,
                   avatarUri: profileAvatar || realResult.avatarUri,
                   capturedAvatarUri: realResult.avatarUri,
                   confidence: realResult.confidence,
@@ -770,7 +791,11 @@ const TabletDetectorScreen: React.FC<TabletDetectorScreenProps> = ({
                     ? 'Điểm danh RA thành công'
                     : 'Điểm danh VÀO thành công',
                   message: isOtherRoom
-                    ? `${realResult.fullName} (${realResult.code}) thuộc [${userRoom?.name || 'Phòng khác'}] (không thuộc phòng đang quét) với độ tin cậy ${realResult.confidence}%`
+                    ? `${realResult.fullName} (${realResult.code}) thuộc [${
+                        userRoom?.name || 'Phòng khác'
+                      }] (không thuộc phòng đang quét) với độ tin cậy ${
+                        realResult.confidence
+                      }%`
                     : scanMode === 'all'
                     ? `${realResult.fullName} (${
                         realResult.code
@@ -965,38 +990,47 @@ const TabletDetectorScreen: React.FC<TabletDetectorScreenProps> = ({
                 }
               }
             } else if (realResult.status === 'verify') {
-              dispatch(
-                recordScanEvent({
-                  userId: realResult.userId,
-                  fullName: realResult.fullName,
-                  code: realResult.code,
-                  avatarUri: realResult.avatarUri,
-                  capturedAvatarUri: realResult.avatarUri,
-                  confidence: realResult.confidence,
-                  status: 'verify',
-                  timestamp: realResult.timestamp,
-                  scanMode,
-                  direction: scanDirection,
-                }),
-              );
-              const lastAlert = alertsRef.current?.[0];
-              const isRecentUnknownAlert =
-                lastAlert?.type === 'warning' &&
-                lastAlert?.title === 'Khuôn mặt chưa khớp';
-              if (!isRecentUnknownAlert) {
-                const warnPayload = {
-                  title: 'Khuôn mặt chưa khớp',
-                  message: `Phát hiện đối tượng chưa khớp với danh sách (độ khớp: ${realResult.confidence}%)`,
-                  timestamp: realResult.timestamp,
-                  type: 'warning' as const,
-                };
-                dispatch(addAlert(warnPayload));
-                alertService.createAlert(warnPayload).catch(err => {
-                  console.log(
-                    '[TabletDetector] Failed to sync alert to BE:',
-                    err,
-                  );
-                });
+              // CHỈ ghi nhận người lạ nếu thực sự không khớp với bất kỳ hồ sơ nào trong DB!
+              // Không ghi nhận hồ sơ đã nhận diện danh tính nhưng đang trong frame gom phiếu hoặc cooldown!
+              const isActualStranger =
+                !realResult.userId ||
+                realResult.userId === 'unverified-unknown' ||
+                realResult.code === 'STRANGER';
+
+              if (isActualStranger) {
+                dispatch(
+                  recordScanEvent({
+                    userId: realResult.userId,
+                    fullName: realResult.fullName || 'Người chưa xác minh',
+                    code: realResult.code || 'STRANGER',
+                    avatarUri: realResult.avatarUri,
+                    capturedAvatarUri: realResult.avatarUri,
+                    confidence: realResult.confidence,
+                    status: 'verify',
+                    timestamp: realResult.timestamp,
+                    scanMode,
+                    direction: scanDirection,
+                  }),
+                );
+                const lastAlert = alertsRef.current?.[0];
+                const isRecentUnknownAlert =
+                  lastAlert?.type === 'warning' &&
+                  lastAlert?.title === 'Khuôn mặt chưa khớp';
+                if (!isRecentUnknownAlert) {
+                  const warnPayload = {
+                    title: 'Khuôn mặt chưa khớp',
+                    message: `Phát hiện đối tượng chưa khớp với danh sách (độ khớp: ${realResult.confidence}%)`,
+                    timestamp: realResult.timestamp,
+                    type: 'warning' as const,
+                  };
+                  dispatch(addAlert(warnPayload));
+                  alertService.createAlert(warnPayload).catch(err => {
+                    console.log(
+                      '[TabletDetector] Failed to sync alert to BE:',
+                      err,
+                    );
+                  });
+                }
               }
             }
 
@@ -1091,7 +1125,11 @@ const TabletDetectorScreen: React.FC<TabletDetectorScreenProps> = ({
   }, [isSessionActive, isTabFocused, handleScanDetection]);
 
   const handleOpenStartSession = () => {
-    if (!isGuard && scanMode === 'zone' && (!selectedZone || !selectedZone.id)) {
+    if (
+      !isGuard &&
+      scanMode === 'zone' &&
+      (!selectedZone || !selectedZone.id)
+    ) {
       showWarnToast(
         'Chưa chọn khu vực',
         'Vui lòng chọn khu vực trước khi bắt đầu phiên quét theo khu!',
@@ -1099,7 +1137,11 @@ const TabletDetectorScreen: React.FC<TabletDetectorScreenProps> = ({
       setZonePickerVisible(true);
       return;
     }
-    if (!isGuard && scanMode === 'room' && (!selectedRoom || !selectedRoom.id)) {
+    if (
+      !isGuard &&
+      scanMode === 'room' &&
+      (!selectedRoom || !selectedRoom.id)
+    ) {
       showWarnToast(
         'Chưa chọn phòng',
         'Vui lòng tạo hoặc chọn phòng trước khi bắt đầu phiên quét theo phòng!',
@@ -1117,7 +1159,8 @@ const TabletDetectorScreen: React.FC<TabletDetectorScreenProps> = ({
     try {
       const finalScanMode = isGuard ? 'all' : scanMode;
       const finalSessionName = isGuard
-        ? sessionName || `Điểm danh ra vào cơ sở - ${dayjs().format('DD/MM/YYYY HH:mm')}`
+        ? sessionName ||
+          `Điểm danh ra vào cơ sở - ${dayjs().format('DD/MM/YYYY HH:mm')}`
         : sessionName;
       const isZoneMode = finalScanMode === 'zone';
       const isRoomMode = finalScanMode === 'room';
@@ -1299,7 +1342,9 @@ const TabletDetectorScreen: React.FC<TabletDetectorScreenProps> = ({
         {
           id: 'all_mode_option',
           label: 'Toàn cơ sở (Quét All - Ra/Vào cơ sở)',
-          subtitle: `Điểm danh ra vào cổng cơ sở (${(userProfiles || []).length} nhân sự)`,
+          subtitle: `Điểm danh ra vào cổng cơ sở (${
+            (userProfiles || []).length
+          } nhân sự)`,
         },
       ];
     }
@@ -1491,7 +1536,9 @@ const TabletDetectorScreen: React.FC<TabletDetectorScreenProps> = ({
               />
 
               <BottomActions
-                onOpenList={isGuard ? undefined : () => setListModalVisible(true)}
+                onOpenList={
+                  isGuard ? undefined : () => setListModalVisible(true)
+                }
                 onOpenAddUser={() => setAddUserVisible(true)}
                 isGuard={isGuard}
                 onOpenSessionsHistory={
@@ -1667,7 +1714,10 @@ const TabletDetectorScreen: React.FC<TabletDetectorScreenProps> = ({
         total={faceSyncProgress.total}
         currentProfileName={faceSyncProgress.profileName}
         scanMode={scanMode}
-        onDismiss={() => setFaceSyncModalVisible(false)}
+        onDismiss={() => {
+          setFaceSyncModalVisible(false);
+          setIsFaceDataReady(true);
+        }}
       />
 
       {/* Kiosk Mode Exit PIN Modal */}

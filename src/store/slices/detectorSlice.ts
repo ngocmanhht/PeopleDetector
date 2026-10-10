@@ -750,11 +750,18 @@ const detectorSlice = createSlice({
 
       if (userId && status === 'present') {
         const existingIdx = state.scanHistory.findIndex(
-          item => item.userId === userId,
+          item => item.userId === userId || item.id === userId,
         );
 
         if (existingIdx >= 0) {
           const existing = state.scanHistory[existingIdx];
+          existing.status = 'present'; // Upgraded from verify to present
+          if (fullName) existing.fullName = fullName;
+          if (code) existing.code = code;
+          if (roomId) existing.roomId = roomId;
+          if (roomName) existing.roomName = roomName;
+          if (zoneId) existing.zoneId = zoneId;
+          if (zoneName) existing.zoneName = zoneName;
           existing.scanCount += 1;
           existing.lastScanTime = timestamp;
           existing.confidence = Math.max(existing.confidence, confidence);
@@ -816,9 +823,12 @@ const detectorSlice = createSlice({
         }
       } else {
         // Unverified stranger: cluster by persistent stranger userId from biometric embedding
+        // Never overwrite or downgrade an item that is already 'present'
         const existingStranger = userId
           ? state.scanHistory.find(
-              item => item.id === userId || item.userId === userId,
+              item =>
+                (item.id === userId || item.userId === userId) &&
+                item.status === 'verify',
             )
           : state.scanHistory.find(
               item =>

@@ -571,27 +571,29 @@ export const CameraViewFinder = forwardRef<
               )}
               <AppText style={styles.detectionLabelText} numberOfLines={1}>
                 {detection
-                  ? detection.qualityWarning
+                  ? detection.qualityWarning && !detection.userId
                     ? detection.qualityWarning
                     : `${detection.fullName} (${detection.confidence}%)`
                   : 'Phát hiện mặt'}
               </AppText>
-              {!isVerified && !detection?.qualityWarning && onEnrollStranger && (
-                <TouchableOpacity
-                  style={styles.boxEnrollBtn}
-                  onPress={() =>
-                    onEnrollStranger(
-                      detection?.avatarUri,
-                      detection?.fullName,
-                      detection?.userId,
-                    )
-                  }
-                  activeOpacity={0.8}
-                >
-                  <UserPlus size={11} color={appColors.white} />
-                  <AppText style={styles.boxEnrollBtnText}>+ Thêm</AppText>
-                </TouchableOpacity>
-              )}
+              {!isVerified &&
+                (!detection?.qualityWarning || Boolean(detection?.userId)) &&
+                onEnrollStranger && (
+                  <TouchableOpacity
+                    style={styles.boxEnrollBtn}
+                    onPress={() =>
+                      onEnrollStranger(
+                        detection?.avatarUri,
+                        detection?.fullName,
+                        detection?.userId,
+                      )
+                    }
+                    activeOpacity={0.8}
+                  >
+                    <UserPlus size={11} color={appColors.white} />
+                    <AppText style={styles.boxEnrollBtnText}>+ Thêm</AppText>
+                  </TouchableOpacity>
+                )}
             </View>
           </Animated.View>
         )}
@@ -600,7 +602,7 @@ export const CameraViewFinder = forwardRef<
         {isSessionActive &&
           detection &&
           detection.status === 'verify' &&
-          !detection.qualityWarning &&
+          (!detection.qualityWarning || Boolean(detection.userId)) &&
           onEnrollStranger && (
             <View style={styles.cameraStrangerAlertBanner}>
               <View style={styles.cameraStrangerAlertLeft}>
