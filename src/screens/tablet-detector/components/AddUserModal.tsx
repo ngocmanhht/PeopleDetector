@@ -59,6 +59,7 @@ interface AddUserModalProps {
   onClose: () => void;
   initialPhotoUri?: string | null;
   initialFullName?: string;
+  initialUserId?: string | null;
   onUserCreated?: (createdProfile: UserProfile) => void;
 }
 
@@ -69,6 +70,7 @@ export const AddUserModal: React.FC<AddUserModalProps> = ({
   onClose,
   initialPhotoUri,
   initialFullName,
+  initialUserId,
   onUserCreated,
 }: AddUserModalProps) => {
   const { isPhone, height: screenHeight } = useResponsive();
@@ -102,6 +104,42 @@ export const AddUserModal: React.FC<AddUserModalProps> = ({
   const [searchMemberQuery, setSearchMemberQuery] = useState('');
   const [selectedExistingUserId, setSelectedExistingUserId] = useState<string | null>(null);
   const [isLinkingUser, setIsLinkingUser] = useState(false);
+
+  // Auto-select existing user if matching initialUserId or initialFullName
+  useEffect(() => {
+    if (visible) {
+      if (initialUserId) {
+        const found = (userProfiles || []).find(u => u.id === initialUserId);
+        if (found) {
+          setSelectedExistingUserId(found.id);
+          setEnrollMode('link_existing');
+          return;
+        }
+      }
+      if (
+        initialFullName &&
+        initialFullName !== 'Người chưa xác minh' &&
+        initialFullName !== 'Người lạ'
+      ) {
+        const found = (userProfiles || []).find(
+          u =>
+            u.fullName?.toLowerCase() === initialFullName.toLowerCase() ||
+            u.code?.toLowerCase() === initialFullName.toLowerCase(),
+        );
+        if (found) {
+          setSelectedExistingUserId(found.id);
+          setEnrollMode('link_existing');
+          return;
+        }
+      }
+      if (initialPhotoUri) {
+        setEnrollMode('link_existing');
+      }
+    } else {
+      setSelectedExistingUserId(null);
+      setSearchMemberQuery('');
+    }
+  }, [visible, initialUserId, initialFullName, initialPhotoUri, userProfiles]);
 
   const selectedExistingProfile = (userProfiles || []).find(
     u => u.id === selectedExistingUserId,
@@ -154,9 +192,13 @@ export const AddUserModal: React.FC<AddUserModalProps> = ({
 
       // Kiểm tra nếu chưa có ảnh này thì thêm vào
       if (!updatedPhotos.includes(initialPhotoUri)) {
-        if (updatedPhotos.length >= PHOTO_CONFIG.MAX_PHOTOS_PER_USER) {
-          // Nếu đã đủ 5 ảnh, thay thế ảnh cũ nhất (giữ ảnh avatar chính)
-          updatedPhotos = [...updatedPhotos.slice(1), initialPhotoUri];
+        if (updatedPhotos.length >= 5) {
+          // Nếu đã đủ 5 ảnh, giữ ảnh avatar chính [0] và thay thế ảnh cũ nhất
+          updatedPhotos = [
+            updatedPhotos[0],
+            ...updatedPhotos.slice(2),
+            initialPhotoUri,
+          ];
         } else {
           updatedPhotos.push(initialPhotoUri);
         }
@@ -169,12 +211,13 @@ export const AddUserModal: React.FC<AddUserModalProps> = ({
         ...selectedExistingProfile,
         avatarUri: mainAvatar,
         photos: updatedPhotos,
+        embeddings: undefined, // Xóa embeddings cũ để ép AI trích xuất vector mới từ ảnh chụp trực tiếp
       };
 
       // 2. Cập nhật vào Redux store
       dispatch(upsertUserProfile(updatedProfile));
 
-      // 3. Nạp vector mới vào RAM ngay lập tức
+      // 3. Nạp vector mới vào RAM ngay lập tức trên thiết bị
       await YoloDetectorService.enrollProfile(updatedProfile).catch(err => {
         console.warn('[AddUserModal] enrollProfile error:', err);
       });
@@ -208,18 +251,28 @@ export const AddUserModal: React.FC<AddUserModalProps> = ({
           p === initialPhotoUri ? uploadedPhotoUri : p,
         );
 
-        await profileService.updateProfile(selectedExistingProfile.id, {
-          avatarUri:
-            mainAvatar === initialPhotoUri ? uploadedPhotoUri : mainAvatar,
-          photos: serverPhotos,
-        });
+        const serverRes = await profileService.updateProfile(
+          selectedExistingProfile.id,
+          {
+            avatarUri:
+              mainAvatar === initialPhotoUri ? uploadedPhotoUri : mainAvatar,
+            photos: serverPhotos,
+          },
+        );
+
+        if (
+          serverRes?.data?.embeddings &&
+          serverRes.data.embeddings.length > 0
+        ) {
+          YoloDetectorService.fastHydrateServerEmbeddings([serverRes.data]);
+        }
       } catch (syncErr) {
         console.log('[AddUserModal] Failed to sync photo to server:', syncErr);
       }
 
       Alert.alert(
-        'Điểm danh thành công',
-        `Đã bổ sung ảnh nhận diện AI và ghi nhận Có mặt cho ${selectedExistingProfile.fullName} (${selectedExistingProfile.code}).`,
+        'Bổ sung vector AI thành công',
+        `Đã nạp góc ảnh mới vào cơ sở dữ liệu khuôn mặt và ghi nhận Có mặt cho ${selectedExistingProfile.fullName} (${selectedExistingProfile.code}).`,
       );
 
       onClose();
@@ -407,24 +460,43 @@ export const AddUserModal: React.FC<AddUserModalProps> = ({
 
   // Photos management
   const handleCapturePhoto = () => {
-    if (photos.length >= PHOTO_CONFIG.MAX_PHOTOS_PER_USER) {
-      Alert.alert('Đã đủ ảnh', `Tối đa ${PHOTO_CONFIG.MAX_PHOTOS_PER_USER} ảnh cho mỗi người.`);
-      return;
-    }
-
     Alert.alert('Chọn Camera', 'Bạn muốn chụp ảnh hồ sơ bằng camera nào?', [
       {
         text: 'Camera sau (Khuyên dùng)',
         onPress: async () => {
           const uri = await ImagePickerService.captureImageWithCamera(photos.length, 'back');
-          if (uri) setPhotos(prev => [...prev, uri]);
+          if (uri) {
+            setPhotos(prev => {
+              let next = [...prev];
+              if (next.includes(uri)) return next;
+              if (next.length >= PHOTO_CONFIG.MAX_PHOTOS_PER_USER) {
+                // Giữ nguyên ảnh chân dung đại diện chính [0] và thay thế ảnh phụ cũ nhất bằng góc chụp mới nhất
+                next = [next[0], ...next.slice(2), uri];
+              } else {
+                next.push(uri);
+              }
+              return next;
+            });
+          }
         },
       },
       {
         text: 'Camera trước (Selfie)',
         onPress: async () => {
           const uri = await ImagePickerService.captureImageWithCamera(photos.length, 'front');
-          if (uri) setPhotos(prev => [...prev, uri]);
+          if (uri) {
+            setPhotos(prev => {
+              let next = [...prev];
+              if (next.includes(uri)) return next;
+              if (next.length >= PHOTO_CONFIG.MAX_PHOTOS_PER_USER) {
+                // Giữ nguyên ảnh chân dung đại diện chính [0] và thay thế ảnh phụ cũ nhất bằng góc chụp mới nhất
+                next = [next[0], ...next.slice(2), uri];
+              } else {
+                next.push(uri);
+              }
+              return next;
+            });
+          }
         },
       },
       { text: 'Hủy', style: 'cancel' },
@@ -432,14 +504,21 @@ export const AddUserModal: React.FC<AddUserModalProps> = ({
   };
 
   const handlePickPhotos = async () => {
-    if (photos.length >= PHOTO_CONFIG.MAX_PHOTOS_PER_USER) {
-      Alert.alert('Đã đủ ảnh', `Tối đa ${PHOTO_CONFIG.MAX_PHOTOS_PER_USER} ảnh cho mỗi người.`);
-      return;
-    }
-    const remainCount = PHOTO_CONFIG.MAX_PHOTOS_PER_USER - photos.length;
-    const uris = await ImagePickerService.pickImagesFromLibrary(remainCount);
+    const uris = await ImagePickerService.pickImagesFromLibrary(photos.length);
     if (uris && uris.length > 0) {
-      setPhotos(prev => [...prev, ...uris].slice(0, PHOTO_CONFIG.MAX_PHOTOS_PER_USER));
+      setPhotos(prev => {
+        let combined = [...prev];
+        for (const u of uris) {
+          if (combined.includes(u)) continue;
+          if (combined.length >= PHOTO_CONFIG.MAX_PHOTOS_PER_USER) {
+            // Giữ nguyên ảnh chân dung đại diện chính [0] và thay thế ảnh phụ cũ nhất bằng ảnh mới
+            combined = [combined[0], ...combined.slice(2), u];
+          } else {
+            combined.push(u);
+          }
+        }
+        return combined;
+      });
     }
   };
 
@@ -634,14 +713,15 @@ export const AddUserModal: React.FC<AddUserModalProps> = ({
             Ảnh nhận diện ({photos.length}/{PHOTO_CONFIG.MAX_PHOTOS_PER_USER})
           </AppText>
           <AppText style={styles.sectionDesc} numberOfLines={1}>
-            Chụp hoặc tải ảnh để trích xuất vector khuôn mặt
+            {photos.length >= PHOTO_CONFIG.MAX_PHOTOS_PER_USER
+              ? 'Đã đủ 5 ảnh (thêm mới sẽ tự động thay thế ảnh phụ cũ nhất)'
+              : 'Chụp hoặc tải ảnh để trích xuất vector khuôn mặt'}
           </AppText>
         </View>
         <View style={styles.photoActions}>
           <TouchableOpacity
             style={styles.actionBtnCamera}
             onPress={handleCapturePhoto}
-            disabled={photos.length >= PHOTO_CONFIG.MAX_PHOTOS_PER_USER}
           >
             <Camera size={15} color={appColors.white} />
             <AppText style={styles.actionBtnCameraText}>Chụp</AppText>
@@ -649,7 +729,6 @@ export const AddUserModal: React.FC<AddUserModalProps> = ({
           <TouchableOpacity
             style={styles.actionBtnLibrary}
             onPress={handlePickPhotos}
-            disabled={photos.length >= PHOTO_CONFIG.MAX_PHOTOS_PER_USER}
           >
             <ImageIcon size={15} color={appColors.blue600} />
             <AppText style={styles.actionBtnLibraryText}>Thư viện</AppText>

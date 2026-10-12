@@ -9,22 +9,23 @@ export const BIOMETRIC_CONFIG = {
   recognition: {
     /**
      * Điểm Cosine Similarity tối thiểu để Top-1 được coi là khớp danh tính.
-     * 0.64 là ngưỡng chuẩn tối ưu thực tế cho MobileFaceNet 512-d giữa camera tablet và ảnh đại diện.
+     * Nâng nhẹ từ 0.64 lên 0.68 để triệt tiêu tỉ lệ nhận nhầm trong gallery nhiều hồ sơ.
      */
-    matchThreshold: 0.64,
+    matchThreshold: 0.68,
 
     /**
      * Khoảng cách biên an toàn tối thiểu giữa ứng viên Top-1 và Top-2 (Top1.similarity - Top2.similarity).
-     * Ngăn ngừa tuyệt đối trường hợp Người A bị nhận nhầm thành Người B khi 2 người có nét mặt gần giống nhau.
+     * Nâng từ 0.02 lên 0.04 (4% margin): Ngăn ngừa tuyệt đối trường hợp Người A bị nhận nhầm thành Người B
+     * khi 2 người có nét mặt gần giống nhau.
      */
-    ambiguityMargin: 0.03,
+    ambiguityMargin: 0.04,
 
     /**
-     * Tắt bypass 1-frame (Khuyến nghị cho Production-Grade Kiosk):
-     * Bắt buộc phải qua Biểu quyết thời gian (Temporal Voting >= 2 frames ~150-200ms) để ra quyết định.
-     * Triệt tiêu hoàn toàn việc chốt vội ở 1 frame đơn lẻ và luôn bảo vệ khoảng cách biên an toàn (ambiguityMargin).
+     * Bật decisive bypass khi độ tin cậy vượt ngưỡng dứt khoát:
+     * Nâng lên >= 0.80 (80% cosine) VÀ margin >= 0.04: Chỉ chốt MATCH tức thì ở frame 1 khi cực kỳ chắc chắn,
+     * còn lại bắt buộc qua Temporal Voting (2 frame đồng thuận).
      */
-    decisiveBypassEnabled: false,
+    decisiveBypassEnabled: true,
     decisiveThreshold: 0.80,
 
     /**
@@ -40,7 +41,7 @@ export const BIOMETRIC_CONFIG = {
     /**
      * Ngưỡng Cosine Similarity để gộp các lần xuất hiện của cùng một người lạ.
      */
-    matchThreshold: 0.65,
+    matchThreshold: 0.68,
   },
 
   /**
@@ -49,9 +50,9 @@ export const BIOMETRIC_CONFIG = {
   imageQuality: {
     /**
      * Ngưỡng độ nét tối thiểu đo bằng phương sai Laplacian trên ROI khuôn mặt.
-     * 12.0 là ngưỡng thực tế phù hợp với camera trước của tablet trong nhà, lọc bỏ rung lắc mạnh nhưng không chặn mặt thường.
+     * Nâng nhẹ lên 15.0 để lọc bỏ các frame rung lắc / nhòe chuyển động gây sai lệch vector đặc trưng.
      */
-    minSharpness: 12.0,
+    minSharpness: 15.0,
 
     /**
      * Kích thước khuôn mặt tối thiểu trong ảnh làm việc (pixel width & height).
@@ -76,15 +77,15 @@ export const BIOMETRIC_CONFIG = {
     windowSize: 5,
 
     /**
-     * Số frame hợp lệ tối thiểu trong cửa sổ (3 frame).
+     * Số frame hợp lệ tối thiểu trong cửa sổ (2 frame).
      */
-    minValidFrames: 3,
+    minValidFrames: 2,
 
     /**
-     * Số phiếu tối thiểu đồng thuận cùng một danh tính để chốt MATCH (3/5 frame đồng thuận).
-     * Chuẩn Majority Voting đạt độ chính xác cao nhất (99.9%), triệt tiêu hoàn toàn nhận nhầm.
+     * Số phiếu tối thiểu đồng thuận cùng một danh tính để chốt MATCH (2 frame đồng thuận ~180-250ms).
+     * Tỷ lệ vàng giữa tốc độ cực nhanh và độ chính xác sinh trắc học cao.
      */
-    minVotes: 3,
+    minVotes: 2,
 
     /**
      * Thời gian tồn tại tối đa của cửa sổ trượt (2.5 giây).

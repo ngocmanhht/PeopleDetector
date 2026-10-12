@@ -3,7 +3,7 @@
  * Configurable photo limits and image compression quality
  */
 export const PHOTO_CONFIG = {
-  MAX_PHOTOS_PER_USER: 10,
+  MAX_PHOTOS_PER_USER: 5,
   IMAGE_QUALITY: 0.7,
   MAX_WIDTH: 600,
   MAX_HEIGHT: 600,

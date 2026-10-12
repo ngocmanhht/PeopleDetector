@@ -37,18 +37,15 @@ export class ImagePickerService {
 
   /**
    * Pick multiple images from photo library up to remaining limit
+   * (Nếu đã đủ số ảnh tối đa, cho phép chọn 1 ảnh để tự động thay thế ảnh phụ cũ nhất)
    */
   public static async pickImagesFromLibrary(
     currentCount = 0,
   ): Promise<string[]> {
-    const remainingSlots = PHOTO_CONFIG.MAX_PHOTOS_PER_USER - currentCount;
-    if (remainingSlots <= 0) {
-      Alert.alert(
-        'Đã đạt giới hạn ảnh',
-        `Mỗi hồ sơ được lưu tối đa ${PHOTO_CONFIG.MAX_PHOTOS_PER_USER} ảnh nhận diện.`,
-      );
-      return [];
-    }
+    const remainingSlots = Math.max(
+      1,
+      PHOTO_CONFIG.MAX_PHOTOS_PER_USER - currentCount,
+    );
 
     const options: ImageLibraryOptions = {
       mediaType: 'photo',
@@ -90,20 +87,12 @@ export class ImagePickerService {
 
   /**
    * Capture single photo with device camera
+   * (Cho phép chụp thêm để tự động thay thế góc ảnh cũ nhất khi đã đạt tối đa)
    */
   public static async captureImageWithCamera(
     currentCount = 0,
     cameraType: 'front' | 'back' = 'back',
   ): Promise<string | null> {
-    const remainingSlots = PHOTO_CONFIG.MAX_PHOTOS_PER_USER - currentCount;
-    if (remainingSlots <= 0) {
-      Alert.alert(
-        'Đã đạt giới hạn ảnh',
-        `Mỗi hồ sơ được lưu tối đa ${PHOTO_CONFIG.MAX_PHOTOS_PER_USER} ảnh nhận diện.`,
-      );
-      return null;
-    }
-
     const hasPerm = await this.requestCameraPermission();
     if (!hasPerm) {
       Alert.alert(

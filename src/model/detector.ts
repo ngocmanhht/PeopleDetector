@@ -115,6 +115,9 @@ export interface AttendanceRecord {
   timestamp: string;
   detectedImageUrl?: string;
   avatarUri?: string;
+  direction?: ScanDirection;
+  firstInTime?: string;
+  lastOutTime?: string;
 }
 
 export interface BoundingBox {

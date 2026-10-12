@@ -296,13 +296,15 @@ const detectorSlice = createSlice({
       if (user) {
         const existing =
           user.photos || (user.avatarUri ? [user.avatarUri] : []);
-        const nextList = [...existing];
+        let nextList = [...existing];
         action.payload.photos.forEach(p => {
-          if (
-            !nextList.includes(p) &&
-            nextList.length < PHOTO_CONFIG.MAX_PHOTOS_PER_USER
-          ) {
-            nextList.push(p);
+          if (!nextList.includes(p)) {
+            if (nextList.length >= PHOTO_CONFIG.MAX_PHOTOS_PER_USER) {
+              // Giữ nguyên ảnh đại diện chính [0] và thay thế ảnh phụ cũ nhất
+              nextList = [nextList[0], ...nextList.slice(2), p];
+            } else {
+              nextList.push(p);
+            }
           }
         });
         user.photos = nextList;
@@ -914,6 +916,18 @@ const detectorSlice = createSlice({
             (sum, item) => sum + item.scanCount,
             0,
           );
+          const verifiedItems = state.scanHistory.filter(
+            i => i.status === 'present' && Boolean(i.userId),
+          );
+          const unverifiedItems = state.scanHistory.filter(
+            i => i.status === 'verify',
+          );
+          activeSess.presentCount = verifiedItems.length;
+          activeSess.verifyCount = unverifiedItems.length;
+          activeSess.missingCount = Math.max(
+            0,
+            activeSess.totalCount - verifiedItems.length,
+          );
         }
       }
     },
@@ -994,16 +1008,37 @@ const detectorSlice = createSlice({
         timestamp: string;
         boundingBox?: { x: number; y: number; width: number; height: number };
         avatarUri?: string;
+        direction?: ScanDirection;
       }>,
     ) => {
-      const { userId, status, confidence, timestamp, boundingBox, avatarUri } =
-        action.payload;
+      const {
+        userId,
+        status,
+        confidence,
+        timestamp,
+        boundingBox,
+        avatarUri,
+        direction,
+      } = action.payload;
+      const effectiveDirection: ScanDirection =
+        direction || state.scanDirection || 'in';
+
+      const existingRecord = state.attendanceMap[userId];
       state.attendanceMap[userId] = {
         userId,
         status,
         confidence,
         timestamp,
-        detectedImageUrl: avatarUri,
+        detectedImageUrl: avatarUri || existingRecord?.detectedImageUrl,
+        direction: effectiveDirection,
+        firstInTime:
+          effectiveDirection === 'in'
+            ? existingRecord?.firstInTime || timestamp
+            : existingRecord?.firstInTime,
+        lastOutTime:
+          effectiveDirection === 'out'
+            ? timestamp
+            : existingRecord?.lastOutTime,
       };
 
       // Đồng bộ vào phiên đang hoạt động
@@ -1028,6 +1063,16 @@ const detectorSlice = createSlice({
       const user = state.userProfiles.find(u => u.id === userId);
       const zone = state.zones.find(z => z.id === user?.zoneId);
       const room = state.rooms.find(r => r.id === user?.roomId);
+      const resolvedRoomName =
+        room?.name ||
+        user?.roomName ||
+        (user?.room as any)?.name ||
+        'Chưa gán phòng';
+      const resolvedZoneName =
+        zone?.name ||
+        user?.zoneName ||
+        (user?.zone as any)?.name ||
+        'Toàn cơ sở';
 
       if (user && status === 'present') {
         state.activeDetection = {
@@ -1035,8 +1080,8 @@ const detectorSlice = createSlice({
           fullName: user.fullName,
           code: user.code,
           avatarUri: avatarUri || user.avatarUri,
-          zoneName: zone ? zone.name.replace('Khu ', '') : 'A',
-          roomName: room ? room.name.replace('Phòng ', '') : 'A01',
+          zoneName: resolvedZoneName,
+          roomName: resolvedRoomName,
           confidence,
           timestamp,
           status,

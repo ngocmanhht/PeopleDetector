@@ -640,8 +640,8 @@ const TabletDetectorScreen: React.FC<TabletDetectorScreenProps> = ({
             targetProfiles,
             isFront,
             confidenceThreshold,
-            userProfiles,
-            { isSingleShot: false },
+            scanMode === 'all' ? userProfiles : undefined,
+            { isSingleShot: false, scanMode },
           );
 
           if (realResult) {
@@ -786,29 +786,40 @@ const TabletDetectorScreen: React.FC<TabletDetectorScreenProps> = ({
                 }),
               );
 
-              // Cooldown 5s per user to prevent high-frequency request flooding
+              // Cooldown 5s per user per direction to prevent high-frequency request flooding
               const now = Date.now();
+              const syncKey = `${realResult.userId}_${scanDirection}`;
               const lastSyncTime =
-                lastAttendanceSyncedTimeRef.current[realResult.userId] || 0;
+                lastAttendanceSyncedTimeRef.current[syncKey] || 0;
 
               if (
                 realResult.userId &&
                 realResult.userId !== 'unverified-unknown' &&
                 now - lastSyncTime > COOLDOWN_SYNC_MS
               ) {
-                lastAttendanceSyncedTimeRef.current[realResult.userId] = now;
+                lastAttendanceSyncedTimeRef.current[syncKey] = now;
                 attendanceService.recordAttendance(attPayload).catch(err => {
                   console.log(
                     '[TabletDetector] Failed to sync attendance to BE:',
                     err,
                   );
+                  if (attPayload.sessionId && String(err).includes('404')) {
+                    attendanceService.recordAttendance({
+                      ...attPayload,
+                      sessionId: undefined,
+                    }).catch(() => {});
+                  }
                 });
               }
             }
 
             if (realResult.status === 'present') {
               const prevAtt = attendanceMapRef.current?.[realResult.userId];
-              if (!prevAtt || prevAtt.status !== 'present') {
+              const isNewDirection =
+                !prevAtt ||
+                prevAtt.status !== 'present' ||
+                prevAtt.direction !== scanDirection;
+              if (isNewDirection) {
                 if (soundEnabled) {
                   Vibration.vibrate(80);
                 }
@@ -926,14 +937,15 @@ const TabletDetectorScreen: React.FC<TabletDetectorScreenProps> = ({
                     }),
                   );
                   const nowAdd = Date.now();
+                  const addSyncKey = `${addResult.userId}_${scanDirection}`;
                   const lastAddSyncTime =
-                    lastAttendanceSyncedTimeRef.current[addResult.userId] || 0;
+                    lastAttendanceSyncedTimeRef.current[addSyncKey] || 0;
                   if (
                     addResult.userId &&
                     addResult.userId !== 'unverified-unknown' &&
                     nowAdd - lastAddSyncTime > COOLDOWN_SYNC_MS
                   ) {
-                    lastAttendanceSyncedTimeRef.current[addResult.userId] =
+                    lastAttendanceSyncedTimeRef.current[addSyncKey] =
                       nowAdd;
                     attendanceService
                       .recordAttendance(addAttPayload)
@@ -942,11 +954,21 @@ const TabletDetectorScreen: React.FC<TabletDetectorScreenProps> = ({
                           '[TabletDetector] Failed to sync multi-attendance to BE:',
                           err,
                         );
+                        if (addAttPayload.sessionId && String(err).includes('404')) {
+                          attendanceService.recordAttendance({
+                            ...addAttPayload,
+                            sessionId: undefined,
+                          }).catch(() => {});
+                        }
                       });
                   }
                   const prevAddAtt =
                     attendanceMapRef.current?.[addResult.userId];
-                  if (!prevAddAtt || prevAddAtt.status !== 'present') {
+                  const isAddDifferent =
+                    !prevAddAtt ||
+                    prevAddAtt.status !== 'present' ||
+                    prevAddAtt.direction !== scanDirection;
+                  if (isAddDifferent) {
                     if (soundEnabled) {
                       Vibration.vibrate(80);
                     }
@@ -997,8 +1019,8 @@ const TabletDetectorScreen: React.FC<TabletDetectorScreenProps> = ({
                 }
               }
 
-              // If a stranger is also detected in the same frame alongside the enrolled user
-              if (realResult.hasUnverifiedStranger) {
+              // CHỈ phát hiện và ghi nhận người lạ đi cùng trong chế độ quét Toàn cơ sở (All)
+              if (realResult.hasUnverifiedStranger && scanMode === 'all') {
                 dispatch(
                   recordScanEvent({
                     fullName: 'Người chưa xác minh',
@@ -1032,46 +1054,48 @@ const TabletDetectorScreen: React.FC<TabletDetectorScreenProps> = ({
                 }
               }
             } else if (realResult.status === 'verify') {
-              // CHỈ ghi nhận người lạ nếu thực sự không khớp với bất kỳ hồ sơ nào trong DB!
-              // Không ghi nhận hồ sơ đã nhận diện danh tính nhưng đang trong frame gom phiếu hoặc cooldown!
-              const isActualStranger =
-                !realResult.userId ||
-                realResult.userId === 'unverified-unknown' ||
-                realResult.code === 'STRANGER';
+              // CHỈ ghi nhận người lạ vào lịch sử phiên khi ở chế độ quét Toàn cơ sở (All)!
+              // Ở chế độ theo Phòng hoặc theo Khu, chỉ nhận diện những người thuộc phòng/khu đó, không tính người lạ!
+              if (scanMode === 'all') {
+                const isActualStranger =
+                  !realResult.userId ||
+                  realResult.userId === 'unverified-unknown' ||
+                  realResult.code === 'STRANGER';
 
-              if (isActualStranger) {
-                dispatch(
-                  recordScanEvent({
-                    userId: realResult.userId,
-                    fullName: realResult.fullName || 'Người chưa xác minh',
-                    code: realResult.code || 'STRANGER',
-                    avatarUri: realResult.avatarUri,
-                    capturedAvatarUri: realResult.avatarUri,
-                    confidence: realResult.confidence,
-                    status: 'verify',
-                    timestamp: realResult.timestamp,
-                    scanMode,
-                    direction: scanDirection,
-                  }),
-                );
-                const lastAlert = alertsRef.current?.[0];
-                const isRecentUnknownAlert =
-                  lastAlert?.type === 'warning' &&
-                  lastAlert?.title === 'Khuôn mặt chưa khớp';
-                if (!isRecentUnknownAlert) {
-                  const warnPayload = {
-                    title: 'Khuôn mặt chưa khớp',
-                    message: `Phát hiện đối tượng chưa khớp với danh sách (độ khớp: ${realResult.confidence}%)`,
-                    timestamp: realResult.timestamp,
-                    type: 'warning' as const,
-                  };
-                  dispatch(addAlert(warnPayload));
-                  alertService.createAlert(warnPayload).catch(err => {
-                    console.log(
-                      '[TabletDetector] Failed to sync alert to BE:',
-                      err,
-                    );
-                  });
+                if (isActualStranger) {
+                  dispatch(
+                    recordScanEvent({
+                      userId: realResult.userId,
+                      fullName: realResult.fullName || 'Người chưa xác minh',
+                      code: realResult.code || 'STRANGER',
+                      avatarUri: realResult.avatarUri,
+                      capturedAvatarUri: realResult.avatarUri,
+                      confidence: realResult.confidence,
+                      status: 'verify',
+                      timestamp: realResult.timestamp,
+                      scanMode,
+                      direction: scanDirection,
+                    }),
+                  );
+                  const lastAlert = alertsRef.current?.[0];
+                  const isRecentUnknownAlert =
+                    lastAlert?.type === 'warning' &&
+                    lastAlert?.title === 'Khuôn mặt chưa khớp';
+                  if (!isRecentUnknownAlert) {
+                    const warnPayload = {
+                      title: 'Khuôn mặt chưa khớp',
+                      message: `Phát hiện đối tượng chưa khớp với danh sách (độ khớp: ${realResult.confidence}%)`,
+                      timestamp: realResult.timestamp,
+                      type: 'warning' as const,
+                    };
+                    dispatch(addAlert(warnPayload));
+                    alertService.createAlert(warnPayload).catch(err => {
+                      console.log(
+                        '[TabletDetector] Failed to sync alert to BE:',
+                        err,
+                      );
+                    });
+                  }
                 }
               }
             }
@@ -1650,8 +1674,9 @@ const TabletDetectorScreen: React.FC<TabletDetectorScreenProps> = ({
         visible={addUserVisible}
         initialPhotoUri={enrollStrangerPhotoUri}
         initialFullName={enrollStrangerFullName}
+        initialUserId={enrollStrangerId}
         onUserCreated={newProfile => {
-          if (enrollStrangerId) {
+          if (enrollStrangerId && enrollStrangerId.startsWith('stranger-')) {
             dispatch(
               convertStrangerToUser({
                 strangerId: enrollStrangerId,

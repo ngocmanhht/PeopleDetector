@@ -2,7 +2,7 @@ import type { TensorflowModel } from 'react-native-fast-tflite';
 import { NitroModules } from 'react-native-nitro-modules';
 import { loadImage, type Image } from 'react-native-nitro-image';
 import dayjs from 'dayjs';
-import { BoundingBox, DetectionResult, UserProfile } from '../model/detector';
+import { BoundingBox, DetectionResult, UserProfile, ScanMode } from '../model/detector';
 import { createMMKV } from 'react-native-mmkv';
 import { appAiModel } from '../const/app-ai-model';
 import { appUtils } from '../utils';
@@ -1581,7 +1581,7 @@ export class TfliteYoloService {
     isFrontCamera?: boolean,
     minConfidenceThreshold: number = 75,
     allProfiles?: UserProfile[],
-    options?: { isSingleShot?: boolean },
+    options?: { isSingleShot?: boolean; scanMode?: ScanMode },
   ): Promise<DetectionResult | null> {
     if (!photoPath) return null;
 
@@ -1628,6 +1628,7 @@ export class TfliteYoloService {
       }
 
       const timeString = dayjs().format('HH:mm:ss');
+      const isAllScanMode = !options?.scanMode || options.scanMode === 'all';
 
       // If native models are not loaded in the runtime, do NOT fake real camera detection!
       if (!this.faceDetectorModel || !this.faceRecognitionModel) {
@@ -1912,8 +1913,9 @@ export class TfliteYoloService {
           }
         }
 
-        // Also check allProfiles (cross-room) to see if there is another matching profile
-        if (allProfiles && allProfiles.length > 0) {
+        // Also check allProfiles (cross-room) ONLY when scanMode is 'all'
+        const isAllScanMode = !options?.scanMode || options.scanMode === 'all';
+        if (isAllScanMode && allProfiles && allProfiles.length > 0) {
           const roomProfileIds = new Set(
             roomProfiles.filter(p => Boolean(p?.id)).map(p => p.id),
           );
@@ -1964,7 +1966,7 @@ export class TfliteYoloService {
               TfliteYoloService.AMBIGUITY_MARGIN
           ) {
             console.warn(
-              `[TFLite YOLO] Ambiguous face match rejected for face #${fIdx}: "${
+              `[TFLite YOLO] Ambiguous face match candidate for face #${fIdx}: "${
                 top1.profile.fullName
               }" (${(top1.similarity * 100).toFixed(1)}%) vs "${
                 top2.profile.fullName
@@ -1973,17 +1975,14 @@ export class TfliteYoloService {
                 100
               ).toFixed(1)}% < ${(
                 TfliteYoloService.AMBIGUITY_MARGIN * 100
-              ).toFixed(1)}%`,
+              ).toFixed(1)}% - Temporal Voting will evaluate consensus`,
             );
-            // Xóa top1 để Temporal Voting không lấy nhầm danh tính mơ hồ này hiển thị lên UI
-            faceCandidateMatches.set(fIdx, { top1: null, top2: null, margin: 0 });
-          } else {
-            allCandidates.push({
-              faceIdx: fIdx,
-              profile: top1.profile,
-              similarity: top1.similarity,
-            });
           }
+          allCandidates.push({
+            faceIdx: fIdx,
+            profile: top1.profile,
+            similarity: top1.similarity,
+          });
         }
       }
 
@@ -2052,9 +2051,9 @@ export class TfliteYoloService {
       const primaryCandidateMatch = faceCandidateMatches.get(
         primary.faceIndex,
       ) || { top1: null, top2: null, margin: 0 };
-      const hasUnverifiedStranger = evaluatedFaces.some(
-        f => f.status === 'verify' && f !== primary,
-      );
+      const hasUnverifiedStranger =
+        isAllScanMode &&
+        evaluatedFaces.some(f => f.status === 'verify' && f !== primary);
 
       // Collect all other verified faces in this frame for simultaneous multi-person attendance!
       const otherVerifiedFaces = evaluatedFaces.filter(
@@ -2231,7 +2230,13 @@ export class TfliteYoloService {
         };
       }
 
-      // No enrolled user matched: unverified face detected (1 or multiple unverified strangers)
+      // No enrolled user matched: unverified face detected
+      // Nếu scanMode KHÔNG PHẢI 'all' (tức đang quét Phòng hoặc Khu):
+      // Không ghi nhận / không tính người lạ nữa, trả về null để không lưu vào phiên!
+      if (!isAllScanMode) {
+        return null;
+      }
+
       // Check against session stranger embeddings cache to group repeat sightings of the same stranger
       let matchedStranger: StrangerRecord | null = null;
       let bestStrangerSim = 0;
@@ -2516,7 +2521,7 @@ export class TfliteYoloService {
     isFrontCamera?: boolean,
     minConfidenceThreshold?: number,
     allProfiles?: UserProfile[],
-    options?: { isSingleShot?: boolean },
+    options?: { isSingleShot?: boolean; scanMode?: ScanMode },
   ): Promise<DetectionResult | null> {
     return this.getInstance().processCapturedFrame(
       photoPath,

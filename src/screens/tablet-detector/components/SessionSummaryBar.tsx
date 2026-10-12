@@ -152,19 +152,34 @@ export const SessionSummaryBar: React.FC<SessionSummaryBarProps> = ({
           </View>
         </View>
 
-        {/* Chưa xác minh (Người lạ) */}
-        <View style={[styles.kpiCard, styles.kpiCardUnverified]}>
-          <View style={styles.kpiTitleRow}>
-            <AlertCircle size={15} color={appColors.amber700} />
-            <AppText style={styles.kpiLabelUnverified}>Chưa xác minh</AppText>
+        {/* Nếu quét All: hiển thị Chưa xác minh (Người lạ). Nếu quét Phòng/Khu: hiển thị Còn thiếu */}
+        {isAllMode ? (
+          <View style={[styles.kpiCard, styles.kpiCardUnverified]}>
+            <View style={styles.kpiTitleRow}>
+              <AlertCircle size={15} color={appColors.amber700} />
+              <AppText style={styles.kpiLabelUnverified}>Chưa xác minh</AppText>
+            </View>
+            <View style={styles.kpiValueRow}>
+              <AppText style={styles.kpiValueUnverified}>
+                {unverifiedItems.length}
+              </AppText>
+              <AppText style={styles.kpiSubText}>người lạ</AppText>
+            </View>
           </View>
-          <View style={styles.kpiValueRow}>
-            <AppText style={styles.kpiValueUnverified}>
-              {unverifiedItems.length}
-            </AppText>
-            <AppText style={styles.kpiSubText}>người lạ</AppText>
+        ) : (
+          <View style={[styles.kpiCard, styles.kpiCardUnverified]}>
+            <View style={styles.kpiTitleRow}>
+              <AlertCircle size={15} color={appColors.amber700} />
+              <AppText style={styles.kpiLabelUnverified}>Còn thiếu</AppText>
+            </View>
+            <View style={styles.kpiValueRow}>
+              <AppText style={styles.kpiValueUnverified}>
+                {Math.max(0, totalMembersCount - verifiedItems.length)}
+              </AppText>
+              <AppText style={styles.kpiSubText}>nhân sự</AppText>
+            </View>
           </View>
-        </View>
+        )}
 
         {/* Tổng lượt phát hiện */}
         <View style={[styles.kpiCard, styles.kpiCardTotal]}>

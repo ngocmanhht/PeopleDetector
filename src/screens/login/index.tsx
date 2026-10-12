@@ -26,7 +26,6 @@ import {
   Eye,
   EyeOff,
   LogIn,
-  Zap,
   CheckCircle2,
 } from 'lucide-react-native';
 import { appColors } from '../../const/app-colors';
@@ -214,7 +213,7 @@ export const LoginScreen = () => {
         <AppText style={styles.loginBtnText}>Đăng nhập</AppText>
       </TouchableOpacity>
       {/* Quick Login Admin Button */}
-      <TouchableOpacity
+      {/* <TouchableOpacity
         style={styles.mockLoginBtn}
         onPress={() => {
           setEmail('admin@cscns2.ag');
@@ -225,10 +224,8 @@ export const LoginScreen = () => {
         activeOpacity={0.85}
       >
         <Zap size={18} color={appColors.blue600} />
-        <AppText style={styles.mockLoginBtnText}>
-          Đăng nhập nhanh tài khoản Admin
-        </AppText>
-      </TouchableOpacity>
+        <AppText style={styles.mockLoginBtnText}>Đăng nhập nhanh</AppText>
+      </TouchableOpacity> */}
       <AppText style={styles.hintText}>
         Device Id: <AppText style={styles.hintBold}>{deviceId}</AppText>
       </AppText>

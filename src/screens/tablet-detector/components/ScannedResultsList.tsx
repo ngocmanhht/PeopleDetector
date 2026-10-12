@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import {
   StyleSheet,
   View,
@@ -28,6 +28,7 @@ import {
   UserCheck,
   Search,
   UserPlus,
+  Sparkles,
 } from 'lucide-react-native';
 import { appColors } from '../../../const/app-colors';
 import { useResponsive } from '../../../hooks/use-responsive';
@@ -83,6 +84,13 @@ export const ScannedResultsList: React.FC<ScannedResultsListProps> = ({
     }
     return scanHistory || [];
   }, [scanHistory, filter]);
+
+  // Auto-switch away from 'unverified' filter when scanning in room/zone mode
+  useEffect(() => {
+    if (!isAllMode && filter === 'unverified') {
+      setFilter('all');
+    }
+  }, [isAllMode, filter]);
 
   if (!isSessionActive) {
     return (
@@ -255,13 +263,18 @@ export const ScannedResultsList: React.FC<ScannedResultsListProps> = ({
                 </AppText>
               </View>
 
-              {activeDetection.status !== 'present' && onEnrollStranger && (
+              {onEnrollStranger && (
                 <TouchableOpacity
-                  style={styles.heroEnrollBtn}
+                  style={[
+                    styles.heroEnrollBtn,
+                    activeDetection.status === 'present' &&
+                      styles.heroEnrollBtnVerified,
+                  ]}
                   onPress={() =>
                     onEnrollStranger(
                       activeDetection.avatarUri,
-                      activeDetection.fullName !== 'Người chưa xác minh'
+                      activeDetection.fullName !== 'Người chưa xác minh' &&
+                        activeDetection.fullName !== 'Người lạ'
                         ? activeDetection.fullName
                         : '',
                       activeDetection.userId,
@@ -269,9 +282,15 @@ export const ScannedResultsList: React.FC<ScannedResultsListProps> = ({
                   }
                   activeOpacity={0.8}
                 >
-                  <UserPlus size={12} color={appColors.white} />
+                  {activeDetection.status === 'present' ? (
+                    <Sparkles size={12} color={appColors.white} />
+                  ) : (
+                    <UserPlus size={12} color={appColors.white} />
+                  )}
                   <AppText style={styles.heroEnrollBtnText}>
-                    + Thêm User
+                    {activeDetection.status === 'present'
+                      ? '+ Bổ sung ảnh AI'
+                      : '+ Thêm User'}
                   </AppText>
                 </TouchableOpacity>
               )}
@@ -321,29 +340,33 @@ export const ScannedResultsList: React.FC<ScannedResultsListProps> = ({
           </AppText>
         </TouchableOpacity>
 
-        <TouchableOpacity
-          style={[
-            styles.filterTab,
-            filter === 'unverified' && styles.filterTabActiveAmber,
-          ]}
-          onPress={() => setFilter('unverified')}
-          activeOpacity={0.8}
-        >
-          <ShieldAlert
-            size={13}
-            color={
-              filter === 'unverified' ? appColors.amber700 : appColors.slate500
-            }
-          />
-          <AppText
+        {isAllMode && (
+          <TouchableOpacity
             style={[
-              styles.filterTabText,
-              filter === 'unverified' && styles.filterTabTextActiveAmber,
+              styles.filterTab,
+              filter === 'unverified' && styles.filterTabActiveAmber,
             ]}
+            onPress={() => setFilter('unverified')}
+            activeOpacity={0.8}
           >
-            Chưa xác minh ({unverifiedCount})
-          </AppText>
-        </TouchableOpacity>
+            <ShieldAlert
+              size={13}
+              color={
+                filter === 'unverified'
+                  ? appColors.amber700
+                  : appColors.slate500
+              }
+            />
+            <AppText
+              style={[
+                styles.filterTabText,
+                filter === 'unverified' && styles.filterTabTextActiveAmber,
+              ]}
+            >
+              Chưa xác minh ({unverifiedCount})
+            </AppText>
+          </TouchableOpacity>
+        )}
       </View>
 
       {/* 4. Scanned List Feed */}
@@ -510,14 +533,18 @@ export const ScannedResultsList: React.FC<ScannedResultsListProps> = ({
                   <AppText style={styles.itemConfidenceText}>
                     Độ tin cậy: {item.confidence}%
                   </AppText>
-                  {!isVerified && onEnrollStranger && (
+                  {onEnrollStranger && (
                     <TouchableOpacity
-                      style={styles.itemEnrollBtn}
+                      style={[
+                        styles.itemEnrollBtn,
+                        isVerified && styles.itemEnrollBtnVerified,
+                      ]}
                       onPress={e => {
                         e.stopPropagation?.();
                         onEnrollStranger(
                           item.avatarUri,
-                          item.fullName !== 'Người chưa xác minh'
+                          item.fullName !== 'Người chưa xác minh' &&
+                            item.fullName !== 'Người lạ'
                             ? item.fullName
                             : '',
                           item.id || item.userId,
@@ -525,9 +552,18 @@ export const ScannedResultsList: React.FC<ScannedResultsListProps> = ({
                       }}
                       activeOpacity={0.8}
                     >
-                      <UserPlus size={10} color={appColors.blue700} />
-                      <AppText style={styles.itemEnrollBtnText}>
-                        + Thêm User
+                      {isVerified ? (
+                        <Sparkles size={10} color={appColors.emerald700} />
+                      ) : (
+                        <UserPlus size={10} color={appColors.blue700} />
+                      )}
+                      <AppText
+                        style={[
+                          styles.itemEnrollBtnText,
+                          isVerified && styles.itemEnrollBtnTextVerified,
+                        ]}
+                      >
+                        {isVerified ? '+ Bổ sung ảnh AI' : '+ Thêm User'}
                       </AppText>
                     </TouchableOpacity>
                   )}
@@ -747,29 +783,39 @@ export const ScannedResultsList: React.FC<ScannedResultsListProps> = ({
                   )}
                 />
 
-                {selectedDetailItem.status !== 'present' &&
-                  onEnrollStranger && (
-                    <TouchableOpacity
-                      style={styles.modalEnrollBtn}
-                      onPress={() => {
-                        const item = selectedDetailItem;
-                        setSelectedDetailItem(null);
-                        onEnrollStranger(
-                          item.avatarUri,
-                          item.fullName !== 'Người chưa xác minh'
-                            ? item.fullName
-                            : '',
-                          item.id || item.userId,
-                        );
-                      }}
-                      activeOpacity={0.85}
-                    >
+                {onEnrollStranger && (
+                  <TouchableOpacity
+                    style={[
+                      styles.modalEnrollBtn,
+                      selectedDetailItem.status === 'present' &&
+                        styles.modalEnrollBtnVerified,
+                    ]}
+                    onPress={() => {
+                      const item = selectedDetailItem;
+                      setSelectedDetailItem(null);
+                      onEnrollStranger(
+                        item.avatarUri,
+                        item.fullName !== 'Người chưa xác minh' &&
+                          item.fullName !== 'Người lạ'
+                          ? item.fullName
+                          : '',
+                        item.id || item.userId,
+                      );
+                    }}
+                    activeOpacity={0.85}
+                  >
+                    {selectedDetailItem.status === 'present' ? (
+                      <Sparkles size={16} color={appColors.white} />
+                    ) : (
                       <UserPlus size={16} color={appColors.white} />
-                      <AppText style={styles.modalEnrollBtnText}>
-                        + Thêm người này vào danh sách nhân sự
-                      </AppText>
-                    </TouchableOpacity>
-                  )}
+                    )}
+                    <AppText style={styles.modalEnrollBtnText}>
+                      {selectedDetailItem.status === 'present'
+                        ? '+ Bổ sung ảnh vừa quét vào vector AI của học viên'
+                        : '+ Thêm người này vào danh sách nhân sự'}
+                    </AppText>
+                  </TouchableOpacity>
+                )}
               </>
             )}
           </View>
@@ -1585,5 +1631,18 @@ const styles = StyleSheet.create({
     color: appColors.white,
     fontSize: 13,
     fontWeight: '700',
+  },
+  heroEnrollBtnVerified: {
+    backgroundColor: appColors.emerald600,
+  },
+  itemEnrollBtnVerified: {
+    backgroundColor: appColors.emerald50,
+    borderColor: appColors.emerald200,
+  },
+  itemEnrollBtnTextVerified: {
+    color: appColors.emerald800,
+  },
+  modalEnrollBtnVerified: {
+    backgroundColor: appColors.emerald600,
   },
 });

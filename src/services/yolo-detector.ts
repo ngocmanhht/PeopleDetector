@@ -1,4 +1,9 @@
-import { DetectionResult, UserProfile, BoundingBox } from '../model/detector';
+import {
+  DetectionResult,
+  UserProfile,
+  BoundingBox,
+  ScanMode,
+} from '../model/detector';
 import { TfliteYoloService } from './tflite-yolo-service';
 
 /**
@@ -38,7 +43,7 @@ export class YoloDetectorService {
     isFrontCamera?: boolean,
     minConfidenceThreshold?: number,
     allProfiles?: UserProfile[],
-    options?: { isSingleShot?: boolean },
+    options?: { isSingleShot?: boolean; scanMode?: ScanMode },
   ): Promise<DetectionResult | null> {
     return TfliteYoloService.processCapturedFrame(
       photoPath,

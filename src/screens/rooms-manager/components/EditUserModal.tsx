@@ -93,14 +93,6 @@ export const EditUserModal: React.FC<EditUserModalProps> = ({
   }, [user, visible]);
 
   const handleCapturePhoto = () => {
-    if (photos.length >= PHOTO_CONFIG.MAX_PHOTOS_PER_USER) {
-      Alert.alert(
-        'Đã đủ ảnh',
-        `Mỗi hồ sơ tối đa ${PHOTO_CONFIG.MAX_PHOTOS_PER_USER} ảnh nhận diện.`,
-      );
-      return;
-    }
-
     Alert.alert('Chọn Camera', 'Bạn muốn chụp ảnh hồ sơ bằng camera nào?', [
       {
         text: 'Camera sau (Khuyên dùng)',
@@ -111,8 +103,15 @@ export const EditUserModal: React.FC<EditUserModalProps> = ({
           );
           if (uri) {
             setPhotos(prev => {
-              const next = [...prev, uri];
-              if (!avatarUri) setAvatarUri(uri);
+              let next = [...prev];
+              if (next.includes(uri)) return next;
+              if (next.length >= PHOTO_CONFIG.MAX_PHOTOS_PER_USER) {
+                // Giữ nguyên ảnh chân dung đại diện chính [0] và thay thế ảnh phụ cũ nhất bằng góc chụp thực tế mới nhất
+                next = [next[0], ...next.slice(2), uri];
+              } else {
+                next.push(uri);
+              }
+              if (!avatarUri) setAvatarUri(next[0] || uri);
               return next;
             });
           }
@@ -127,8 +126,15 @@ export const EditUserModal: React.FC<EditUserModalProps> = ({
           );
           if (uri) {
             setPhotos(prev => {
-              const next = [...prev, uri];
-              if (!avatarUri) setAvatarUri(uri);
+              let next = [...prev];
+              if (next.includes(uri)) return next;
+              if (next.length >= PHOTO_CONFIG.MAX_PHOTOS_PER_USER) {
+                // Giữ nguyên ảnh chân dung đại diện chính [0] và thay thế ảnh phụ cũ nhất bằng góc chụp thực tế mới nhất
+                next = [next[0], ...next.slice(2), uri];
+              } else {
+                next.push(uri);
+              }
+              if (!avatarUri) setAvatarUri(next[0] || uri);
               return next;
             });
           }
@@ -157,27 +163,21 @@ export const EditUserModal: React.FC<EditUserModalProps> = ({
   };
 
   const handlePickPhotos = async () => {
-    if (photos.length >= PHOTO_CONFIG.MAX_PHOTOS_PER_USER) {
-      Alert.alert(
-        'Đã đủ ảnh',
-        `Mỗi hồ sơ tối đa ${PHOTO_CONFIG.MAX_PHOTOS_PER_USER} ảnh nhận diện.`,
-      );
-      return;
-    }
     const newUris = await ImagePickerService.pickImagesFromLibrary(
       photos.length,
     );
     if (newUris.length > 0) {
       setPhotos(prev => {
-        const combined = [...prev];
-        newUris.forEach(u => {
-          if (
-            !combined.includes(u) &&
-            combined.length < PHOTO_CONFIG.MAX_PHOTOS_PER_USER
-          ) {
+        let combined = [...prev];
+        for (const u of newUris) {
+          if (combined.includes(u)) continue;
+          if (combined.length >= PHOTO_CONFIG.MAX_PHOTOS_PER_USER) {
+            // Giữ nguyên ảnh chân dung đại diện chính [0] và thay thế ảnh phụ cũ nhất bằng ảnh mới
+            combined = [combined[0], ...combined.slice(2), u];
+          } else {
             combined.push(u);
           }
-        });
+        }
         if (!avatarUri && combined.length > 0) {
           setAvatarUri(combined[0]);
         }
@@ -393,7 +393,9 @@ export const EditUserModal: React.FC<EditUserModalProps> = ({
                       {PHOTO_CONFIG.MAX_PHOTOS_PER_USER} ảnh)
                     </AppText>
                     <AppText style={styles.sectionDesc}>
-                      Thêm ảnh mới hoặc xóa ảnh cũ để tối ưu độ chính xác
+                      {photos.length >= PHOTO_CONFIG.MAX_PHOTOS_PER_USER
+                        ? 'Đã đủ 5 ảnh (chụp thêm sẽ tự động thay thế ảnh phụ cũ nhất)'
+                        : 'Thêm góc ảnh mới để nâng cao độ chính xác AI'}
                     </AppText>
                   </View>
 
@@ -401,9 +403,6 @@ export const EditUserModal: React.FC<EditUserModalProps> = ({
                     <TouchableOpacity
                       style={styles.actionBtnCamera}
                       onPress={handleCapturePhoto}
-                      disabled={
-                        photos.length >= PHOTO_CONFIG.MAX_PHOTOS_PER_USER
-                      }
                     >
                       <Camera size={16} color={appColors.white} />
                       <AppText style={styles.actionBtnCameraText}>
@@ -414,9 +413,6 @@ export const EditUserModal: React.FC<EditUserModalProps> = ({
                     <TouchableOpacity
                       style={styles.actionBtnLibrary}
                       onPress={handlePickPhotos}
-                      disabled={
-                        photos.length >= PHOTO_CONFIG.MAX_PHOTOS_PER_USER
-                      }
                     >
                       <ImageIcon size={16} color={appColors.blue600} />
                       <AppText style={styles.actionBtnLibraryText}>
