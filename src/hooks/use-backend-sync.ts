@@ -1,3 +1,4 @@
+import { createMMKV } from 'react-native-mmkv';
 import { useQuery } from '@tanstack/react-query';
 import { useAppDispatch, useAppSelector } from '../store/hooks';
 import {
@@ -16,6 +17,9 @@ import {
 } from '../services/api';
 import { YoloDetectorService } from '../services/yolo-detector';
 
+const syncMetaStorage = createMMKV({ id: 'sync-meta-storage-v1' });
+const LAST_EMBEDDINGS_SYNC_KEY = 'last_embeddings_synced_at';
+
 /**
  * Hook tự động đồng bộ toàn bộ dữ liệu hệ thống từ Backend sử dụng TanStack Query
  * - Tự động Polling định kỳ mỗi 60 giây (refetchInterval)
@@ -30,6 +34,8 @@ export const useBackendSync = (intervalMs: number = 60000) => {
   const query = useQuery({
     queryKey: ['backend-sync-all'],
     queryFn: async () => {
+      const lastSyncedAt = syncMetaStorage.getString(LAST_EMBEDDINGS_SYNC_KEY);
+
       // Parallelize all sync requests concurrently for maximum throughput
       const [
         zonesRes,
@@ -43,8 +49,10 @@ export const useBackendSync = (intervalMs: number = 60000) => {
         roomService.getRooms(),
         // 1. Tải danh sách hồ sơ siêu nhẹ (không mang vector) để nạp Redux UI trong ~100ms
         profileService.getProfiles({ limit: 2000, includeEmbeddings: false }),
-        // 2. Tải riêng gói vector sinh trắc học siêu nhẹ từ endpoint chuyên dụng cho AI Engine
-        profileService.getEmbeddingsSync(),
+        // 2. Tải riêng gói vector sinh trắc học từ endpoint chuyên dụng (đồng bộ gia tăng qua updatedAfter)
+        profileService.getEmbeddingsSync(
+          lastSyncedAt ? { updatedAfter: lastSyncedAt } : undefined,
+        ),
         sessionService.getSessions(),
         alertService.getAlerts(),
       ]);
@@ -63,9 +71,17 @@ export const useBackendSync = (intervalMs: number = 60000) => {
 
       // Nạp vector từ endpoint sinh trắc học chuyên dụng vào RAM & MMKV cho AI Engine
       if (embeddingsRes.status === 'fulfilled' && embeddingsRes.value?.data) {
-        YoloDetectorService.fastHydrateServerEmbeddings(
-          embeddingsRes.value.data,
-        );
+        if (embeddingsRes.value.data.length > 0) {
+          YoloDetectorService.fastHydrateServerEmbeddings(
+            embeddingsRes.value.data,
+          );
+        }
+        if (embeddingsRes.value.syncedAt) {
+          syncMetaStorage.set(
+            LAST_EMBEDDINGS_SYNC_KEY,
+            embeddingsRes.value.syncedAt,
+          );
+        }
       }
 
       if (sessionsRes.status === 'fulfilled' && sessionsRes.value?.data) {
@@ -86,7 +102,10 @@ export const useBackendSync = (intervalMs: number = 60000) => {
   });
 
   return {
-    syncAllData: async () => {
+    syncAllData: async (options?: { forceFullEmbeddingsSync?: boolean }) => {
+      if (options?.forceFullEmbeddingsSync) {
+        syncMetaStorage.remove(LAST_EMBEDDINGS_SYNC_KEY);
+      }
       const res = await query.refetch();
       return res.data;
     },
