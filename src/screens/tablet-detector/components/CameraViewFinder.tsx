@@ -137,7 +137,7 @@ export const CameraViewFinder = forwardRef<
           if (Platform.OS === 'android') {
             try {
               const snapshot = await cameraRef.current.takeSnapshot({
-                quality: 85,
+                quality: 70,
               });
               if (snapshot?.path) {
                 lastPendingSnapshot.current = snapshot.path;

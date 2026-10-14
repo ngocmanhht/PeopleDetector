@@ -1644,9 +1644,9 @@ export class TfliteYoloService {
         return null;
       }
 
-      // Clamp frame image to optimal working size (max dimension 720)
-      // This normalizes native UIImage EXIF orientation, speeds up processing, and keeps memory light (<1.5MB)
-      const MAX_WORKING_DIM = 720;
+      // Clamp frame image to optimal working size (max dimension 640)
+      // This normalizes native UIImage EXIF orientation, speeds up processing, matches YOLOv8 640x640 input, and keeps memory light (<1.2MB)
+      const MAX_WORKING_DIM = 640;
       let targetW = rawImage.width;
       let targetH = rawImage.height;
       if (Math.max(targetW, targetH) > MAX_WORKING_DIM) {
@@ -1724,23 +1724,30 @@ export class TfliteYoloService {
       // 5. Extract avatar crop and 512-d biometric embeddings for each detected face
       interface ExtractedFaceInfo {
         face: YoloFaceDetection;
-        avatarUri: string;
+        getAvatarUri: () => string;
         embedding: Float32Array | null;
       }
 
       const extractedFaces: ExtractedFaceInfo[] = [];
       for (const face of detectedFaces) {
-        let faceAvatarUri = this.cropAvatarFromFrame(
-          frameImage,
-          face.avatarCropBox,
-          isFrontCamera,
-        );
-        if (!faceAvatarUri) {
-          faceAvatarUri =
-            photoPath.startsWith('data:') || photoPath.startsWith('file://')
-              ? photoPath
-              : `file://${photoPath}`;
-        }
+        let cachedAvatar: string | undefined;
+        const getAvatarUri = () => {
+          if (cachedAvatar !== undefined) return cachedAvatar;
+          let faceAvatarUri = this.cropAvatarFromFrame(
+            frameImage,
+            face.avatarCropBox,
+            isFrontCamera,
+          );
+          if (!faceAvatarUri) {
+            faceAvatarUri =
+              photoPath.startsWith('data:') || photoPath.startsWith('file://')
+                ? photoPath
+                : `file://${photoPath}`;
+          }
+          cachedAvatar = faceAvatarUri;
+          return cachedAvatar;
+        };
+
         const liveEmbedding = await this.extractFaceEmbedding(
           frameImage,
           face.cropBox,
@@ -1760,7 +1767,7 @@ export class TfliteYoloService {
             userId: '',
             fullName: blurWarning,
             code: 'BLURRY_FRAME',
-            avatarUri: faceAvatarUri,
+            avatarUri: getAvatarUri(),
             zoneName: '',
             roomName: '',
             confidence: face.confidence,
@@ -1792,7 +1799,7 @@ export class TfliteYoloService {
             userId: '',
             fullName: padWarning,
             code: 'PAD_REJECTED',
-            avatarUri: faceAvatarUri,
+            avatarUri: getAvatarUri(),
             zoneName: '',
             roomName: '',
             confidence: face.confidence,
@@ -1807,7 +1814,7 @@ export class TfliteYoloService {
 
         extractedFaces.push({
           face,
-          avatarUri: faceAvatarUri,
+          getAvatarUri,
           embedding: liveEmbedding,
         });
       }
@@ -2012,7 +2019,7 @@ export class TfliteYoloService {
         profile: UserProfile | null;
         similarity: number;
         status: 'present' | 'verify';
-        avatarUri: string;
+        getAvatarUri: () => string;
         embedding: Float32Array | null;
       }
       const evaluatedFaces: EvaluatedFace[] = [];
@@ -2030,7 +2037,7 @@ export class TfliteYoloService {
           profile: isMatch ? assignedProfile : null,
           similarity: sim,
           status: isMatch ? 'present' : 'verify',
-          avatarUri: item.avatarUri,
+          getAvatarUri: item.getAvatarUri,
           embedding: item.embedding,
         });
       }
@@ -2048,6 +2055,7 @@ export class TfliteYoloService {
       });
 
       const primary = evaluatedFaces[0];
+      const primaryAvatarUri = primary.getAvatarUri();
       const primaryCandidateMatch = faceCandidateMatches.get(
         primary.faceIndex,
       ) || { top1: null, top2: null, margin: 0 };
@@ -2083,7 +2091,7 @@ export class TfliteYoloService {
             userId: f.profile!.id,
             fullName: f.profile!.fullName,
             code: f.profile!.code,
-            avatarUri: f.avatarUri,
+            avatarUri: f.getAvatarUri(),
             zoneName: 'Khu vực chính',
             roomName: 'Phòng hiện tại',
             confidence: confPct,
@@ -2125,7 +2133,7 @@ export class TfliteYoloService {
             padScore: padResult.score,
             padWarning: padResult.warning,
             timestamp: Date.now(),
-            avatarUri: primary.avatarUri,
+            avatarUri: primaryAvatarUri,
             boundingBox: primary.detection.boundingBox,
             embedding: primary.embedding,
           },
@@ -2156,7 +2164,7 @@ export class TfliteYoloService {
           userId: temporalDecision.personId!,
           fullName: temporalDecision.profile.fullName,
           code: temporalDecision.profile.code,
-          avatarUri: primary.avatarUri,
+          avatarUri: temporalDecision.avatarUri || primaryAvatarUri,
           zoneName: decZone,
           roomName: decRoom,
           confidence: Math.max(
@@ -2194,7 +2202,7 @@ export class TfliteYoloService {
             temporalDecision.message ||
             'Đang xác minh danh tính...',
           code: temporalDecision.profile?.code || 'VERIFYING',
-          avatarUri: primary.avatarUri,
+          avatarUri: temporalDecision.avatarUri || primaryAvatarUri,
           zoneName: decZone,
           roomName: decRoom,
           confidence: temporalDecision.confidencePct,
@@ -2217,7 +2225,7 @@ export class TfliteYoloService {
           fullName:
             temporalDecision.qualityWarning || 'Vui lòng giữ yên khuôn mặt',
           code: 'RECAPTURE',
-          avatarUri: primary.avatarUri,
+          avatarUri: temporalDecision.avatarUri || primaryAvatarUri,
           zoneName: '',
           roomName: '',
           confidence: 0,
@@ -2262,8 +2270,8 @@ export class TfliteYoloService {
         if (primary.embedding && matchedStranger.embeddings.length < 3) {
           matchedStranger.embeddings.push(primary.embedding);
         }
-        if (!matchedStranger.avatarUri && primary.avatarUri) {
-          matchedStranger.avatarUri = primary.avatarUri;
+        if (!matchedStranger.avatarUri && primaryAvatarUri) {
+          matchedStranger.avatarUri = primaryAvatarUri;
         }
       } else {
         // New unidentified person: register in stranger cache
@@ -2278,7 +2286,7 @@ export class TfliteYoloService {
           code,
           fullName,
           embeddings: primary.embedding ? [primary.embedding] : [],
-          avatarUri: primary.avatarUri,
+          avatarUri: primaryAvatarUri,
           firstSeen: Date.now(),
           lastSeen: Date.now(),
         };
@@ -2298,7 +2306,7 @@ export class TfliteYoloService {
         userId: matchedStranger.id,
         fullName: matchedStranger.fullName,
         code: matchedStranger.code,
-        avatarUri: matchedStranger.avatarUri || primary.avatarUri,
+        avatarUri: matchedStranger.avatarUri || primaryAvatarUri,
         zoneName: 'Khu vực',
         roomName: 'Phòng',
         confidence: strangerConfidence,

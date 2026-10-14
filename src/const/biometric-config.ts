@@ -22,11 +22,14 @@ export const BIOMETRIC_CONFIG = {
 
     /**
      * Bật decisive bypass khi độ tin cậy vượt ngưỡng dứt khoát:
-     * Nâng lên >= 0.80 (80% cosine) VÀ margin >= 0.04: Chỉ chốt MATCH tức thì ở frame 1 khi cực kỳ chắc chắn,
-     * còn lại bắt buộc qua Temporal Voting (2 frame đồng thuận).
+     * Adaptive Decisive Bypass: Cho phép chốt MATCH tức thì ở Frame 1 (~180ms) khi:
+     * - Top1 similarity >= 0.74 VÀ khoảng cách an toàn với người thứ 2 margin >= 0.05 (cách biệt lớn, triệt tiêu nhận nhầm)
+     * - HOẶC Top1 similarity >= 0.78 VÀ margin >= 0.04.
+     * Các trường hợp còn lại (nét mặt sát nút hoặc điểm thấp 0.68-0.73) tự động chuyển sang Temporal Voting (2 frame đồng thuận).
      */
     decisiveBypassEnabled: true,
-    decisiveThreshold: 0.80,
+    decisiveThreshold: 0.74,
+    decisiveMargin: 0.05,
 
     /**
      * Mốc trần Cosine Similarity quy đổi ra 99% hiển thị trên giao diện người dùng.

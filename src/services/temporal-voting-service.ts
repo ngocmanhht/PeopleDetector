@@ -363,10 +363,11 @@ export class TemporalVotingManager {
       }
 
       // Trong chế độ Single-Shot (chụp 1 ảnh hoặc chọn từ thư viện trong CMS để tìm hồ sơ):
-      // Cho phép khớp ngay khi similarity >= 0.75 hoặc khoảng cách an toàn margin >= ambiguityMargin!
+      // Cho phép khớp ngay khi similarity >= decisiveThreshold (0.74) hoặc khoảng cách an toàn margin >= ambiguityMargin!
       const isDecisiveSingle =
         (config.recognition.decisiveBypassEnabled || isSingleShot) &&
-        candidate.top1Similarity >= 0.75;
+        candidate.top1Similarity >=
+          ((config.recognition as any).decisiveThreshold ?? 0.74);
 
       const isMatch =
         candidate.personId !== null &&
@@ -526,7 +527,12 @@ export class TemporalVotingManager {
       if (f.top1Similarity < config.recognition.matchThreshold) return false;
       const isDecisive =
         config.recognition.decisiveBypassEnabled &&
-        f.top1Similarity >= (config.recognition as any).decisiveThreshold;
+        ((f.top1Similarity >= 0.78 &&
+          f.margin >= config.recognition.ambiguityMargin) ||
+          (f.top1Similarity >=
+            ((config.recognition as any).decisiveThreshold ?? 0.74) &&
+            f.margin >=
+              ((config.recognition as any).decisiveMargin ?? 0.05)));
       if (!isDecisive && f.margin < config.recognition.ambiguityMargin) return false;
       return true;
     });
@@ -567,12 +573,19 @@ export class TemporalVotingManager {
 
     // 5. Kiểm tra điều kiện số frame hợp lệ tối thiểu
     if (validFrames.length < config.temporalVoting.minValidFrames) {
+      // Adaptive Decisive Bypass:
+      // Cho phép chốt MATCH ngay tại Frame 1 (tức thì trong ~180ms) khi:
+      // - Điểm khá cao (>= 0.74) VÀ biên an toàn vượt trội (margin >= 0.05: cách biệt người thứ 2 rất xa)
+      // - Hoặc điểm rất cao (>= 0.78) VÀ biên an toàn tiêu chuẩn (margin >= 0.04)
       const isDecisive =
         config.recognition.decisiveBypassEnabled &&
-        candidate.top1Similarity >= (config.recognition as any).decisiveThreshold &&
-        candidate.margin >= config.recognition.ambiguityMargin;
+        ((candidate.top1Similarity >= 0.78 &&
+          candidate.margin >= config.recognition.ambiguityMargin) ||
+          (candidate.top1Similarity >=
+            ((config.recognition as any).decisiveThreshold ?? 0.74) &&
+            candidate.margin >=
+              ((config.recognition as any).decisiveMargin ?? 0.05)));
 
-      // Nếu độ tương đồng đạt mức dứt khoát cao (>= 0.72) VÀ có khoảng cách an toàn (margin):
       // Xác nhận MATCH NGAY LẬP TỨC để viền lập tức chuyển sang xanh lá và điểm danh vào phòng!
       if (isDecisive && candidate.personId && candidate.profile) {
         const confPct = this.calculateConfidencePct(

@@ -804,10 +804,12 @@ const TabletDetectorScreen: React.FC<TabletDetectorScreenProps> = ({
                     err,
                   );
                   if (attPayload.sessionId && String(err).includes('404')) {
-                    attendanceService.recordAttendance({
-                      ...attPayload,
-                      sessionId: undefined,
-                    }).catch(() => {});
+                    attendanceService
+                      .recordAttendance({
+                        ...attPayload,
+                        sessionId: undefined,
+                      })
+                      .catch(() => {});
                   }
                 });
               }
@@ -945,8 +947,7 @@ const TabletDetectorScreen: React.FC<TabletDetectorScreenProps> = ({
                     addResult.userId !== 'unverified-unknown' &&
                     nowAdd - lastAddSyncTime > COOLDOWN_SYNC_MS
                   ) {
-                    lastAttendanceSyncedTimeRef.current[addSyncKey] =
-                      nowAdd;
+                    lastAttendanceSyncedTimeRef.current[addSyncKey] = nowAdd;
                     attendanceService
                       .recordAttendance(addAttPayload)
                       .catch(err => {
@@ -954,11 +955,16 @@ const TabletDetectorScreen: React.FC<TabletDetectorScreenProps> = ({
                           '[TabletDetector] Failed to sync multi-attendance to BE:',
                           err,
                         );
-                        if (addAttPayload.sessionId && String(err).includes('404')) {
-                          attendanceService.recordAttendance({
-                            ...addAttPayload,
-                            sessionId: undefined,
-                          }).catch(() => {});
+                        if (
+                          addAttPayload.sessionId &&
+                          String(err).includes('404')
+                        ) {
+                          attendanceService
+                            .recordAttendance({
+                              ...addAttPayload,
+                              sessionId: undefined,
+                            })
+                            .catch(() => {});
                         }
                       });
                   }
@@ -1114,14 +1120,14 @@ const TabletDetectorScreen: React.FC<TabletDetectorScreenProps> = ({
               dispatch(setActiveDetection(null));
             }
             // Dynamic Idle Power Management:
-            // If room is empty for > 10s, throttle down to 1 FPS (1000ms) to cool CPU/GPU and prevent thermal throttling
+            // If room is empty for > 10s, maintain 4 FPS (250ms) to cool CPU/GPU while waking up instantly when someone approaches
             const idleTime = Date.now() - lastFaceSeenTimestampRef.current;
             if (idleTime > 10000) {
-              scheduleNextScan(1000); // 1 FPS deep idle to keep tablet cool
+              scheduleNextScan(250); // 4 FPS idle: instant wakeup without thermal throttle
             } else if (idleTime > 3000) {
-              scheduleNextScan(Math.max(200, Math.round(8000 / targetFps))); // 2.5 FPS transition
+              scheduleNextScan(Math.max(120, Math.round(4000 / targetFps))); // Transition
             } else {
-              scheduleNextScan(Math.max(40, Math.round(2000 / targetFps))); // Fast search
+              scheduleNextScan(Math.max(30, Math.round(1500 / targetFps))); // Fast search
             }
           }
         } else {
@@ -1131,9 +1137,9 @@ const TabletDetectorScreen: React.FC<TabletDetectorScreenProps> = ({
           }
           const idleTime = Date.now() - lastFaceSeenTimestampRef.current;
           if (idleTime > 10000) {
-            scheduleNextScan(1000);
+            scheduleNextScan(250); // 4 FPS idle
           } else {
-            scheduleNextScan(Math.max(50, Math.round(2500 / targetFps)));
+            scheduleNextScan(Math.max(40, Math.round(1800 / targetFps)));
           }
         }
       } catch (err) {
@@ -1147,21 +1153,24 @@ const TabletDetectorScreen: React.FC<TabletDetectorScreenProps> = ({
       }
     },
     [
-      activeSessionId,
-      targetProfiles,
-      userProfiles,
       isFaceDataReady,
-      cameraFacing,
-      dispatch,
+      faceSyncModalVisible,
       scheduleNextScan,
+      cameraFacing,
+      targetProfiles,
+      confidenceThreshold,
       scanMode,
-      scanDirection,
+      userProfiles,
       effectiveRoomId,
       effectiveZoneId,
       rooms,
+      selectedRoom,
       zones,
-      confidenceThreshold,
+      selectedZone,
+      dispatch,
       targetFps,
+      scanDirection,
+      activeSessionId,
       soundEnabled,
     ],
   );
