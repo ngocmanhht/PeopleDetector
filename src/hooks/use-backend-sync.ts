@@ -30,15 +30,24 @@ export const useBackendSync = (intervalMs: number = 60000) => {
   const query = useQuery({
     queryKey: ['backend-sync-all'],
     queryFn: async () => {
-      // Parallelize all 5 sync requests concurrently for 3x-5x faster response time
-      const [zonesRes, roomsRes, profilesRes, sessionsRes, alertsRes] =
-        await Promise.allSettled([
-          zoneService.getZones(),
-          roomService.getRooms(),
-          profileService.getProfiles({ limit: 2000 }),
-          sessionService.getSessions(),
-          alertService.getAlerts(),
-        ]);
+      // Parallelize all sync requests concurrently for maximum throughput
+      const [
+        zonesRes,
+        roomsRes,
+        profilesRes,
+        embeddingsRes,
+        sessionsRes,
+        alertsRes,
+      ] = await Promise.allSettled([
+        zoneService.getZones(),
+        roomService.getRooms(),
+        // 1. Tải danh sách hồ sơ siêu nhẹ (không mang vector) để nạp Redux UI trong ~100ms
+        profileService.getProfiles({ limit: 2000, includeEmbeddings: false }),
+        // 2. Tải riêng gói vector sinh trắc học siêu nhẹ từ endpoint chuyên dụng cho AI Engine
+        profileService.getEmbeddingsSync(),
+        sessionService.getSessions(),
+        alertService.getAlerts(),
+      ]);
 
       if (zonesRes.status === 'fulfilled' && zonesRes.value?.data) {
         dispatch(setZones(zonesRes.value.data));
@@ -50,7 +59,13 @@ export const useBackendSync = (intervalMs: number = 60000) => {
 
       if (profilesRes.status === 'fulfilled' && profilesRes.value?.data) {
         dispatch(setUserProfiles(profilesRes.value.data));
-        YoloDetectorService.fastHydrateServerEmbeddings(profilesRes.value.data);
+      }
+
+      // Nạp vector từ endpoint sinh trắc học chuyên dụng vào RAM & MMKV cho AI Engine
+      if (embeddingsRes.status === 'fulfilled' && embeddingsRes.value?.data) {
+        YoloDetectorService.fastHydrateServerEmbeddings(
+          embeddingsRes.value.data as any,
+        );
       }
 
       if (sessionsRes.status === 'fulfilled' && sessionsRes.value?.data) {
