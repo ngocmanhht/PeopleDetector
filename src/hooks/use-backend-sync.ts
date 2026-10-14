@@ -64,7 +64,7 @@ export const useBackendSync = (intervalMs: number = 60000) => {
       // Nạp vector từ endpoint sinh trắc học chuyên dụng vào RAM & MMKV cho AI Engine
       if (embeddingsRes.status === 'fulfilled' && embeddingsRes.value?.data) {
         YoloDetectorService.fastHydrateServerEmbeddings(
-          embeddingsRes.value.data as any,
+          embeddingsRes.value.data,
         );
       }
 

@@ -67,7 +67,7 @@ export class ProfileService {
     zoneId?: string;
     roomId?: string;
     updatedAfter?: string;
-  }): Promise<{ success: boolean; data: Partial<UserProfile>[]; total: number; syncedAt: string }> {
+  }): Promise<{ success: boolean; data: UserProfile[]; total: number; syncedAt: string }> {
     return apiClient.get('/profiles/embeddings/sync', params);
   }
 
