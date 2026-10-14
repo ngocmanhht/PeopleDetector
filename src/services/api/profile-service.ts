@@ -6,6 +6,8 @@ export interface GetProfilesParams extends PaginationParams {
   zoneId?: string;
   roomId?: string;
   q?: string;
+  includeEmbeddings?: boolean;
+  updatedAfter?: string;
 }
 
 export interface CreateProfilePayload extends Partial<UserProfile> {
@@ -56,6 +58,17 @@ export class ProfileService {
       '/profiles',
       params,
     );
+  }
+
+  /**
+   * Đồng bộ siêu nhẹ chỉ riêng vector khuôn mặt phục vụ AI Engine (bỏ qua toàn bộ dữ liệu nặng)
+   */
+  public async getEmbeddingsSync(params?: {
+    zoneId?: string;
+    roomId?: string;
+    updatedAfter?: string;
+  }): Promise<{ success: boolean; data: Partial<UserProfile>[]; total: number; syncedAt: string }> {
+    return apiClient.get('/profiles/embeddings/sync', params);
   }
 
   public async getProfileById(

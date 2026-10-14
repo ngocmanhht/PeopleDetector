@@ -22,12 +22,13 @@ export const BIOMETRIC_CONFIG = {
 
     /**
      * Bật decisive bypass khi độ tin cậy vượt ngưỡng dứt khoát:
-     * ĐÃ TẮT (false) để đảm bảo độ chính xác tuyệt đối 100% chuẩn NIST/ISO:
-     * Bắt buộc mọi trường hợp phải qua Temporal Voting (ít nhất 2 frame liên tiếp đồng thuận)
-     * mới được chốt MATCH, triệt tiêu hoàn toàn mọi rủi ro nhận nhầm.
+     * Adaptive Decisive Bypass: Cho phép chốt MATCH ngay tại Frame 1 (~180ms) khi:
+     * - Top1 similarity >= 0.74 VÀ khoảng cách an toàn với người thứ 2 margin >= 0.05 (cách biệt lớn, triệt tiêu nhận nhầm)
+     * - HOẶC Top1 similarity >= 0.78 VÀ margin >= 0.04.
+     * Khắc phục triệt để tình trạng học viên bước qua Kiosk bị kẹt ở trạng thái 'verify' (1/2 frame) mà không ghi nhận vào ra!
      */
-    decisiveBypassEnabled: false,
-    decisiveThreshold: 0.78,
+    decisiveBypassEnabled: true,
+    decisiveThreshold: 0.74,
     decisiveMargin: 0.05,
 
     /**

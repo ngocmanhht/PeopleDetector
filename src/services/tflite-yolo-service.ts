@@ -2195,12 +2195,12 @@ export class TfliteYoloService {
           temporalDecision.profile?.roomName ||
           (temporalDecision.profile?.room as any)?.name ||
           '';
+        const verifyLabel = temporalDecision.profile?.fullName
+          ? `Đang xác minh: ${temporalDecision.profile.fullName}`
+          : temporalDecision.message || 'Đang xác minh danh tính...';
         return {
           userId: temporalDecision.profile?.id || '',
-          fullName:
-            temporalDecision.profile?.fullName ||
-            temporalDecision.message ||
-            'Đang xác minh danh tính...',
+          fullName: verifyLabel,
           code: temporalDecision.profile?.code || 'VERIFYING',
           avatarUri: temporalDecision.avatarUri || primaryAvatarUri,
           zoneName: decZone,
